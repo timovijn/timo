@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import UIKit
+import CoreImage
 
 struct DayView: View {
     @EnvironmentObject private var store: PlanStore
@@ -17,7 +18,11 @@ struct DayView: View {
     @Namespace private var calendarTransition
     @ScaledMetric(relativeTo: .subheadline) private var dateLabelWidth: CGFloat = 110
     @ScaledMetric(relativeTo: .caption) private var scheduleColumnWidth: CGFloat = 90
-    @AppStorage("timeView") private var showingTimeView = false
+    // Only the views that move or fade read the mode, so switching never
+    // rebuilds DayView or the day's content.
+    @State private var viewMode = ViewMode(persisted: true)
+    // Neighbouring pages follow after the animation instead of during it.
+    @State private var previewMode = ViewMode(persisted: false)
     @State private var showingRelativeDate = true
     private enum DayFilter: Int { case all, review, reminders }
     @State private var filter: DayFilter = .all
@@ -49,11 +54,11 @@ struct DayView: View {
             GeometryReader { viewport in
                 ZStack(alignment: .bottom) {
                     DayPager(day: day,
-                             content: pageContent(for: date, filter: filter, insets: viewport.safeAreaInsets),
+                             content: pageContent(for: date, filter: filter, mode: viewMode, insets: viewport.safeAreaInsets),
                              adjacentContent: { adjacentDay in
-                                 pageContent(for: adjacentDay.date(), filter: .all, insets: viewport.safeAreaInsets)
+                                 pageContent(for: adjacentDay.date(), filter: .all, mode: previewMode, insets: viewport.safeAreaInsets)
                              },
-                             revision: DayPageRevision(items: store.items, mode: showingTimeView, filter: filter.rawValue,
+                             revision: DayPageRevision(items: store.items, filter: filter.rawValue,
                                                        minute: Int(now.timeIntervalSinceReferenceDate / 60), typeSize: dynamicTypeSize,
                                                        insets: viewport.safeAreaInsets, reduceMotion: reduceMotion),
                              reduceMotion: reduceMotion,
@@ -108,16 +113,17 @@ struct DayView: View {
             }
         }.tint(.primary)
     }
-    private func pageContent(for date: Date, filter: DayFilter, insets: EdgeInsets) -> AnyView {
+    private func pageContent(for date: Date, filter: DayFilter, mode: ViewMode, insets: EdgeInsets) -> AnyView {
         AnyView(dayList(for: date, filter: filter)
             .contentMargins(.top, insets.top, for: .scrollContent)
             .contentMargins(.bottom, insets.bottom + 94, for: .scrollContent)
+            .environment(mode)
             .environmentObject(store).tint(.primary))
     }
     private var dayDock: some View {
         ZStack {
             HStack {
-                viewModeButton
+                ViewModeButton(mode: viewMode, previewMode: previewMode)
                 Spacer()
                 Button { add() } label: {
                     Image(systemName: "plus").font(.title3.weight(.regular)).foregroundStyle(.primary)
@@ -139,22 +145,6 @@ struct DayView: View {
             .padding()
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
-    }
-    private var viewModeButton: some View {
-        Button {
-            withAnimation(viewModeAnimation) {
-                showingTimeView.toggle()
-            }
-        } label: {
-            Image(systemName: showingTimeView ? "list.bullet" : "clock")
-                .contentTransition(.symbolEffect(.replace))
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(.primary)
-                .frame(width: 44, height: 44)
-        }
-        .buttonStyle(.glass).tint(.primary)
-        .accessibilityLabel(showingTimeView ? "Switch to list view" : "Switch to time view")
-        .accessibilityValue(showingTimeView ? "Time view" : "List view")
     }
     private var dayNavigation: some View {
         HStack(spacing: 0) {
@@ -423,7 +413,7 @@ struct DayView: View {
             }
             // One SwiftUI scroll surface resizes continuously with the rows.
             // A UIKit List cell used to resize separately and interrupt the morph.
-            .animation(viewModeAnimation, value: showingTimeView)
+            // The view-mode animation lives on the mode-reading views below.
             .animation(reviewAnimation, value: filter)
             .animation(reviewAnimation, value: filtered.map(\.id))
             .transaction { transaction in
@@ -470,8 +460,8 @@ struct DayView: View {
         let contentKey = TimelineContentKey(items: items, order: compactItems.map(\.id),
                                             markers: items.map { [needsReview($0), hasOpenReminder($0)] },
                                             filter: filter.rawValue, showNow: showNow, typeSize: dynamicTypeSize)
-        return DayTimelineLayout(startMinute: startMinute, laneCount: (lanes.values.max() ?? 0) + 1,
-                                 contentKey: contentKey, progress: showingTimeView ? 1 : 0) {
+        return ModeTimelineLayout(startMinute: startMinute, laneCount: (lanes.values.max() ?? 0) + 1,
+                                  contentKey: contentKey) {
             if showNow, let first = past.first {
                 let order = (compactOrder[first.id] ?? 0) - 1
                 compactSectionDivider("Past")
@@ -491,16 +481,9 @@ struct DayView: View {
             }
             ForEach(items) { item in
                 ForEach([false, true], id: \.self) { timedVariant in
-                    row(item, filter: filter, day: day, feedbackEnabled: showingTimeView == timedVariant,
-                        sharedSchedule: filter == .all)
-                        .opacity(showingTimeView == timedVariant ? 1 : 0)
-                        // Both variants share a position, so additive blending keeps
-                        // identical pixels fully opaque instead of dipping to 75%
-                        // halfway through a normal crossfade.
-                        .blendMode(.plusLighter)
-                        .allowsHitTesting(showingTimeView == timedVariant)
-                        .accessibilityHidden(showingTimeView != timedVariant)
-                        .accessibilitySortPriority(showingTimeView || !showNow ? 0 : -Double(compactOrder[item.id] ?? 0))
+                    row(item, filter: filter, day: day, feedbackEnabled: false, sharedSchedule: filter == .all)
+                        .modifier(ModeRowVariant(isTimed: timedVariant, isComplete: item.isComplete,
+                                                 compactSortPriority: showNow ? -Double(compactOrder[item.id] ?? 0) : 0))
                         .layoutValue(key: TimelineCompactOrderKey.self, value: compactOrder[item.id] ?? 0)
                         .layoutValue(key: TimelineTimedVariantKey.self, value: timedVariant)
                         .layoutValue(key: TimelineMinuteKey.self, value: entries.first(where: { $0.id == item.id })?.minute ?? 0)
@@ -520,7 +503,7 @@ struct DayView: View {
                 }
                 if let entry = entries.first(where: { $0.id == item.id }) {
                     TimelineConnector(complete: entry.complete)
-                        .opacity(showingTimeView ? 1 : 0)
+                        .modifier(ModeFade(visibleInTimeView: true))
                         .layoutValue(key: TimelineConnectorLaneKey.self, value: lanes[item.id] ?? 0)
                         .layoutValue(key: TimelineMinuteKey.self, value: entry.minute)
                 }
@@ -540,7 +523,7 @@ struct DayView: View {
                                 - TimelineNowMarker.height / 2)
                 }
             }
-            .opacity(showingTimeView ? 1 : 0)
+            .modifier(ModeFade(visibleInTimeView: true))
         }
         .animation(reviewAnimation, value: active.map(\.id))
         .accessibilityElement(children: .contain)
@@ -557,14 +540,9 @@ struct DayView: View {
         .foregroundStyle(.tertiary)
         .padding(.horizontal, 8)
         .frame(height: 24)
-        .opacity(showingTimeView ? 0 : 1)
-        // Headers travel across rows mid-transition. Leave quickly, and only
-        // return once the rows have nearly settled into the list.
-        .animation(reduceMotion ? nil : showingTimeView ? .easeOut(duration: 0.12)
-                   : .easeIn(duration: 0.18).delay(0.32), value: showingTimeView)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
-        .accessibilityHidden(showingTimeView)
+        .modifier(ModeSectionHeaderFade())
         .allowsHitTesting(false)
         .layoutValue(key: TimelineMarkerKey.self, value: true)
     }
@@ -690,9 +668,6 @@ struct DayView: View {
         }
         .frame(width: 44, height: 44)
         .contentShape(Rectangle())
-    }
-    private var viewModeAnimation: Animation? {
-        reduceMotion ? nil : .smooth(duration: 0.5)
     }
     private var reviewAnimation: Animation? {
         reduceMotion ? nil : .smooth(duration: 0.5)
@@ -843,6 +818,144 @@ private struct FilteredItemPanel: View {
     }
 }
 
+// List/Time view state, observed only by the views that move or fade with it.
+@Observable
+private final class ViewMode {
+    private static let key = "timeView"
+    @ObservationIgnored private let persisted: Bool
+    var showingTime: Bool {
+        didSet { if persisted { UserDefaults.standard.set(showingTime, forKey: Self.key) } }
+    }
+    init(persisted: Bool) {
+        self.persisted = persisted
+        showingTime = UserDefaults.standard.bool(forKey: Self.key)
+    }
+    static func animation(reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : .smooth(duration: 0.5)
+    }
+}
+
+private struct ViewModeButton: View {
+    let mode: ViewMode
+    let previewMode: ViewMode
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var previewSync: Task<Void, Never>?
+
+    var body: some View {
+        Button {
+            if !reduceMotion { FrameRateBoost.shared.request(for: .milliseconds(700)) }
+            withAnimation(ViewMode.animation(reduceMotion: reduceMotion)) { mode.showingTime.toggle() }
+            // Neighbouring pages update once the switch has finished animating.
+            previewSync?.cancel()
+            previewSync = Task {
+                try? await Task.sleep(for: .milliseconds(600))
+                guard !Task.isCancelled else { return }
+                previewMode.showingTime = mode.showingTime
+            }
+        } label: {
+            Image(systemName: mode.showingTime ? "list.bullet" : "clock")
+                .contentTransition(.symbolEffect(.replace))
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(.primary)
+                .frame(width: 44, height: 44)
+        }
+        .buttonStyle(.glass).tint(.primary)
+        .accessibilityLabel(mode.showingTime ? "Switch to list view" : "Switch to time view")
+        .accessibilityValue(mode.showingTime ? "Time view" : "List view")
+    }
+}
+
+// SwiftUI animations otherwise stay at 60 Hz on ProMotion iPhones. An active
+// display link asking for 120 Hz raises the app's frame rate while it runs.
+@MainActor
+private final class FrameRateBoost: NSObject {
+    static let shared = FrameRateBoost()
+    private var link: CADisplayLink?
+    private var expiry: Task<Void, Never>?
+
+    func request(for duration: Duration) {
+        if link == nil {
+            let link = CADisplayLink(target: self, selector: #selector(tick))
+            link.preferredFrameRateRange = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
+            link.add(to: .main, forMode: .common)
+            self.link = link
+        }
+        expiry?.cancel()
+        expiry = Task { [weak self] in
+            try? await Task.sleep(for: duration)
+            guard !Task.isCancelled else { return }
+            self?.link?.invalidate()
+            self?.link = nil
+        }
+    }
+    @objc private func tick() {}
+}
+
+private struct ModeTimelineLayout<Content: View>: View {
+    let startMinute: Double
+    let laneCount: Int
+    let contentKey: TimelineContentKey
+    @ViewBuilder let content: Content
+    @Environment(ViewMode.self) private var mode
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        DayTimelineLayout(startMinute: startMinute, laneCount: laneCount, contentKey: contentKey,
+                          progress: mode.showingTime ? 1 : 0) { content }
+            .animation(ViewMode.animation(reduceMotion: reduceMotion), value: mode.showingTime)
+    }
+}
+
+private struct ModeRowVariant: ViewModifier {
+    let isTimed: Bool
+    let isComplete: Bool
+    let compactSortPriority: Double
+    @Environment(ViewMode.self) private var mode
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        let active = mode.showingTime == isTimed
+        content
+            .sensoryFeedback(.success, trigger: isComplete) { _, _ in active }
+            .opacity(active ? 1 : 0)
+            // Both variants share a position, so additive blending keeps
+            // identical pixels fully opaque instead of dipping to 75%
+            // halfway through a normal crossfade.
+            .blendMode(.plusLighter)
+            .animation(ViewMode.animation(reduceMotion: reduceMotion), value: mode.showingTime)
+            .allowsHitTesting(active)
+            .accessibilityHidden(!active)
+            .accessibilitySortPriority(mode.showingTime ? 0 : compactSortPriority)
+    }
+}
+
+private struct ModeFade: ViewModifier {
+    let visibleInTimeView: Bool
+    @Environment(ViewMode.self) private var mode
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(mode.showingTime == visibleInTimeView ? 1 : 0)
+            .animation(ViewMode.animation(reduceMotion: reduceMotion), value: mode.showingTime)
+    }
+}
+
+// Headers travel across rows mid-transition. Leave quickly, and only
+// return once the rows have nearly settled into the list.
+private struct ModeSectionHeaderFade: ViewModifier {
+    @Environment(ViewMode.self) private var mode
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(mode.showingTime ? 0 : 1)
+            .animation(reduceMotion ? nil : mode.showingTime ? .easeOut(duration: 0.12)
+                       : .easeIn(duration: 0.18).delay(0.32), value: mode.showingTime)
+            .accessibilityHidden(mode.showingTime)
+    }
+}
+
 // Use the button's native pressed state so scrolling cancels the highlight
 // automatically and opening still happens immediately on release.
 private struct ItemPressStyle: ButtonStyle {
@@ -909,34 +1022,17 @@ private struct ReminderTimeEditor: View {
 private struct TodayDateGlow: View {
     let isVisible: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.scenePhase) private var scenePhase
-    @State private var appearedAt = Date()
     @State private var revealed = false
     @State private var running = true
     private let fadeDuration = 1.6
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion || scenePhase != .active || !running)) { tick in
-            let elapsed = max(0, tick.date.timeIntervalSince(appearedAt))
-            let phase = reduceMotion ? 0 : elapsed / 20
-            let gradient = AngularGradient(
-                colors: [.cyan, .blue, .purple, .pink, .purple, .blue, .cyan],
-                center: .center, angle: .degrees(phase * 360))
-            ZStack {
-                Capsule()
-                    .stroke(gradient, lineWidth: 12)
-                    .blur(radius: 12).opacity(0.32)
-                Capsule()
-                    .stroke(gradient, lineWidth: 6)
-                    .blur(radius: 5).opacity(0.36)
-                Capsule()
-                    .stroke(gradient, lineWidth: 2)
-                    .blur(radius: 2).opacity(0.38)
-            }
-            .padding(1)
+        // Core Animation spins the gradient on the render server. Redrawing a
+        // blurred conic gradient on the main thread cost ~9 ms per frame on
+        // device and made every list/time switch hitch while viewing today.
+        GlowRing(rotating: !reduceMotion && running)
             .opacity(0.48)
-        }
-        .opacity(revealed ? 1 : 0)
+            .opacity(revealed ? 1 : 0)
         .animation(reduceMotion ? nil : .easeInOut(duration: fadeDuration), value: revealed)
         .task(id: isVisible) {
             revealed = isVisible
@@ -954,6 +1050,104 @@ private struct TodayDateGlow: View {
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+}
+
+private struct GlowRing: UIViewRepresentable {
+    let rotating: Bool
+    func makeUIView(context: Context) -> GlowRingView { GlowRingView() }
+    func updateUIView(_ view: GlowRingView, context: Context) { view.rotating = rotating }
+}
+
+// A conic gradient rotates beneath a fixed mask of the three blurred capsule
+// strokes. The mask is drawn once per size, so the orbit costs no app frames.
+private final class GlowRingView: UIView {
+    private static let spill: CGFloat = 40
+    private static let colors: [Color] = [.cyan, .blue, .purple, .pink, .purple, .blue, .cyan]
+    // Line width, blur radius and opacity of each stroke, outermost first.
+    private static let strokes: [(width: CGFloat, blur: CGFloat, opacity: CGFloat)] = [(12, 12, 0.32), (6, 5, 0.36), (2, 2, 0.38)]
+    private let container = CALayer()
+    private let gradient = CAGradientLayer()
+    private let ringMask = CALayer()
+    private var maskSize: CGSize?
+    private var maskScale: CGFloat?
+    var rotating = false { didSet { updateRotation() } }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        gradient.type = .conic
+        gradient.startPoint = CGPoint(x: 0.5, y: 0.5)
+        gradient.endPoint = CGPoint(x: 1, y: 0.5)
+        container.addSublayer(gradient)
+        container.mask = ringMask
+        layer.addSublayer(container)
+        registerForTraitChanges([UITraitUserInterfaceStyle.self, UITraitDisplayScale.self]) { (view: GlowRingView, _) in
+            view.setNeedsLayout()
+        }
+    }
+    required init?(coder: NSCoder) { fatalError("GlowRingView is created programmatically") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard bounds.width > 0, bounds.height > 0 else { return }
+        let frame = bounds.insetBy(dx: -Self.spill, dy: -Self.spill)
+        let side = hypot(frame.width, frame.height)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        container.frame = frame
+        ringMask.frame = container.bounds
+        gradient.bounds = CGRect(x: 0, y: 0, width: side, height: side)
+        gradient.position = CGPoint(x: frame.width / 2, y: frame.height / 2)
+        gradient.colors = Self.colors.map { UIColor($0).resolvedColor(with: traitCollection).cgColor }
+        let scale = traitCollection.displayScale
+        if maskSize != bounds.size || maskScale != scale {
+            ringMask.contents = Self.ringImage(size: bounds.size, scale: scale)
+            ringMask.contentsScale = scale
+            maskSize = bounds.size
+            maskScale = scale
+        }
+        CATransaction.commit()
+        updateRotation()
+    }
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        updateRotation()
+    }
+    private func updateRotation() {
+        guard rotating, window != nil else {
+            gradient.removeAnimation(forKey: "orbit")
+            return
+        }
+        guard gradient.animation(forKey: "orbit") == nil else { return }
+        let orbit = CABasicAnimation(keyPath: "transform.rotation.z")
+        orbit.fromValue = 0
+        orbit.toValue = 2 * Double.pi
+        orbit.duration = 20
+        orbit.repeatCount = .infinity
+        orbit.isRemovedOnCompletion = false
+        gradient.add(orbit, forKey: "orbit")
+    }
+    private static func ringImage(size: CGSize, scale: CGFloat) -> CGImage? {
+        let canvas = CGSize(width: size.width + spill * 2, height: size.height + spill * 2)
+        let rect = CGRect(x: spill, y: spill, width: size.width, height: size.height).insetBy(dx: 1, dy: 1)
+        let path = UIBezierPath(roundedRect: rect, cornerRadius: rect.height / 2)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = scale
+        var combined: CIImage?
+        for stroke in strokes {
+            let sharp = UIGraphicsImageRenderer(size: canvas, format: format).image { _ in
+                UIColor(white: 1, alpha: stroke.opacity).setStroke()
+                path.lineWidth = stroke.width
+                path.stroke()
+            }
+            guard let image = CIImage(image: sharp) else { continue }
+            let blurred = image.clampedToExtent().applyingGaussianBlur(sigma: Double(stroke.blur * scale))
+                .cropped(to: image.extent)
+            combined = combined.map { blurred.composited(over: $0) } ?? blurred
+        }
+        guard let combined else { return nil }
+        return CIContext().createCGImage(combined, from: combined.extent)
     }
 }
 
@@ -1284,7 +1478,6 @@ private final class DaySwipeInteraction: ObservableObject {
 // label updates must not rebuild three pages during a horizontal animation.
 private struct DayPageRevision: Equatable {
     let items: [PlanItem]
-    let mode: Bool
     let filter: Int
     let minute: Int
     let typeSize: DynamicTypeSize
@@ -1444,25 +1637,16 @@ private struct DayPager: UIViewControllerRepresentable {
         }
         func refreshIfIdle() {
             guard !dragging, animator == nil, requestedDay == day else { return }
-            let modeChanged = displayedRevision.map { $0.mode != latestRevision.mode } ?? false
             if displayedRevision != latestRevision {
                 host.content = latestContent
                 displayedRevision = latestRevision
             }
-            if modeChanged {
-                warmTask?.cancel()
-                warmTask = nil
-                scheduleWarm(delay: .milliseconds(600))
-            } else {
-                scheduleWarm()
-            }
+            scheduleWarm()
         }
-        private func scheduleWarm(delay: Duration = .zero) {
+        private func scheduleWarm() {
             guard warmTask == nil, !dragging, animator == nil, requestedDay == day, size.width > 0 else { return }
             warmTask = Task { [weak self] in
-                if delay > .zero {
-                    do { try await Task.sleep(for: delay) } catch { return }
-                } else { await Task.yield() }
+                await Task.yield()
                 guard !Task.isCancelled, let self else { return }
                 self.warmTask = nil
                 guard !self.dragging, self.animator == nil, self.requestedDay == self.day else { return }
@@ -1591,6 +1775,9 @@ private struct DayPager: UIViewControllerRepresentable {
             host.view.accessibilityElementsHidden = false
             day = Day(date)
             displayedRevision = nil
+            // The promoted page still carries the preview mode and the demoted
+            // page the live one; both get their proper content when idle.
+            previewsDirty = true
             offset = translation
             positionPages()
         }
