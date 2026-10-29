@@ -870,8 +870,10 @@ private struct ViewModeButton: View {
 @MainActor
 private final class FrameRateBoost: NSObject {
     static let shared = FrameRateBoost()
+    static let didChange = Notification.Name("FrameRateBoost.didChange")
     private var link: CADisplayLink?
     private var expiry: Task<Void, Never>?
+    var isActive: Bool { link != nil }
 
     func request(for duration: Duration) {
         if link == nil {
@@ -879,13 +881,15 @@ private final class FrameRateBoost: NSObject {
             link.preferredFrameRateRange = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
             link.add(to: .main, forMode: .common)
             self.link = link
+            NotificationCenter.default.post(name: Self.didChange, object: self)
         }
         expiry?.cancel()
         expiry = Task { [weak self] in
             try? await Task.sleep(for: duration)
-            guard !Task.isCancelled else { return }
-            self?.link?.invalidate()
-            self?.link = nil
+            guard !Task.isCancelled, let self else { return }
+            self.link?.invalidate()
+            self.link = nil
+            NotificationCenter.default.post(name: Self.didChange, object: self)
         }
     }
     @objc private func tick() {}
@@ -1063,6 +1067,7 @@ private struct GlowRing: UIViewRepresentable {
 // strokes. The mask is drawn once per size, so the orbit costs no app frames.
 private final class GlowRingView: UIView {
     private static let spill: CGFloat = 40
+    private static let imageContext = CIContext()
     private static let colors: [Color] = [.cyan, .blue, .purple, .pink, .purple, .blue, .cyan]
     // Line width, blur radius and opacity of each stroke, outermost first.
     private static let strokes: [(width: CGFloat, blur: CGFloat, opacity: CGFloat)] = [(12, 12, 0.32), (6, 5, 0.36), (2, 2, 0.38)]
@@ -1071,6 +1076,7 @@ private final class GlowRingView: UIView {
     private let ringMask = CALayer()
     private var maskSize: CGSize?
     private var maskScale: CGFloat?
+    private var orbitIsBoosted: Bool?
     var rotating = false { didSet { updateRotation() } }
 
     override init(frame: CGRect) {
@@ -1085,6 +1091,8 @@ private final class GlowRingView: UIView {
         registerForTraitChanges([UITraitUserInterfaceStyle.self, UITraitDisplayScale.self]) { (view: GlowRingView, _) in
             view.setNeedsLayout()
         }
+        NotificationCenter.default.addObserver(self, selector: #selector(boostChanged),
+                                               name: FrameRateBoost.didChange, object: nil)
     }
     required init?(coder: NSCoder) { fatalError("GlowRingView is created programmatically") }
 
@@ -1114,19 +1122,30 @@ private final class GlowRingView: UIView {
         super.didMoveToWindow()
         updateRotation()
     }
+    @objc private func boostChanged() { updateRotation() }
     private func updateRotation() {
         guard rotating, window != nil else {
             gradient.removeAnimation(forKey: "orbit")
+            orbitIsBoosted = nil
             return
         }
-        guard gradient.animation(forKey: "orbit") == nil else { return }
+        let boosted = FrameRateBoost.shared.isActive
+        guard gradient.animation(forKey: "orbit") == nil || orbitIsBoosted != boosted else { return }
+        // Continue from the visible angle when the frame-rate cap changes.
+        let start = (gradient.presentation()?.value(forKeyPath: "transform.rotation.z") as? Double) ?? 0
         let orbit = CABasicAnimation(keyPath: "transform.rotation.z")
-        orbit.fromValue = 0
-        orbit.toValue = 2 * Double.pi
+        orbit.fromValue = start
+        orbit.toValue = start + 2 * Double.pi
         orbit.duration = 20
         orbit.repeatCount = .infinity
         orbit.isRemovedOnCompletion = false
+        // A 20-second orbit under heavy blur looks the same at ~20 fps. Without
+        // a cap it ran at ~48 fps, recompositing the screen while idle on today.
+        // The cap is lifted during a view switch: left in place, it held the
+        // whole app at 60 Hz despite the 120 Hz boost.
+        orbit.preferredFrameRateRange = boosted ? .default : CAFrameRateRange(minimum: 15, maximum: 30, preferred: 20)
         gradient.add(orbit, forKey: "orbit")
+        orbitIsBoosted = boosted
     }
     private static func ringImage(size: CGSize, scale: CGFloat) -> CGImage? {
         let canvas = CGSize(width: size.width + spill * 2, height: size.height + spill * 2)
@@ -1147,7 +1166,7 @@ private final class GlowRingView: UIView {
             combined = combined.map { blurred.composited(over: $0) } ?? blurred
         }
         guard let combined else { return nil }
-        return CIContext().createCGImage(combined, from: combined.extent)
+        return imageContext.createCGImage(combined, from: combined.extent)
     }
 }
 
