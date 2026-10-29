@@ -3,81 +3,97 @@ import SwiftUI
 struct ItemEditor: View {
     @EnvironmentObject private var store: PlanStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @State var item: PlanItem
+    @State private var locations: [ItemTextEntry]
+    @State private var people: [ItemTextEntry]
     @State private var issue: String?
-    @State private var childEditor: PlanItem?
     @State private var showingDelete = false
+    @State private var requestingReminder = false
+    @State private var needsNotificationSettings = false
     @FocusState private var titleFocused: Bool
     private var existing: Bool { store.item(item.id) != nil }
-    private var children: [PlanItem] { store.children(of: item) }
-    private var parentOptions: [PlanItem] { store.items.filter { $0.id != item.id && $0.parentID == nil } }
+    init(item: PlanItem) {
+        _item = State(initialValue: item)
+        _locations = State(initialValue: (item.locations.isEmpty ? [""] : item.locations).map { ItemTextEntry(text: $0) })
+        _people = State(initialValue: (item.people.isEmpty ? [""] : item.people).map { ItemTextEntry(text: $0) })
+    }
     var body: some View {
         NavigationStack {
             Form {
                 Section {
                     TextField("What’s on your day?", text: $item.title, axis: .vertical)
                         .font(.title3.weight(.medium)).focused($titleFocused)
-                    Picker("Type", selection: $item.kind) {
-                        Text("Task").tag(ItemKind.task); Text("Event").tag(ItemKind.event)
-                    }.pickerStyle(.segmented).disabled(item.parentID != nil)
                 }
-                Section("Schedule") {
+                Section {
                     DatePicker("Day", selection: Binding(get: { item.day.date() }, set: { new in
-                        let oldStart = item.start(); item.day = Day(new)
-                        if item.kind == .event, let oldStart, let newStart = item.start(), let end = item.end {
-                            item.end = end.addingTimeInterval(newStart.timeIntervalSince(oldStart))
-                        }
-                        item.carriedFrom = nil; item.suggestionDismissed = false
+                        Planner.updateStart(&item, day: Day(new), minute: item.minute)
                     }), displayedComponents: .date)
-                    if item.kind == .task {
-                        Toggle("Set a time", isOn: Binding(get: { item.minute != nil }, set: { item.minute = $0 ? 9 * 60 : nil; item.suggestionDismissed = false }))
-                    }
+                    Toggle("Set a time", isOn: Binding(get: { item.minute != nil }, set: { enabled in
+                        Planner.updateStart(&item, day: item.day, minute: enabled ? 9 * 60 : nil)
+                    }))
                     if item.minute != nil {
-                        DatePicker(item.kind == .event ? "Starts" : "Time", selection: Binding(get: { item.start() ?? item.day.date() }, set: { new in
+                        DatePicker("Time", selection: Binding(get: { item.start() ?? item.day.date() }, set: { new in
                             let c = Calendar.current.dateComponents([.hour, .minute], from: new)
-                            item.minute = (c.hour ?? 0) * 60 + (c.minute ?? 0); item.suggestionDismissed = false
+                            Planner.updateStart(&item, day: item.day, minute: (c.hour ?? 0) * 60 + (c.minute ?? 0))
                         }), displayedComponents: .hourAndMinute)
+                        Toggle("Add an end time", isOn: Binding(get: { item.end != nil }, set: { enabled in
+                            item.end = enabled ? item.start()?.addingTimeInterval(3600) : nil
+                            item.suggestionDismissed = false
+                        }))
                     }
-                    if item.kind == .event {
-                        DatePicker("Ends", selection: Binding(get: { item.end ?? Date() }, set: { item.end = $0; item.suggestionDismissed = false }), displayedComponents: [.date, .hourAndMinute])
+                    if item.end != nil {
+                        DatePicker("Ends", selection: Binding(get: { item.end ?? item.day.date() }, set: { item.end = $0; item.suggestionDismissed = false }), displayedComponents: [.date, .hourAndMinute])
                     }
-                    if let from = item.carriedFrom { Text("Carried from \(from.date().formatted(date: .abbreviated, time: .omitted)). Choosing a date gives this task a fresh plan.").font(.caption).foregroundStyle(.secondary) }
-                    if existing { Text("Originally planned for \(item.originalDay.date().formatted(date: .abbreviated, time: .omitted))").font(.caption).foregroundStyle(.secondary) }
+                    if let from = item.carriedFrom {
+                        Text("Carried from \(from.date().formatted(date: .abbreviated, time: .omitted)). Choosing a date gives this item a fresh plan.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                } header: { Text("Schedule") } footer: {
+                    Text("Leave the time open, choose a moment, or set aside a stretch of time.")
+                }
+                Section {
+                    Toggle("Move to next day if unfinished", isOn: $item.movesToNextDay)
+                } footer: {
+                    Text(item.movesToNextDay
+                         ? "Unfinished items move to today. A time range keeps its time and duration; a single time becomes any time."
+                         : "This item stays on its scheduled day, even if unfinished.")
+                }
+                Section {
+                    Toggle(isOn: Binding(get: { item.reminderAt != nil }, set: { enabled in
+                        if !enabled { item.reminderAt = nil; return }
+                        requestingReminder = true
+                        Task { @MainActor in
+                            defer { requestingReminder = false }
+                            do {
+                                if try await store.requestReminderPermission() {
+                                    item.reminderAt = max(item.start() ?? Date().addingTimeInterval(3600), Date().addingTimeInterval(60))
+                                } else {
+                                    needsNotificationSettings = true
+                                    issue = "Allow notifications for timo in Settings to receive reminders."
+                                }
+                            } catch { issue = "Reminders could not be enabled. \(error.localizedDescription)" }
+                        }
+                    })) {
+                        Label("Remind me", systemImage: "alarm").foregroundStyle(.blue)
+                    }.tint(.blue).disabled(requestingReminder)
+                    if item.reminderAt != nil {
+                        DatePicker("Remind me at", selection: Binding(get: { item.reminderAt ?? Date() }, set: { item.reminderAt = $0 }), displayedComponents: [.date, .hourAndMinute])
+                        if let reminder = item.reminderAt, reminder <= Date() {
+                            Text("This reminder has passed. Choose a new time to be reminded again.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                } footer: {
+                    Text("Reminders appear in the blue alarm filter and notify you at the chosen time.")
+                }
+                Section("Locations") {
+                    ItemTextFields(entries: $locations, placeholder: "Location", symbol: "mappin.and.ellipse", addLabel: "Add location")
+                }
+                Section("People") {
+                    ItemTextFields(entries: $people, placeholder: "Name", symbol: "person", addLabel: "Add person")
                 }
                 Section("Notes") { TextField("Anything to remember", text: $item.notes, axis: .vertical).lineLimit(3...8) }
-                if item.kind == .task && children.isEmpty {
-                    Section("Linked work") {
-                        Picker("Parent", selection: $item.parentID) {
-                            Text("None").tag(nil as UUID?)
-                            ForEach(parentOptions) { parent in Text(parent.title).tag(Optional(parent.id)) }
-                        }
-                        if let parent = store.item(item.parentID) {
-                            Button("Open \(parent.title)") { childEditor = parent }
-                            if parent.kind == .event && (parent.end ?? .distantFuture) < Date() {
-                                Text("This task is linked to an event in the past.").font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
-                if item.parentID == nil {
-                    Section {
-                        ForEach(children) { child in
-                            HStack {
-                                Button { store.toggle(child) } label: { Image(systemName: child.isComplete ? "checkmark.circle.fill" : "circle").frame(minWidth: 44, minHeight: 44) }
-                                    .buttonStyle(.plain).accessibilityLabel(child.isComplete ? "Undo \(child.title)" : "Complete \(child.title)")
-                                Button { childEditor = child } label: {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(child.title).foregroundStyle(child.isComplete ? .secondary : .primary)
-                                        Text(child.day.date(), format: .dateTime.day().month(.abbreviated)).font(.caption).foregroundStyle(.secondary)
-                                    }.frame(maxWidth: .infinity, alignment: .leading)
-                                }.buttonStyle(.plain)
-                            }
-                        }
-                        if existing {
-                            Button("Add subtask", systemImage: "plus") { childEditor = PlanItem(title: "", day: item.day, parentID: item.id) }
-                        } else { Text("Save this item to add subtasks.").foregroundStyle(.secondary) }
-                    } header: { Text("Subtasks · \(children.filter(\.isComplete).count)/\(children.count)") }
-                }
                 if existing {
                     Section {
                         Button(item.isComplete ? "Mark incomplete" : "Mark complete", systemImage: item.isComplete ? "arrow.uturn.backward" : "checkmark") {
@@ -91,32 +107,81 @@ struct ItemEditor: View {
             .navigationTitle(existing ? "Your item" : "New item").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) { Button("Save") { save() }.fontWeight(.semibold).disabled(item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
-            }
-            .onChange(of: item.kind) { _, kind in
-                if kind == .event {
-                    item.minute = item.minute ?? 9 * 60
-                    item.end = item.end ?? item.start()!.addingTimeInterval(3600)
-                    item.parentID = nil
-                } else { item.end = nil }
-                item.suggestionDismissed = false
+                ToolbarItem(placement: .confirmationAction) { Button("Save") { save() }.fontWeight(.semibold).disabled(requestingReminder || item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
             }
             .onAppear { if !existing { titleFocused = true } }
-            .sheet(item: $childEditor) { linked in ItemEditor(item: linked).environmentObject(store) }
-            .alert("Check this item", isPresented: Binding(get: { issue != nil }, set: { if !$0 { issue = nil } })) { Button("OK") { issue = nil } } message: { Text(issue ?? "") }
-            .confirmationDialog("Delete this item?", isPresented: $showingDelete, titleVisibility: .visible) {
-                if children.isEmpty { Button("Delete item", role: .destructive) { store.delete(item, children: false); dismiss() } }
-                else {
-                    Button("Delete parent, keep subtasks", role: .destructive) { store.delete(item, children: false); dismiss() }
-                    Button("Delete parent and subtasks", role: .destructive) { store.delete(item, children: true); dismiss() }
+            .alert("Check this item", isPresented: Binding(get: { issue != nil }, set: { if !$0 { issue = nil } })) {
+                if needsNotificationSettings {
+                    Button("Open Settings") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                        issue = nil; needsNotificationSettings = false
+                    }
                 }
+                Button("OK", role: .cancel) { issue = nil; needsNotificationSettings = false }
+            } message: { Text(issue ?? "") }
+            .confirmationDialog("Delete this item?", isPresented: $showingDelete, titleVisibility: .visible) {
+                Button("Delete item", role: .destructive) { store.delete(item, children: false); dismiss() }
             }
         }
     }
     private func save() {
-        // A linked item may have been deleted in a nested editor.
+        item.locations = locations.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        item.people = people.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        if let reminder = item.reminderAt, reminder <= Date(), reminder != store.item(item.id)?.reminderAt {
+            issue = "Choose a reminder time in the future."
+            return
+        }
+        // Retain existing relationships unless their saved parent no longer exists.
         if let parentID = item.parentID, store.item(parentID) == nil { item.parentID = nil }
         do { try store.save(item); if store.errorMessage == nil { dismiss() } }
         catch { issue = error.localizedDescription }
+    }
+}
+
+private struct ItemTextEntry: Identifiable {
+    let id = UUID()
+    var text: String
+}
+
+private struct ItemTextFields: View {
+    @Binding var entries: [ItemTextEntry]
+    let placeholder: String
+    let symbol: String
+    let addLabel: String
+    @FocusState private var focusedEntry: UUID?
+
+    var body: some View {
+        ForEach($entries) { $entry in
+            HStack(spacing: 10) {
+                Image(systemName: symbol).foregroundStyle(.secondary).frame(width: 22)
+                    .accessibilityHidden(true)
+                TextField(placeholder, text: $entry.text, axis: .vertical)
+                    .textInputAutocapitalization(.words)
+                    .focused($focusedEntry, equals: entry.id)
+                    .accessibilityLabel(placeholder == "Name" ? "Person" : placeholder)
+                if entries.count > 1 || !entry.text.isEmpty {
+                    Button {
+                        let id = entry.id
+                        focusedEntry = nil
+                        if entries.count == 1 { entries[0].text = "" }
+                        else { entries.removeAll { $0.id == id } }
+                    } label: {
+                        Image(systemName: "minus.circle").foregroundStyle(.secondary)
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Remove \(entry.text.isEmpty ? placeholder.lowercased() : entry.text)")
+                }
+            }
+        }
+        Button(addLabel, systemImage: "plus") {
+            if let empty = entries.first(where: { $0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
+                focusedEntry = empty.id
+            } else {
+                let entry = ItemTextEntry(text: "")
+                entries.append(entry)
+                focusedEntry = entry.id
+            }
+        }
     }
 }
