@@ -5,6 +5,8 @@ struct DayView: View {
     @EnvironmentObject private var store: PlanStore
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    private let reviewTint = Color.orange
     @State private var date = Calendar.current.startOfDay(for: Date())
     @State private var editing: PlanItem?
     @State private var pickingDate = false
@@ -30,12 +32,7 @@ struct DayView: View {
     }
     var body: some View {
         NavigationStack {
-            ZStack {
-                dayList
-                    .id(reviewing)
-                    .zIndex(1)
-                    .transition(reviewTransition)
-            }
+            dayList
             .background(Color(.systemBackground))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -48,17 +45,12 @@ struct DayView: View {
                 if reviewing || !reviewItems.isEmpty {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button {
-                            refresh(Date())
                             setReviewing(!reviewing)
                         } label: {
-                            HStack(spacing: 5) {
-                                Image(systemName: reviewing ? "line.3.horizontal.decrease" : "exclamationmark.triangle.fill")
-                                Text("\(reviewItems.count)").font(.caption.weight(.semibold).monospacedDigit())
-                            }
-                            .foregroundStyle(.orange)
-                            .padding(.horizontal, 12)
-                            .frame(minHeight: 44)
-                            .glassEffect(.regular.tint(.orange.opacity(reviewing ? 0.35 : 0.22)).interactive(), in: .capsule)
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(reviewTint)
+                                .frame(width: 44, height: 44)
+                                .glassEffect(.regular.tint(reviewTint.opacity(reviewing ? 0.35 : 0.22)).interactive(), in: .circle)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(reviewing ? "Show full day" : "Review \(reviewItems.count) items")
@@ -88,84 +80,85 @@ struct DayView: View {
             .onChange(of: scenePhase) { _, phase in if phase == .active { refresh(Date()) } }
         }.tint(.primary)
     }
-    private var reviewTransition: AnyTransition {
-        reduceMotion ? .opacity : .asymmetric(
-            insertion: .opacity.combined(with: .offset(y: 10)),
-            removal: .opacity.combined(with: .offset(y: -6))
-        )
-    }
+    private var displayedAnyTime: [PlanItem] { anyTime.filter { !reviewing || needsReview($0) } }
+    private var displayedTimed: [PlanItem] { timed.filter { !reviewing || needsReview($0) } }
     private var dayList: some View {
         List {
             Section {
-                HStack(alignment: .center, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(date.formatted(.dateTime.weekday(.wide)))
-                            .font(.system(.title2, design: .rounded).weight(.bold))
-                        Text(date.formatted(.dateTime.day().month(.wide)))
-                            .font(.subheadline).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .center, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(date.formatted(.dateTime.weekday(.wide)))
+                                .font(.system(.title2, design: .rounded).weight(.bold))
+                            Text(date.formatted(.dateTime.day().month(.wide)))
+                                .font(.subheadline).foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 0)
+                        if reviewing {
+                            Text("\(reviewItems.count) to review")
+                                .font(.caption).foregroundStyle(reviewTint)
+                        } else if !visible.isEmpty {
+                            Text("\(visible.filter(\.isComplete).count)/\(visible.count) complete")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                     }
-                    Spacer(minLength: 0)
                     if reviewing {
-                        Text("\(reviewItems.count) to review")
-                            .font(.caption).foregroundStyle(.orange)
-                    } else if !visible.isEmpty {
-                        Text("\(visible.filter(\.isComplete).count)/\(visible.count) complete")
-                            .font(.caption).foregroundStyle(.secondary)
+                        HStack(spacing: 8) {
+                            Image(systemName: "line.3.horizontal.decrease").foregroundStyle(reviewTint)
+                            Text("\(visible.count - reviewItems.count) items hidden")
+                                .foregroundStyle(.secondary)
+                            Spacer(minLength: 0)
+                            Button("Show all") { setReviewing(false) }
+                                .fontWeight(.medium)
+                                .frame(minHeight: 44)
+                        }
+                        .font(.caption)
+                        .transition(.opacity)
+                        .accessibilityElement(children: .contain)
                     }
                 }.padding(.vertical, 6)
             }.listRowBackground(Color.clear).listRowSeparator(.hidden)
-            if reviewing {
-                if reviewItems.isEmpty {
-                    Section {
-                        ContentUnavailableView {
-                            Label("All clear", systemImage: "checkmark.circle")
-                        } description: {
-                            Text("There’s nothing left to review for this day.")
-                        } actions: {
-                            Button("Show full day") { setReviewing(false) }
-                                .buttonStyle(.bordered)
-                        }.listRowBackground(Color.clear)
-                    }.listRowSeparator(.hidden)
-                } else {
-                    Section {
-                        ForEach(reviewItems) { row($0) }
-                    } header: {
-                        HStack {
-                            Text("Needs review")
-                            Spacer()
-                            Button("Show all") { setReviewing(false) }
-                                .textCase(nil)
+            if reviewing && reviewItems.isEmpty {
+                Section {
+                    ContentUnavailableView {
+                        Label("All clear", systemImage: "checkmark.circle")
+                    } description: {
+                        Text("There’s nothing left to review for this day. Your other items are still in the full day view.")
+                    } actions: {
+                        Button("Show full day") { setReviewing(false) }.buttonStyle(.bordered)
+                    }.listRowBackground(Color.clear)
+                }.listRowSeparator(.hidden)
+            }
+            if !reviewing && visible.isEmpty {
+                Section {
+                    ContentUnavailableView {
+                        Label("Room for your day", systemImage: "sun.horizon")
+                    } description: {
+                        Text("A small task. A little time set aside. Start with what matters today.")
+                    } actions: {
+                        Button("Add an item", systemImage: "plus") { add() }.buttonStyle(.borderedProminent)
+                        if store.items.isEmpty { Button("Try a sample day") { store.addSampleDay(); date = Calendar.current.startOfDay(for: Date()) } }
+                    }.listRowBackground(Color.clear)
+                }.listRowSeparator(.hidden)
+            }
+            // Keep the same sections and item IDs in both modes so List can animate
+            // individual removals and close their gaps instead of replacing the list.
+            if !displayedAnyTime.isEmpty {
+                Section("Any time") {
+                    ForEach(displayedAnyTime) { row($0) }
+                }
+            }
+            if !displayedTimed.isEmpty {
+                Section {
+                    ForEach(displayedTimed) { item in
+                        if !reviewing, day == Day(now), let start = item.start(), start > now,
+                           item.id == timed.first(where: { ($0.start() ?? .distantPast) > now })?.id {
+                            nowMarker
                         }
+                        row(item)
                     }
-                }
-            } else {
-                if visible.isEmpty {
-                    Section {
-                        ContentUnavailableView {
-                            Label("Room for your day", systemImage: "sun.horizon")
-                        } description: {
-                            Text("A small task. A little time set aside. Start with what matters today.")
-                        } actions: {
-                            Button("Add an item", systemImage: "plus") { add() }.buttonStyle(.borderedProminent)
-                            if store.items.isEmpty { Button("Try a sample day") { store.addSampleDay(); date = Calendar.current.startOfDay(for: Date()) } }
-                        }.listRowBackground(Color.clear)
-                    }.listRowSeparator(.hidden)
-                }
-                if !anyTime.isEmpty {
-                    Section("Any time") { ForEach(anyTime) { row($0) } }
-                }
-                if !timed.isEmpty {
-                    Section {
-                        ForEach(timed) { item in
-                            if day == Day(now), let start = item.start(), start > now,
-                               item.id == timed.first(where: { ($0.start() ?? .distantPast) > now })?.id {
-                                nowMarker
-                            }
-                            row(item)
-                        }
-                        if day == Day(now), !timed.contains(where: { ($0.start() ?? .distantPast) > now }) { nowMarker }
-                    } header: { Text("Your day") }
-                }
+                    if !reviewing, day == Day(now), !timed.contains(where: { ($0.start() ?? .distantPast) > now }) { nowMarker }
+                } header: { Text("Your day") }
             }
             Section {
                 Text("timo").font(.system(.footnote, design: .rounded).weight(.medium)).foregroundStyle(.tertiary)
@@ -175,6 +168,12 @@ struct DayView: View {
         .listStyle(.plain)
         .environment(\.defaultMinListRowHeight, 44)
         .scrollContentBackground(.hidden)
+        // Attach filtering animation to the list itself so toolbar actions and
+        // in-list controls produce the same row insertion/removal transaction.
+        .animation(reviewAnimation, value: reviewing)
+        .transaction { transaction in
+            if reduceMotion { transaction.animation = nil }
+        }
     }
     private var nowMarker: some View {
         HStack(spacing: 10) {
@@ -228,69 +227,91 @@ struct DayView: View {
                         .padding(.vertical, 2).contentShape(Rectangle())
                 }.buttonStyle(.plain)
                     .accessibilityHint(needsReview(item) ? "Needs review. Open details and edit" : "Open details and edit")
-                if !reviewing && needsReview(item) {
-                    Circle().fill(.orange).frame(width: 6, height: 6)
-                        .accessibilityHidden(true)
-                }
             }
             if reviewing {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(Planner.suggestsParentCompletion(item, in: store.items)
                          ? "All subtasks are complete"
                          : item.kind == .event ? "This event has ended" : "The scheduled time has passed")
-                        .font(.caption).foregroundStyle(.secondary)
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 8) { reviewActions(item, compact: true) }
-                        VStack(alignment: .leading, spacing: 8) { reviewActions(item, compact: false) }
+                        .font(.caption).foregroundStyle(reviewTint)
+                    Group {
+                        if dynamicTypeSize.isAccessibilitySize {
+                            VStack(spacing: 0) { reviewActions(item) }
+                        } else {
+                            HStack(spacing: 0) { reviewActions(item) }
+                        }
+                    }
+                    .background(reviewTint.opacity(0.07), in: RoundedRectangle(cornerRadius: 12))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 12).strokeBorder(reviewTint.opacity(0.12), lineWidth: 0.5)
+                            .allowsHitTesting(false)
                     }
                     .padding(.bottom, 8)
-                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: 6)))
-                }.padding(.leading, 52).padding(.bottom, 4)
+                }
+                .padding(.leading, 52).padding(.bottom, 4)
+                .transition(.opacity)
+            }
+        }
+        .padding(.trailing, !reviewing && needsReview(item) ? 14 : 0)
+        .overlay(alignment: .trailing) {
+            if !reviewing && needsReview(item) {
+                Circle().fill(reviewTint).frame(width: 6, height: 6)
+                    .accessibilityHidden(true)
+                    .allowsHitTesting(false)
             }
         }
         .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 20))
         .listRowSeparatorTint(Color.primary.opacity(0.07))
     }
-    private func setReviewing(_ value: Bool) {
-        withAnimation(reduceMotion ? .easeInOut(duration: 0.18) : .smooth(duration: 0.35)) { reviewing = value }
+    private var reviewAnimation: Animation? {
+        reduceMotion ? nil : .smooth(duration: 0.5)
     }
-    @ViewBuilder private func reviewActions(_ item: PlanItem, compact: Bool) -> some View {
-        Button {
-            withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.toggle(item) }
-        } label: {
-            Label("Complete", systemImage: "checkmark")
-                .font(.subheadline.weight(.medium)).fixedSize()
-                .padding(.horizontal, 14).frame(minHeight: 44)
-                .foregroundStyle(Color(.systemBackground))
-                .background(Color.primary, in: Capsule())
+    private func setReviewing(_ value: Bool) {
+        withAnimation(reviewAnimation) { reviewing = value }
+    }
+    @ViewBuilder private func reviewActions(_ item: PlanItem) -> some View {
+        reviewAction("Complete", symbol: "checkmark", item: item) {
+            withAnimation(reviewAnimation) { store.toggle(item) }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Complete \(item.title)")
-        Button {
-            withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.dismissSuggestion(item) }
-        } label: {
-            Text("Leave open").font(.subheadline.weight(.medium)).fixedSize()
-                .padding(.horizontal, 14).frame(minHeight: 44)
-                .background(.quaternary, in: Capsule())
+        reviewActionDivider
+        reviewAction("Leave open", symbol: "minus", item: item) {
+            withAnimation(reviewAnimation) { store.dismissSuggestion(item) }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Leave \(item.title) open")
-        Button { editing = item } label: {
+        reviewActionDivider
+        reviewAction("Reschedule", symbol: "calendar", item: item) { editing = item }
+    }
+    private var reviewActionDivider: some View {
+        Rectangle().fill(reviewTint.opacity(0.15))
+            .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : 0.5,
+                   height: dynamicTypeSize.isAccessibilitySize ? 0.5 : 24)
+            .accessibilityHidden(true)
+    }
+    private func reviewAction(_ title: String, symbol: String, item: PlanItem,
+                              action: @escaping () -> Void) -> some View {
+        Button(action: action) {
             Group {
-                if compact {
-                    Image(systemName: "calendar.badge.clock").font(.body)
+                if dynamicTypeSize.isAccessibilitySize {
+                    Label(title, systemImage: symbol)
+                        .font(.subheadline.weight(.medium))
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
-                    Label("Reschedule", systemImage: "calendar.badge.clock")
-                        .font(.subheadline.weight(.medium)).fixedSize()
+                    VStack(spacing: 5) {
+                        Image(systemName: symbol).font(.system(size: 16, weight: .medium))
+                            .frame(height: 20)
+                        Text(title).font(.caption.weight(.medium))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }.frame(maxWidth: .infinity)
                 }
             }
-            .padding(.horizontal, compact ? 0 : 14)
-            .frame(minWidth: 44, minHeight: 44)
-            .background(.quaternary, in: Capsule())
+            .foregroundStyle(reviewTint)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 6).padding(.vertical, 10)
+            .frame(minHeight: 52)
+            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Reschedule \(item.title)")
-        .help("Reschedule")
+        .frame(maxWidth: .infinity)
+        .buttonStyle(.borderless)
+        .accessibilityLabel("\(title): \(item.title)")
     }
     private func itemTitle(_ item: PlanItem) -> some View {
         Text(item.title).font(.body.weight(.medium))
