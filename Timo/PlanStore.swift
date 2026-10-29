@@ -4,20 +4,35 @@ import UserNotifications
 
 @MainActor final class PlanStore: ObservableObject {
     @Published private(set) var items: [PlanItem] = []
+    private var series: [RepeatingPlan] = []
+    private var displayedDay = Day(Date())
     @Published var errorMessage: String?
     private let url: URL
     private var canWrite = true
     private var reminderRevision = 0
     private var reminderWorker: Task<Void, Never>?
     private let notificationCenter = UNUserNotificationCenter.current()
-    private struct Document: Codable { var version = 4; var items: [PlanItem] }
+    private struct Document: Codable {
+        var version = 5
+        var items: [PlanItem]
+        var series: [RepeatingPlan]
+        private enum CodingKeys: String, CodingKey { case version, items, series }
+        init(items: [PlanItem], series: [RepeatingPlan]) { self.items = items; self.series = series }
+        init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            version = try values.decode(Int.self, forKey: .version)
+            items = try values.decode([PlanItem].self, forKey: .items)
+            series = try values.decodeIfPresent([RepeatingPlan].self, forKey: .series) ?? []
+        }
+    }
     init() {
         url = URL.applicationSupportDirectory.appending(path: "Timo", directoryHint: .isDirectory).appending(path: "plan.json")
         do {
             if FileManager.default.fileExists(atPath: url.path) {
                 let document = try JSONDecoder().decode(Document.self, from: Data(contentsOf: url))
-                guard (1...4).contains(document.version) else { throw CocoaError(.fileReadCorruptFile) }
+                guard (1...5).contains(document.version) else { throw CocoaError(.fileReadCorruptFile) }
                 items = document.items
+                series = document.series
             }
         } catch {
             canWrite = false
@@ -27,19 +42,40 @@ import UserNotifications
         reconcile()
         refreshReminders()
     }
-    private func commit(_ updated: [PlanItem]) {
+    private func commit(_ updated: [PlanItem], series updatedSeries: [RepeatingPlan]? = nil) {
         guard canWrite else { errorMessage = "Saving is disabled to protect the existing plan. Please close the app and resolve the saved-file error."; return }
         do {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
-            try encoder.encode(Document(items: updated)).write(to: url, options: .atomic)
+            try encoder.encode(Document(items: updated, series: updatedSeries ?? series)).write(to: url, options: .atomic)
             items = updated
+            if let updatedSeries { series = updatedSeries }
             refreshReminders()
         } catch { errorMessage = "This change could not be saved. \(error.localizedDescription)" }
     }
+    @discardableResult private func materialize(_ updated: inout [PlanItem], series plans: [RepeatingPlan], now: Date) -> Bool {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: now)
+        let horizon = calendar.date(byAdding: .day, value: 60, to: today)!
+        let changed = Planner.materialize(plans, in: &updated, from: Day(today), through: Day(horizon))
+        // Include earlier starts for overnight/multi-day ranges overlapping the viewed day.
+        var selectedChanged = false
+        for plan in plans {
+            let span = plan.template.end.flatMap { end in plan.template.start().map { max(0, end.timeIntervalSince($0)) } } ?? 0
+            let previous = calendar.date(byAdding: .day, value: -(Int(ceil(span / 86400))), to: displayedDay.date())!
+            if Planner.materialize([plan], in: &updated, from: Day(previous), through: displayedDay) { selectedChanged = true }
+        }
+        return changed || selectedChanged
+    }
+    func showDay(_ day: Day) {
+        displayedDay = day
+        reconcile()
+    }
     func reconcile(now: Date = Date()) {
         var updated = items
-        if Planner.reconcile(&updated, now: now) { commit(updated) }
+        let generated = materialize(&updated, series: series, now: now)
+        let carried = Planner.reconcile(&updated, now: now)
+        if generated || carried { commit(updated) }
     }
     func requestReminderPermission() async throws -> Bool {
         try await notificationCenter.requestAuthorization(options: [.alert, .sound])
@@ -84,11 +120,21 @@ import UserNotifications
     func save(_ item: PlanItem) throws {
         try Planner.validate(item, in: items)
         var updated = items
-        if let i = updated.firstIndex(where: { $0.id == item.id }) { updated[i] = item }
-        else { var fresh = item; fresh.originalDay = fresh.day; updated.append(fresh) }
-        // New items use their own carry-over preference, including when saved on a past day.
+        var plans = series
+        let previous = items.first { $0.id == item.id }
+        var previousDefinition = previous
+        previousDefinition?.completedAt = item.completedAt
+        previousDefinition?.suggestionDismissed = item.suggestionDismissed
+        if (item.repeatRule != .never || previous?.seriesID != nil) && previousDefinition != item {
+            Planner.saveRepeating(item, items: &updated, series: &plans)
+        } else if let i = updated.firstIndex(where: { $0.id == item.id }) {
+            updated[i] = item
+        } else {
+            var fresh = item; fresh.originalDay = fresh.day; updated.append(fresh)
+        }
+        materialize(&updated, series: plans, now: Date())
         Planner.reconcile(&updated, now: Date())
-        commit(updated)
+        commit(updated, series: plans)
     }
     func toggle(_ item: PlanItem) {
         var updated = items
@@ -104,7 +150,14 @@ import UserNotifications
         updated[i].suggestionDismissed = true; commit(updated)
     }
     func delete(_ item: PlanItem, children: Bool) {
-        var updated = items; Planner.delete(item.id, includingChildren: children, from: &updated); commit(updated)
+        var updated = items
+        var plans = series
+        if item.seriesID != nil {
+            Planner.deleteSeries(item, items: &updated, series: &plans)
+        } else {
+            Planner.delete(item.id, includingChildren: children, from: &updated)
+        }
+        commit(updated, series: plans)
     }
     func item(_ id: UUID?) -> PlanItem? { items.first { $0.id == id } }
     func children(of item: PlanItem) -> [PlanItem] { items.filter { $0.parentID == item.id }.sorted { $0.createdAt < $1.createdAt } }

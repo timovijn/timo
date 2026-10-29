@@ -53,11 +53,44 @@ struct ItemEditor: View {
                     Text("Leave the time open, choose a moment, or set aside a stretch of time.")
                 }
                 Section {
-                    Toggle("Move to next day if unfinished", isOn: $item.movesToNextDay)
-                } footer: {
-                    Text(item.movesToNextDay
-                         ? "Unfinished items move to today. A time range keeps its time and duration; a single time becomes any time."
-                         : "This item stays on its scheduled day, even if unfinished.")
+                    Picker("Repeat", selection: $item.repeatRule) {
+                        ForEach(RepeatRule.allCases) { rule in
+                            Text(rule.title).tag(rule)
+                        }
+                    }
+                    if item.repeatRule == .custom {
+                        ForEach(orderedWeekdays, id: \.self) { weekday in
+                            Toggle(Calendar.current.weekdaySymbols[weekday - 1], isOn: Binding(
+                                get: { item.repeatWeekdays.contains(weekday) },
+                                set: { selected in
+                                    if selected { item.repeatWeekdays.append(weekday) }
+                                    else { item.repeatWeekdays.removeAll { $0 == weekday } }
+                                }))
+                        }
+                    }
+                    if item.repeatRule == .weekly {
+                        Text("Every " + item.day.date().formatted(.dateTime.weekday(.wide)))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                } header: { Text("Repeat") } footer: {
+                    if item.repeatRule != .never || item.seriesID != nil {
+                        Text("Starts on the first matching day on or after the selected date. Each occurrence can be completed independently and stays on its scheduled day. Edits apply to every occurrence of this repeating item, including earlier days. Completion is separate for each day. Choosing Never keeps only this occurrence.")
+                    }
+                }
+                .onChange(of: item.repeatRule) { _, rule in
+                    if rule != .never { item.movesToNextDay = false }
+                    if rule == .custom && item.repeatWeekdays.isEmpty {
+                        item.repeatWeekdays = [Calendar.current.component(.weekday, from: item.day.date())]
+                    }
+                }
+                if item.repeatRule == .never && item.seriesID == nil {
+                    Section {
+                        Toggle("Move to next day if unfinished", isOn: $item.movesToNextDay)
+                    } footer: {
+                        Text(item.movesToNextDay
+                             ? "Unfinished items move to today. A time range keeps its time and duration; a single time becomes any time."
+                             : "This item stays on its scheduled day, even if unfinished.")
+                    }
                 }
                 Section {
                     Toggle(isOn: Binding(get: { item.reminderAt != nil }, set: { enabled in
@@ -100,7 +133,7 @@ struct ItemEditor: View {
                             // Save current edits together with the completion change.
                             item.completedAt = item.isComplete ? nil : Date(); save()
                         }
-                        Button("Delete item", role: .destructive) { showingDelete = true }
+                        Button(item.seriesID == nil ? "Delete item" : "Delete repeating item", role: .destructive) { showingDelete = true }
                     }
                 }
             }
@@ -119,10 +152,16 @@ struct ItemEditor: View {
                 }
                 Button("OK", role: .cancel) { issue = nil; needsNotificationSettings = false }
             } message: { Text(issue ?? "") }
-            .confirmationDialog("Delete this item?", isPresented: $showingDelete, titleVisibility: .visible) {
-                Button("Delete item", role: .destructive) { store.delete(item, children: false); dismiss() }
+            .confirmationDialog(item.seriesID == nil ? "Delete this item?" : "Delete all occurrences of this repeating item?", isPresented: $showingDelete, titleVisibility: .visible) {
+                Button(item.seriesID == nil ? "Delete item" : "Delete all occurrences", role: .destructive) {
+                    store.delete(item, children: false); dismiss()
+                }
             }
         }
+    }
+    private var orderedWeekdays: [Int] {
+        let first = Calendar.current.firstWeekday
+        return (0..<7).map { (first - 1 + $0) % 7 + 1 }
     }
     private func save() {
         item.locations = locations.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }

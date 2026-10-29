@@ -17,9 +17,61 @@ public struct Day: Codable, Hashable, Comparable {
     }
 }
 
+public enum RepeatRule: String, Codable, CaseIterable, Identifiable {
+    case never, daily, weekdays, weekly, custom
+    public var id: String { rawValue }
+    public var title: String {
+        switch self {
+        case .never: return "Never"
+        case .daily: return "Every day"
+        case .weekdays: return "Every weekday"
+        case .weekly: return "Every week"
+        case .custom: return "Custom days"
+        }
+    }
+    public func matches(_ day: Day, starting start: Day, weekdays: [Int], calendar: Calendar = .current) -> Bool {
+        guard day >= start else { return false }
+        let weekday = calendar.component(.weekday, from: day.date(calendar: calendar))
+        switch self {
+        case .never: return day == start
+        case .daily: return true
+        case .weekdays: return (2...6).contains(weekday)
+        case .weekly: return weekday == calendar.component(.weekday, from: start.date(calendar: calendar))
+        case .custom: return weekdays.contains(weekday)
+        }
+    }
+}
+
+public struct RepeatingPlan: Codable, Equatable, Identifiable {
+    public var id: UUID
+    public var familyID: UUID
+    public var template: PlanItem
+    public var endBefore: Day?
+    public var excludedDays: [Day] = []
+    public init(template: PlanItem) {
+        id = UUID()
+        familyID = id
+        self.template = template
+        self.template.completedAt = nil
+        self.template.carriedFrom = nil
+        self.template.suggestionDismissed = false
+        self.template.movesToNextDay = false
+        self.template.seriesID = nil
+        self.template.occurrenceDay = nil
+    }
+    public func includes(_ day: Day, calendar: Calendar = .current) -> Bool {
+        guard endBefore.map({ day < $0 }) ?? true, !excludedDays.contains(day) else { return false }
+        return template.repeatRule.matches(day, starting: template.day, weekdays: template.repeatWeekdays, calendar: calendar)
+    }
+}
+
 public struct PlanItem: Identifiable, Codable, Equatable {
     public var id: UUID
     public var movesToNextDay: Bool
+    public var repeatRule: RepeatRule = .never
+    public var repeatWeekdays: [Int] = []
+    public var seriesID: UUID?
+    public var occurrenceDay: Day?
     public var title: String
     public var notes: String
     public var locations: [String]
@@ -45,12 +97,16 @@ public struct PlanItem: Identifiable, Codable, Equatable {
     }
     // Read the original task/event format without changing IDs or scheduling choices.
     private enum CodingKeys: String, CodingKey {
-        case id, title, notes, locations, people, day, minute, end, reminderAt, completedAt, parentID, originalDay, carriedFrom, suggestionDismissed, createdAt, movesToNextDay
+        case id, title, notes, locations, people, day, minute, end, reminderAt, completedAt, parentID, originalDay, carriedFrom, suggestionDismissed, createdAt, movesToNextDay, repeatRule, repeatWeekdays, seriesID, occurrenceDay
     }
     private enum LegacyKeys: String, CodingKey { case kind }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
+        repeatRule = try c.decodeIfPresent(RepeatRule.self, forKey: .repeatRule) ?? .never
+        repeatWeekdays = try c.decodeIfPresent([Int].self, forKey: .repeatWeekdays) ?? []
+        seriesID = try c.decodeIfPresent(UUID.self, forKey: .seriesID)
+        occurrenceDay = try c.decodeIfPresent(Day.self, forKey: .occurrenceDay)
         title = try c.decode(String.self, forKey: .title)
         notes = try c.decode(String.self, forKey: .notes)
         locations = try c.decodeIfPresent([String].self, forKey: .locations) ?? []
@@ -94,9 +150,10 @@ public struct PlanItem: Identifiable, Codable, Equatable {
 }
 
 public enum PlannerError: LocalizedError {
-    case title, schedule, parent, nested, children
+    case title, schedule, parent, nested, children, repeatDays
     public var errorDescription: String? {
         switch self {
+        case .repeatDays: return "Choose at least one day to repeat on."
         case .title: return "Give this item a title."
         case .schedule: return "Choose a valid time, with any end time after the start."
         case .parent: return "Choose an existing parent."
@@ -107,10 +164,145 @@ public enum PlannerError: LocalizedError {
 }
 
 public enum Planner {
+    // Generate only the requested window; stored occurrence keys make revisiting idempotent.
+    @discardableResult public static func materialize(_ series: [RepeatingPlan], in items: inout [PlanItem],
+                                                      from first: Day, through last: Day,
+                                                      calendar: Calendar = .current) -> Bool {
+        guard first <= last else { return false }
+        var changed = false
+        for plan in series {
+            var existing = Set(items.filter { $0.seriesID == plan.id }.compactMap(\.occurrenceDay))
+            var cursor = max(first, plan.template.day)
+            while cursor <= last {
+                if !existing.contains(cursor), plan.includes(cursor, calendar: calendar) {
+                    var occurrence = plan.template
+                    occurrence.id = UUID()
+                    occurrence.seriesID = plan.id
+                    occurrence.occurrenceDay = cursor
+                    updateStart(&occurrence, day: cursor, minute: occurrence.minute, calendar: calendar)
+                    occurrence.originalDay = cursor
+                    occurrence.completedAt = nil
+                    occurrence.movesToNextDay = false
+                    occurrence.parentID = nil
+                    items.append(occurrence)
+                    existing.insert(cursor)
+                    changed = true
+                }
+                guard let next = calendar.date(byAdding: .day, value: 1, to: cursor.date(calendar: calendar)) else { break }
+                cursor = Day(next, calendar: calendar)
+            }
+        }
+        return changed
+    }
+    // A repeating item has one shared definition. Editing any occurrence updates
+    // the whole family, including plans split by older versions of the app.
+    public static func saveRepeating(_ edited: PlanItem, items: inout [PlanItem], series: inout [RepeatingPlan], calendar: Calendar = .current) {
+        let previous = items.first { $0.id == edited.id }
+        let family = series.first { $0.id == previous?.seriesID }?.familyID
+        let plans = series.filter { $0.familyID == family }
+        let related = Set(plans.map(\.id))
+        let occurrences = items.filter { $0.seriesID.map { related.contains($0) } ?? false }
+        let shift = previous.map {
+            calendar.dateComponents([.day], from: $0.day.date(calendar: calendar), to: edited.day.date(calendar: calendar)).day ?? 0
+        } ?? 0
+        func shifted(_ day: Day) -> Day {
+            Day(calendar.date(byAdding: .day, value: shift, to: day.date(calendar: calendar))!, calendar: calendar)
+        }
+        series.removeAll { related.contains($0.id) }
+        items.removeAll { $0.id == edited.id || ($0.seriesID.map { related.contains($0) } ?? false) }
+
+        guard edited.repeatRule != .never else {
+            var single = edited
+            single.seriesID = nil
+            single.occurrenceDay = nil
+            single.originalDay = single.day
+            single.carriedFrom = nil
+            let removed = Set(occurrences.map(\.id)).subtracting([single.id])
+            for index in items.indices where items[index].parentID.map({ removed.contains($0) }) ?? false {
+                items[index].parentID = nil
+            }
+            items.append(single)
+            return
+        }
+
+        let originalStart = plans.map { $0.template.day }.min()
+        let earliest = originalStart.map(shifted) ?? edited.day
+        let weeklyDay = calendar.component(.weekday, from: edited.day.date(calendar: calendar))
+        func matches(_ day: Day) -> Bool {
+            let weekday = calendar.component(.weekday, from: day.date(calendar: calendar))
+            switch edited.repeatRule {
+            case .never: return false
+            case .daily: return true
+            case .weekdays: return (2...6).contains(weekday)
+            case .weekly: return weekday == weeklyDay
+            case .custom: return edited.repeatWeekdays.contains(weekday)
+            }
+        }
+        var start = earliest
+        for offset in 0..<7 {
+            let candidate = Day(calendar.date(byAdding: .day, value: offset, to: earliest.date(calendar: calendar))!, calendar: calendar)
+            if matches(candidate) { start = candidate; break }
+        }
+        var definition = edited
+        updateStart(&definition, day: start, minute: edited.minute, calendar: calendar)
+        var plan = RepeatingPlan(template: definition)
+        if let first = plans.min(by: { $0.template.day < $1.template.day }) {
+            plan.id = first.id
+            plan.familyID = first.familyID
+        }
+        // Preserve previous deletions and an explicitly stopped series.
+        plan.excludedDays = Array(Set(plans.flatMap(\.excludedDays).map(shifted))).filter { $0 != edited.day }
+        if !plans.isEmpty && plans.allSatisfy({ $0.endBefore != nil }) {
+            plan.endBefore = plans.compactMap(\.endBefore).max().map(shifted)
+        }
+        series.append(plan)
+
+        for old in occurrences {
+            let day = shifted(old.occurrenceDay ?? old.day)
+            guard plan.includes(day, calendar: calendar) else { continue }
+            var updated = definition
+            updateStart(&updated, day: day, minute: definition.minute, calendar: calendar)
+            updated.id = old.id
+            updated.seriesID = plan.id
+            updated.occurrenceDay = day
+            updated.originalDay = day
+            updated.createdAt = old.createdAt
+            updated.completedAt = old.id == edited.id ? edited.completedAt : old.completedAt
+            updated.movesToNextDay = false
+            updated.parentID = old.parentID
+            let scheduleChanged = old.day != updated.day || old.minute != updated.minute || old.end != updated.end
+            updated.suggestionDismissed = scheduleChanged ? false : old.suggestionDismissed
+            items.append(updated)
+        }
+        if occurrences.isEmpty {
+            var first = definition
+            first.id = edited.id
+            first.seriesID = plan.id
+            first.occurrenceDay = first.day
+            first.originalDay = first.day
+            first.movesToNextDay = false
+            items.append(first)
+        }
+        let retained = Set(items.map(\.id))
+        let removed = Set(occurrences.map(\.id)).subtracting(retained)
+        for index in items.indices where items[index].parentID.map({ removed.contains($0) }) ?? false {
+            items[index].parentID = nil
+        }
+    }
+    public static func deleteSeries(_ item: PlanItem, items: inout [PlanItem], series: inout [RepeatingPlan]) {
+        guard let family = series.first(where: { $0.id == item.seriesID })?.familyID else {
+            delete(item.id, includingChildren: false, from: &items)
+            return
+        }
+        let related = Set(series.filter { $0.familyID == family }.map(\.id))
+        let ids = items.filter { $0.seriesID.map { related.contains($0) } ?? false }.map(\.id)
+        for id in ids { delete(id, includingChildren: false, from: &items) }
+        series.removeAll { related.contains($0.id) }
+    }
     @discardableResult public static func reconcile(_ items: inout [PlanItem], now: Date, calendar: Calendar = .current) -> Bool {
         let today = Day(now, calendar: calendar)
         var changed = false
-        for index in items.indices where items[index].movesToNextDay && !items[index].isComplete && items[index].day < today {
+        for index in items.indices where items[index].movesToNextDay && items[index].seriesID == nil && !items[index].isComplete && items[index].day < today {
             // An overnight item still in progress stays on its original schedule.
             if let end = items[index].end, end > now { continue }
             if let reminder = items[index].reminderAt, reminder < now { items[index].reminderAt = nil }
@@ -131,6 +323,7 @@ public enum Planner {
     }
     public static func validate(_ item: PlanItem, in items: [PlanItem], calendar: Calendar = .current) throws {
         guard !item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw PlannerError.title }
+        if item.repeatRule == .custom && (item.repeatWeekdays.isEmpty || item.repeatWeekdays.contains(where: { !(1...7).contains($0) })) { throw PlannerError.repeatDays }
         if let minute = item.minute, !(0..<1440).contains(minute) { throw PlannerError.schedule }
         if let end = item.end {
             guard let start = item.start(calendar: calendar), end > start else { throw PlannerError.schedule }
@@ -177,5 +370,34 @@ public enum Planner {
     public static func suggestsParentCompletion(_ parent: PlanItem, in items: [PlanItem]) -> Bool {
         let children = items.filter { $0.parentID == parent.id }
         return !parent.isComplete && !parent.suggestionDismissed && !children.isEmpty && children.allSatisfy(\.isComplete)
+    }
+}
+
+// Assign overlapping time ranges to parallel tracks. Touching endpoints may share
+// a track; ranges with the same start put the longest event closest to the axis.
+public enum TimelineLanes {
+    public static func assign(_ intervals: [Range<Double>]) -> [Int] {
+        let order = intervals.indices.sorted {
+            if intervals[$0].lowerBound != intervals[$1].lowerBound {
+                return intervals[$0].lowerBound < intervals[$1].lowerBound
+            }
+            if intervals[$0].upperBound != intervals[$1].upperBound {
+                return intervals[$0].upperBound > intervals[$1].upperBound
+            }
+            return $0 < $1
+        }
+        var ends: [Double] = []
+        var lanes = Array(repeating: 0, count: intervals.count)
+        for index in order where !intervals[index].isEmpty {
+            let interval = intervals[index]
+            if let lane = ends.firstIndex(where: { $0 <= interval.lowerBound }) {
+                ends[lane] = interval.upperBound
+                lanes[index] = lane
+            } else {
+                lanes[index] = ends.count
+                ends.append(interval.upperBound)
+            }
+        }
+        return lanes
     }
 }
