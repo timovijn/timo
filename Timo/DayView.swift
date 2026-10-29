@@ -43,7 +43,7 @@ struct DayView: View {
         visible.filter(needsReview)
     }
     private func hasOpenReminder(_ item: PlanItem) -> Bool {
-        !item.reminders.isEmpty && !item.isComplete
+        !item.isComplete && item.reminders.contains { $0 > now }
     }
     private func needsReview(_ item: PlanItem) -> Bool {
         !item.isComplete && !item.suggestionDismissed &&

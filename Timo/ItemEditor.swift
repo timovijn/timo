@@ -30,6 +30,13 @@ struct ItemEditor: View {
                 Section {
                     TextField("What’s on your day?", text: $item.title, axis: .vertical)
                         .font(.title3.weight(.medium)).focused($titleFocused)
+                        .submitLabel(.done)
+                        // The title wraps but stays one line: Return finishes editing instead of adding a break.
+                        .onChange(of: item.title) { _, title in
+                            guard title.contains(where: \.isNewline) else { return }
+                            item.title = title.split(whereSeparator: \.isNewline).joined(separator: " ")
+                            titleFocused = false
+                        }
                 }
                 Section {
                     // One line of buttons: the day, then an optional start and duration, each removable.
@@ -132,7 +139,7 @@ struct ItemEditor: View {
                             .transition(.scale(scale: 0.8).combined(with: .opacity))
                         }
                         SchedulePill(name: "Reminder", addTitle: "Add reminder", addLabel: "Reminder", value: nil,
-                                     tint: .blue, isEditing: .constant(false), onAdd: addReminder) { EmptyView() }
+                                     isEditing: .constant(false), onAdd: addReminder) { EmptyView() }
                             .disabled(requestingReminder)
                     }
                     .padding(.vertical, 2)
@@ -153,7 +160,7 @@ struct ItemEditor: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 } header: { Text("Reminders") } footer: {
-                    Text("Reminders appear in the blue alarm filter and notify you at the chosen times.")
+                    Text("Upcoming reminders appear in the blue alarm filter and notify you at the chosen times.")
                 }
                 Section("Locations") {
                     ItemTextFields(entries: $locations, placeholder: "Location", symbol: "mappin.and.ellipse", addLabel: "Add location")
@@ -173,6 +180,11 @@ struct ItemEditor: View {
                 }
             }
             .navigationTitle(existing ? "Your item" : "New item").navigationBarTitleDisplayMode(.inline)
+            .background(KeyboardDismissal())
+            // A popover replaces the keyboard, whichever field was being typed in.
+            .onChange(of: editingField) { _, field in
+                if field != nil { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) { Button("Save") { save() }.fontWeight(.semibold).disabled(requestingReminder || item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
@@ -557,5 +569,42 @@ private struct ItemTextFields: View {
                 focusedEntry = entry.id
             }
         }
+    }
+}
+
+/// Closes the keyboard when a tap lands anywhere except a text field, without taking the tap
+/// from the button or row underneath.
+private struct KeyboardDismissal: UIViewRepresentable {
+    func makeUIView(context: Context) -> InstallerView { InstallerView() }
+    func updateUIView(_ uiView: InstallerView, context: Context) {}
+    static func dismantleUIView(_ uiView: InstallerView, coordinator: ()) { uiView.uninstall() }
+
+    final class InstallerView: UIView, UIGestureRecognizerDelegate {
+        private lazy var tap: UITapGestureRecognizer = {
+            let tap = UITapGestureRecognizer(target: self, action: #selector(dismissKeyboard))
+            tap.cancelsTouchesInView = false
+            tap.delegate = self
+            return tap
+        }()
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            uninstall()
+            window?.addGestureRecognizer(tap)
+        }
+        func uninstall() { tap.view?.removeGestureRecognizer(tap) }
+
+        @objc private func dismissKeyboard() { window?.endEditing(true) }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            var view = touch.view
+            while let current = view {
+                if current is UITextField || current is UITextView { return false }
+                view = current.superview
+            }
+            return true
+        }
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
     }
 }

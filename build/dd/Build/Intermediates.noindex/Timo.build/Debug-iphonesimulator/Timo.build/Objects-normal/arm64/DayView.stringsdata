@@ -1,0 +1,392 @@
+{
+  "source": "/Users/timovijn/Timo/GitHub/timo/Timo/DayView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Day",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 143
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add item",
+        "location": {
+          "startingColumn": 37,
+          "startingLine": 133
+        }
+      },
+      {
+        "comment": "",
+        "key": "Next day",
+        "location": {
+          "startingColumn": 37,
+          "startingLine": 255
+        }
+      },
+      {
+        "comment": "",
+        "key": "Previous day",
+        "location": {
+          "startingColumn": 37,
+          "startingLine": 256
+        }
+      },
+      {
+        "comment": "",
+        "key": "Previous day",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 160
+        }
+      },
+      {
+        "comment": "",
+        "key": "Choose a day",
+        "location": {
+          "startingColumn": 37,
+          "startingLine": 186
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tap or swipe up for the calendar, or hold for today",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 188
+        }
+      },
+      {
+        "comment": "",
+        "key": "Go to today",
+        "location": {
+          "startingColumn": 45,
+          "startingLine": 190
+        }
+      },
+      {
+        "comment": "",
+        "key": "Next day",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 200
+        }
+      },
+      {
+        "comment": "",
+        "key": "Show full day",
+        "location": {
+          "startingColumn": 56,
+          "startingLine": 300
+        }
+      },
+      {
+        "comment": "",
+        "key": "Show %lld items with reminders",
+        "location": {
+          "startingColumn": 74,
+          "startingLine": 300
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reminder filter on",
+        "location": {
+          "startingColumn": 56,
+          "startingLine": 301
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reminder filter off",
+        "location": {
+          "startingColumn": 79,
+          "startingLine": 301
+        }
+      },
+      {
+        "comment": "",
+        "key": "Toggles unfinished items with a reminder set for this day",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 303
+        }
+      },
+      {
+        "comment": "",
+        "key": "Show full day",
+        "location": {
+          "startingColumn": 49,
+          "startingLine": 311
+        }
+      },
+      {
+        "comment": "",
+        "key": "Review %lld items",
+        "location": {
+          "startingColumn": 67,
+          "startingLine": 311
+        }
+      },
+      {
+        "comment": "",
+        "key": "Review filter on",
+        "location": {
+          "startingColumn": 49,
+          "startingLine": 312
+        }
+      },
+      {
+        "comment": "",
+        "key": "Review filter off",
+        "location": {
+          "startingColumn": 70,
+          "startingLine": 312
+        }
+      },
+      {
+        "comment": "",
+        "key": "Toggles items needing review for this day",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 314
+        }
+      },
+      {
+        "comment": "",
+        "key": "99+",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 333
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 333
+        }
+      },
+      {
+        "comment": "",
+        "key": "timo",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 411
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld to review",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 369
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld with reminders",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 371
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld/%lld complete",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 373
+        }
+      },
+      {
+        "comment": "",
+        "key": "All clear",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 380
+        }
+      },
+      {
+        "comment": "",
+        "key": "There are no unfinished items with reminders for this day. Your other items are still in the full day view.",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 383
+        }
+      },
+      {
+        "comment": "",
+        "key": "There’s nothing left to review for this day. Your other items are still in the full day view.",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 384
+        }
+      },
+      {
+        "comment": "",
+        "key": "Show full day",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 386
+        }
+      },
+      {
+        "comment": "",
+        "key": "Room for your day",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 391
+        }
+      },
+      {
+        "comment": "",
+        "key": "Something to do. A little time set aside. Start with what matters today.",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 393
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add an item",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 395
+        }
+      },
+      {
+        "comment": "",
+        "key": "Try a sample day",
+        "location": {
+          "startingColumn": 57,
+          "startingLine": 396
+        }
+      },
+      {
+        "comment": "",
+        "key": "Mark %@ incomplete",
+        "location": {
+          "startingColumn": 59,
+          "startingLine": 564
+        }
+      },
+      {
+        "comment": "",
+        "key": "Complete %@",
+        "location": {
+          "startingColumn": 93,
+          "startingLine": 564
+        }
+      },
+      {
+        "comment": "",
+        "key": "Carried from %@",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 579
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@: %@",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 818
+        }
+      },
+      {
+        "comment": "",
+        "key": "Switch to list view",
+        "location": {
+          "startingColumn": 48,
+          "startingLine": 871
+        }
+      },
+      {
+        "comment": "",
+        "key": "Switch to time view",
+        "location": {
+          "startingColumn": 72,
+          "startingLine": 871
+        }
+      },
+      {
+        "comment": "",
+        "key": "Time view",
+        "location": {
+          "startingColumn": 48,
+          "startingLine": 872
+        }
+      },
+      {
+        "comment": "",
+        "key": "List view",
+        "location": {
+          "startingColumn": 62,
+          "startingLine": 872
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reminder time",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1011
+        }
+      },
+      {
+        "comment": "",
+        "key": "Check this reminder",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 1016
+        }
+      },
+      {
+        "comment": "",
+        "key": "Remind me at",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 1002
+        }
+      },
+      {
+        "comment": "",
+        "key": "This updates the reminder time for every occurrence of this repeating item.",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1007
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 70,
+          "startingLine": 1013
+        }
+      },
+      {
+        "comment": "",
+        "key": "Save",
+        "location": {
+          "startingColumn": 70,
+          "startingLine": 1014
+        }
+      },
+      {
+        "comment": "",
+        "key": "OK",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 1017
+        }
+      }
+    ]
+  },
+  "version": 1
+}
