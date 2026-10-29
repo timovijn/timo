@@ -203,47 +203,60 @@ final class PlannerTests: XCTestCase {
         XCTAssertThrowsError(try Planner.validate(invalidTime, in: [], calendar: calendar))
     }
 
-    func testReminderPersistenceAndOlderItemsDefaultToNoReminder() throws {
-        let item = PlanItem(title: "Read", day: Day(date(29), calendar: calendar), reminderAt: date(29, 20))
+    func testReminderPersistenceAndOlderItemsMigrate() throws {
+        let item = PlanItem(title: "Read", day: Day(date(29), calendar: calendar), reminders: [date(29, 19), date(29, 20)])
         let data = try JSONEncoder().encode(item)
         XCTAssertEqual(try JSONDecoder().decode(PlanItem.self, from: data), item)
         var older = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        older.removeValue(forKey: "reminderAt")
+        let encodedReminders = try XCTUnwrap(older.removeValue(forKey: "reminders") as? [Any])
+        let unset = try JSONDecoder().decode(PlanItem.self, from: JSONSerialization.data(withJSONObject: older))
+        XCTAssertEqual(unset.reminders, [])
+        XCTAssertEqual(unset.id, item.id)
+        // The single-reminder format becomes a one-element list.
+        older["reminderAt"] = encodedReminders[1]
         let migrated = try JSONDecoder().decode(PlanItem.self, from: JSONSerialization.data(withJSONObject: older))
-        XCTAssertNil(migrated.reminderAt)
-        XCTAssertEqual(migrated.id, item.id)
+        XCTAssertEqual(migrated.reminders, [date(29, 20)])
     }
     func testUpcomingReminderQueueExcludesPastAndCompletedAndKeepsNearest() {
         let day = Day(date(29), calendar: calendar)
-        let first = PlanItem(title: "First", day: day, reminderAt: date(29, 13))
-        let later = PlanItem(title: "Later", day: day, reminderAt: date(29, 14))
-        let past = PlanItem(title: "Past", day: day, reminderAt: date(29, 10))
-        var completed = PlanItem(title: "Done", day: day, reminderAt: date(29, 15))
+        let first = PlanItem(title: "First", day: day, reminders: [date(29, 16), date(29, 13)])
+        let later = PlanItem(title: "Later", day: day, reminders: [date(29, 14)])
+        let past = PlanItem(title: "Past", day: day, reminders: [date(29, 10)])
+        var completed = PlanItem(title: "Done", day: day, reminders: [date(29, 15)])
         completed.completedAt = date(29)
         let unset = PlanItem(title: "No reminder", day: day)
         let all = [later, past, completed, unset, first]
-        XCTAssertEqual(Planner.upcomingReminders(in: all, now: date(29)), [first, later])
-        XCTAssertEqual(Planner.upcomingReminders(in: all, now: date(29), limit: 1), [first])
-        XCTAssertTrue(Planner.upcomingReminders(in: all, now: date(29), limit: 0).isEmpty)
-        XCTAssertEqual(Planner.upcomingReminders(in: all, now: date(29, 13)), [later])
+        func queue(_ now: Date, limit: Int = 64) -> [String] {
+            Planner.upcomingReminders(in: all, now: now, limit: limit).map { "\($0.item.title) \(calendar.component(.hour, from: $0.date))" }
+        }
+        XCTAssertEqual(queue(date(29)), ["First 13", "Later 14", "First 16"])
+        XCTAssertEqual(queue(date(29), limit: 1), ["First 13"])
+        XCTAssertTrue(queue(date(29), limit: 0).isEmpty)
+        XCTAssertEqual(queue(date(29, 13)), ["Later 14", "First 16"])
     }
-    func testMovingStartAlsoMovesReminderAndRemovingTimeKeepsReminder() {
-        var item = PlanItem(title: "Read", day: Day(date(29), calendar: calendar), minute: 20 * 60, reminderAt: date(29, 19))
+    func testDisplayedReminderPrefersNextUpcoming() {
+        let item = PlanItem(title: "Read", day: Day(date(29), calendar: calendar), reminders: [date(29, 18), date(29, 12), date(29, 15)])
+        XCTAssertEqual(item.displayedReminder(now: date(29, 13)), date(29, 15))
+        XCTAssertEqual(item.displayedReminder(now: date(29, 19)), date(29, 18))
+        XCTAssertNil(PlanItem(title: "None", day: item.day).displayedReminder(now: date(29)))
+    }
+    func testMovingStartAlsoMovesRemindersAndRemovingTimeKeepsThem() {
+        var item = PlanItem(title: "Read", day: Day(date(29), calendar: calendar), minute: 20 * 60, reminders: [date(29, 19), date(29, 18)])
         Planner.updateStart(&item, day: item.day, minute: 21 * 60, calendar: calendar)
-        XCTAssertEqual(item.reminderAt, date(29, 20))
+        XCTAssertEqual(item.reminders, [date(29, 20), date(29, 19)])
         Planner.updateStart(&item, day: item.day, minute: nil, calendar: calendar)
-        XCTAssertEqual(item.reminderAt, date(29, 20))
+        XCTAssertEqual(item.reminders, [date(29, 20), date(29, 19)])
         Planner.updateStart(&item, day: Day(date(30), calendar: calendar), minute: nil, calendar: calendar)
-        XCTAssertEqual(item.reminderAt, date(30, 20))
+        XCTAssertEqual(item.reminders, [date(30, 20), date(30, 19)])
     }
     func testCarryOverDoesNotReplayExpiredReminders() {
         let day = Day(date(28), calendar: calendar)
-        let expired = PlanItem(title: "Read", day: day, reminderAt: date(28, 20))
-        let upcoming = PlanItem(title: "Call", day: day, reminderAt: date(29, 18))
+        let expired = PlanItem(title: "Read", day: day, reminders: [date(28, 20), date(29, 18)])
+        let upcoming = PlanItem(title: "Call", day: day, reminders: [date(29, 18)])
         var items = [expired, upcoming]
         Planner.reconcile(&items, now: date(29), calendar: calendar)
-        XCTAssertNil(items[0].reminderAt)
-        XCTAssertEqual(items[1].reminderAt, date(29, 18))
+        XCTAssertEqual(items[0].reminders, [date(29, 18)])
+        XCTAssertEqual(items[1].reminders, [date(29, 18)])
     }
 
     func testMultipleLocationsAndPeoplePersistAndSurviveCarryOver() throws {

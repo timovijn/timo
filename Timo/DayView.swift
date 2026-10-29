@@ -43,7 +43,7 @@ struct DayView: View {
         visible.filter(needsReview)
     }
     private func hasOpenReminder(_ item: PlanItem) -> Bool {
-        item.reminderAt != nil && !item.isComplete
+        !item.reminders.isEmpty && !item.isComplete
     }
     private func needsReview(_ item: PlanItem) -> Bool {
         !item.isComplete && !item.suggestionDismissed &&
@@ -417,7 +417,7 @@ struct DayView: View {
             .animation(reviewAnimation, value: filter)
             .animation(reviewAnimation, value: filtered.map(\.id))
             .transaction { transaction in
-                if reduceMotion { transaction.animation = nil }
+                if reduceMotion && !ViewMode.crossFades(reduceMotion: true) { transaction.animation = nil }
             }
         }
         .scrollEdgeEffectHidden(true, for: .vertical)
@@ -681,8 +681,9 @@ struct DayView: View {
     private func itemStatusPanel(_ item: PlanItem, filter: DayFilter, day: Day) -> some View {
         let reminder = filter == .reminders
         let message: String
-        if reminder, let time = item.reminderAt {
+        if reminder, let time = item.displayedReminder(now: now) {
             message = time.formatted(date: Day(time) == day ? .omitted : .abbreviated, time: .shortened)
+                + (item.reminders.count > 1 ? " · \(item.reminders.count) reminders" : "")
         } else {
             message = item.end != nil ? "This time has ended" : "The scheduled time has passed"
         }
@@ -694,8 +695,9 @@ struct DayView: View {
                 self.changingReminder = item
             })
             actions.append(FilteredItemAction(title: "Remove", symbol: "bell.slash") {
-                guard var updated = self.store.item(item.id) else { return }
-                updated.reminderAt = nil
+                // Remove the reminder shown in the panel; any others stay.
+                guard var updated = self.store.item(item.id), let shown = updated.displayedReminder(now: Date()) else { return }
+                updated.reminders.removeAll { $0 == shown }
                 do { try withAnimation(self.reviewAnimation) { try self.store.save(updated) } }
                 catch { self.store.errorMessage = error.localizedDescription }
             })
@@ -830,8 +832,14 @@ private final class ViewMode {
         self.persisted = persisted
         showingTime = UserDefaults.standard.bool(forKey: Self.key)
     }
+    // Prefer Cross-Fade Transitions is a Reduce Motion option: with it, layout
+    // changes dissolve; with Reduce Motion alone, they apply immediately.
+    static func crossFades(reduceMotion: Bool) -> Bool {
+        reduceMotion && UIAccessibility.prefersCrossFadeTransitions
+    }
     static func animation(reduceMotion: Bool) -> Animation? {
-        reduceMotion ? nil : .smooth(duration: 0.5)
+        if crossFades(reduceMotion: reduceMotion) { return .easeInOut(duration: 0.3) }
+        return reduceMotion ? nil : .smooth(duration: 0.5)
     }
 }
 
@@ -870,10 +878,8 @@ private struct ViewModeButton: View {
 @MainActor
 private final class FrameRateBoost: NSObject {
     static let shared = FrameRateBoost()
-    static let didChange = Notification.Name("FrameRateBoost.didChange")
     private var link: CADisplayLink?
     private var expiry: Task<Void, Never>?
-    var isActive: Bool { link != nil }
 
     func request(for duration: Duration) {
         if link == nil {
@@ -881,15 +887,13 @@ private final class FrameRateBoost: NSObject {
             link.preferredFrameRateRange = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
             link.add(to: .main, forMode: .common)
             self.link = link
-            NotificationCenter.default.post(name: Self.didChange, object: self)
         }
         expiry?.cancel()
         expiry = Task { [weak self] in
             try? await Task.sleep(for: duration)
-            guard !Task.isCancelled, let self else { return }
-            self.link?.invalidate()
-            self.link = nil
-            NotificationCenter.default.post(name: Self.didChange, object: self)
+            guard !Task.isCancelled else { return }
+            self?.link?.invalidate()
+            self?.link = nil
         }
     }
     @objc private func tick() {}
@@ -904,9 +908,15 @@ private struct ModeTimelineLayout<Content: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        DayTimelineLayout(startMinute: startMinute, laneCount: laneCount, contentKey: contentKey,
-                          progress: mode.showingTime ? 1 : 0) { content }
-            .animation(ViewMode.animation(reduceMotion: reduceMotion), value: mode.showingTime)
+        let layout = DayTimelineLayout(startMinute: startMinute, laneCount: laneCount, contentKey: contentKey,
+                                       progress: mode.showingTime ? 1 : 0) { content }
+        if ViewMode.crossFades(reduceMotion: reduceMotion) {
+            // Dissolve between the finished layouts instead of moving rows.
+            ZStack { layout.id(mode.showingTime).transition(.opacity) }
+                .animation(ViewMode.animation(reduceMotion: reduceMotion), value: mode.showingTime)
+        } else {
+            layout.animation(ViewMode.animation(reduceMotion: reduceMotion), value: mode.showingTime)
+        }
     }
 }
 
@@ -954,8 +964,9 @@ private struct ModeSectionHeaderFade: ViewModifier {
     func body(content: Content) -> some View {
         content
             .opacity(mode.showingTime ? 0 : 1)
-            .animation(reduceMotion ? nil : mode.showingTime ? .easeOut(duration: 0.12)
-                       : .easeIn(duration: 0.18).delay(0.32), value: mode.showingTime)
+            .animation(reduceMotion ? ViewMode.animation(reduceMotion: true)
+                       : mode.showingTime ? .easeOut(duration: 0.12) : .easeIn(duration: 0.18).delay(0.32),
+                       value: mode.showingTime)
             .accessibilityHidden(mode.showingTime)
     }
 }
@@ -982,7 +993,7 @@ private struct ReminderTimeEditor: View {
 
     init(item: PlanItem) {
         self.item = item
-        _time = State(initialValue: max(item.reminderAt ?? Date(), Date().addingTimeInterval(60)))
+        _time = State(initialValue: max(item.displayedReminder(now: Date()) ?? Date(), Date().addingTimeInterval(60)))
     }
     var body: some View {
         NavigationStack {
@@ -1012,7 +1023,13 @@ private struct ReminderTimeEditor: View {
     private func save() {
         guard time > Date() else { issue = "Choose a reminder time in the future."; return }
         guard var updated = store.item(item.id) else { dismiss(); return }
-        updated.reminderAt = time
+        // Change the reminder this sheet opened with, keeping any others.
+        if let shown = updated.displayedReminder(now: Date()), let index = updated.reminders.firstIndex(of: shown) {
+            updated.reminders[index] = time
+        } else {
+            updated.reminders.append(time)
+        }
+        updated.reminders.sort()
         do {
             try store.save(updated)
             if let error = store.errorMessage { issue = error }
@@ -1027,44 +1044,27 @@ private struct TodayDateGlow: View {
     let isVisible: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var revealed = false
-    @State private var running = true
     private let fadeDuration = 1.6
 
     var body: some View {
-        // Core Animation spins the gradient on the render server. Redrawing a
-        // blurred conic gradient on the main thread cost ~9 ms per frame on
-        // device and made every list/time switch hitch while viewing today.
-        GlowRing(rotating: !reduceMotion && running)
+        // A still halo: it only fades in and out with today.
+        GlowRing()
             .opacity(0.48)
             .opacity(revealed ? 1 : 0)
-        .animation(reduceMotion ? nil : .easeInOut(duration: fadeDuration), value: revealed)
-        .task(id: isVisible) {
-            revealed = isVisible
-            if isVisible {
-                running = true
-            } else {
-                // Finish the same fade used on arrival before stopping frames.
-                // Returning to today cancels this task and resumes immediately.
-                do {
-                    if !reduceMotion { try await Task.sleep(for: .seconds(fadeDuration)) }
-                    try Task.checkCancellation()
-                    running = false
-                } catch { /* A reversed fade keeps the current glow alive. */ }
-            }
-        }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+            .animation(reduceMotion ? nil : .easeInOut(duration: fadeDuration), value: revealed)
+            .onChange(of: isVisible, initial: true) { _, visible in revealed = visible }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }
 
 private struct GlowRing: UIViewRepresentable {
-    let rotating: Bool
     func makeUIView(context: Context) -> GlowRingView { GlowRingView() }
-    func updateUIView(_ view: GlowRingView, context: Context) { view.rotating = rotating }
+    func updateUIView(_ view: GlowRingView, context: Context) {}
 }
 
-// A conic gradient rotates beneath a fixed mask of the three blurred capsule
-// strokes. The mask is drawn once per size, so the orbit costs no app frames.
+// A conic gradient beneath a fixed mask of the three blurred capsule strokes.
+// The mask is drawn once per size, so the halo costs no frames once shown.
 private final class GlowRingView: UIView {
     private static let spill: CGFloat = 40
     private static let imageContext = CIContext()
@@ -1076,8 +1076,6 @@ private final class GlowRingView: UIView {
     private let ringMask = CALayer()
     private var maskSize: CGSize?
     private var maskScale: CGFloat?
-    private var orbitIsBoosted: Bool?
-    var rotating = false { didSet { updateRotation() } }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -1091,8 +1089,6 @@ private final class GlowRingView: UIView {
         registerForTraitChanges([UITraitUserInterfaceStyle.self, UITraitDisplayScale.self]) { (view: GlowRingView, _) in
             view.setNeedsLayout()
         }
-        NotificationCenter.default.addObserver(self, selector: #selector(boostChanged),
-                                               name: FrameRateBoost.didChange, object: nil)
     }
     required init?(coder: NSCoder) { fatalError("GlowRingView is created programmatically") }
 
@@ -1116,36 +1112,6 @@ private final class GlowRingView: UIView {
             maskScale = scale
         }
         CATransaction.commit()
-        updateRotation()
-    }
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        updateRotation()
-    }
-    @objc private func boostChanged() { updateRotation() }
-    private func updateRotation() {
-        guard rotating, window != nil else {
-            gradient.removeAnimation(forKey: "orbit")
-            orbitIsBoosted = nil
-            return
-        }
-        let boosted = FrameRateBoost.shared.isActive
-        guard gradient.animation(forKey: "orbit") == nil || orbitIsBoosted != boosted else { return }
-        // Continue from the visible angle when the frame-rate cap changes.
-        let start = (gradient.presentation()?.value(forKeyPath: "transform.rotation.z") as? Double) ?? 0
-        let orbit = CABasicAnimation(keyPath: "transform.rotation.z")
-        orbit.fromValue = start
-        orbit.toValue = start + 2 * Double.pi
-        orbit.duration = 20
-        orbit.repeatCount = .infinity
-        orbit.isRemovedOnCompletion = false
-        // A 20-second orbit under heavy blur looks the same at ~20 fps. Without
-        // a cap it ran at ~48 fps, recompositing the screen while idle on today.
-        // The cap is lifted during a view switch: left in place, it held the
-        // whole app at 60 Hz despite the 120 Hz boost.
-        orbit.preferredFrameRateRange = boosted ? .default : CAFrameRateRange(minimum: 15, maximum: 30, preferred: 20)
-        gradient.add(orbit, forKey: "orbit")
-        orbitIsBoosted = boosted
     }
     private static func ringImage(size: CGSize, scale: CGFloat) -> CGImage? {
         let canvas = CGSize(width: size.width + spill * 2, height: size.height + spill * 2)
@@ -1753,7 +1719,12 @@ private struct DayPager: UIViewControllerRepresentable {
             let target = direction.map { -CGFloat($0) * size.width } ?? 0
             if reduceMotion {
                 offset = target
-                completeSettle()
+                if ViewMode.crossFades(reduceMotion: true), let view = container?.view {
+                    UIView.transition(with: view, duration: 0.3, options: [.transitionCrossDissolve, .allowUserInteraction],
+                                      animations: completeSettle)
+                } else {
+                    completeSettle()
+                }
                 return
             }
             let animation = UIViewPropertyAnimator(duration: 0.28, dampingRatio: 1) {
@@ -1828,22 +1799,31 @@ private struct DayPager: UIViewControllerRepresentable {
             dragging = false
             guard selected != day else { refreshIfIdle(); return }
             let delta = Calendar.current.dateComponents([.day], from: day.date(), to: selected.date()).day ?? 0
+            let crossFade = ViewMode.crossFades(reduceMotion: reduceMotion)
             if abs(delta) == 1, !reduceMotion {
                 preparePreviews()
                 // The source page is kept intact and the cached neighbour is
                 // used directly, including its existing scroll/text layout.
                 settle(direction: delta, notify: false)
             } else {
-                for preview in previews.values { remove(preview) }
-                previews.removeAll()
-                remove(host)
-                host = Self.makeHost(latestContent)
-                if let container { install(host, in: container) }
-                day = selected
-                displayedRevision = latestRevision
-                offset = 0
-                positionPages()
-                refreshIfIdle()
+                let replace = {
+                    for preview in self.previews.values { self.remove(preview) }
+                    self.previews.removeAll()
+                    self.remove(self.host)
+                    self.host = Self.makeHost(self.latestContent)
+                    if let container = self.container { self.install(self.host, in: container) }
+                    self.day = selected
+                    self.displayedRevision = self.latestRevision
+                    self.offset = 0
+                    self.positionPages()
+                    self.refreshIfIdle()
+                }
+                if crossFade, let view = container?.view {
+                    UIView.transition(with: view, duration: 0.3, options: [.transitionCrossDissolve, .allowUserInteraction],
+                                      animations: replace)
+                } else {
+                    replace()
+                }
             }
         }
         func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {

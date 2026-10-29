@@ -95,20 +95,22 @@ import UserNotifications
                 let pending = await notificationCenter.pendingNotificationRequests()
                 notificationCenter.removePendingNotificationRequests(withIdentifiers:
                     pending.filter { $0.identifier.hasPrefix("timo.reminder.") }.map(\.identifier))
-                let activeIDs = Set(snapshot.filter { !$0.isComplete }.map { "timo.reminder." + $0.id.uuidString })
+                // Identifiers are "timo.reminder.<item>.<time>", one per reminder.
+                let activeIDs = Set(snapshot.filter { !$0.isComplete }.map(\.id.uuidString))
                 let delivered = await notificationCenter.deliveredNotifications()
                 notificationCenter.removeDeliveredNotifications(withIdentifiers: delivered.map(\.request.identifier)
-                    .filter { $0.hasPrefix("timo.reminder.") && !activeIDs.contains($0) })
+                    .filter { $0.hasPrefix("timo.reminder.") && !activeIDs.contains(String($0.dropFirst("timo.reminder.".count).prefix(36))) })
                 guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else { continue }
-                for item in Planner.upcomingReminders(in: snapshot, now: Date()) {
-                    guard let date = item.reminderAt, date > Date() else { continue }
+                for reminder in Planner.upcomingReminders(in: snapshot, now: Date()) {
+                    let item = reminder.item, date = reminder.date
+                    guard date > Date() else { continue }
                     let content = UNMutableNotificationContent()
                     content.title = item.title
                     content.body = "A moment for what you planned."
                     content.sound = .default
                     content.userInfo = ["itemID": item.id.uuidString]
                     let components = Calendar.current.dateComponents([.calendar, .timeZone, .year, .month, .day, .hour, .minute, .second], from: date)
-                    let request = UNNotificationRequest(identifier: "timo.reminder." + item.id.uuidString,
+                    let request = UNNotificationRequest(identifier: "timo.reminder.\(item.id.uuidString).\(Int(date.timeIntervalSince1970))",
                         content: content, trigger: UNCalendarNotificationTrigger(dateMatching: components, repeats: false))
                     do { try await notificationCenter.add(request) }
                     catch { errorMessage = "Your plan was saved, but a reminder could not be scheduled. \(error.localizedDescription)" }

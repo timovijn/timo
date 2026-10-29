@@ -51,7 +51,7 @@ final class RepeatingTests: XCTestCase {
     }
     func testTimeDurationReminderAndDetailsAcrossDST() {
         var item = template(.daily, day: 24)
-        item.reminderAt = date(24, hour: 8)
+        item.reminders = [date(24, hour: 8)]
         item.people = ["Timo"]; item.locations = ["Office"]
         let plan = RepeatingPlan(template: item)
         var items: [PlanItem] = []
@@ -59,7 +59,7 @@ final class RepeatingTests: XCTestCase {
         for occurrence in items {
             XCTAssertEqual(calendar.component(.hour, from: occurrence.start(calendar: calendar)!), 9)
             XCTAssertEqual(calendar.component(.hour, from: occurrence.end!), 17)
-            XCTAssertEqual(calendar.component(.hour, from: occurrence.reminderAt!), 8)
+            XCTAssertEqual(calendar.component(.hour, from: occurrence.reminders[0]), 8)
             XCTAssertEqual(occurrence.people, item.people)
             XCTAssertEqual(occurrence.locations, item.locations)
             XCTAssertNil(occurrence.carriedFrom)
@@ -165,7 +165,7 @@ final class RepeatingTests: XCTestCase {
         edited.locations = ["Office"]
         Planner.updateStart(&edited, day: edited.day, minute: 600, calendar: calendar)
         edited.end = date(27, hour: 18)
-        edited.reminderAt = date(27, hour: 9)
+        edited.reminders = [date(27, hour: 9)]
         Planner.saveRepeating(edited, items: &items, series: &series, calendar: calendar)
         XCTAssertEqual(Set(items.map(\.id)), originalIDs)
         for item in items {
@@ -175,7 +175,7 @@ final class RepeatingTests: XCTestCase {
             XCTAssertEqual(item.locations, edited.locations)
             XCTAssertEqual(item.minute, 600)
             XCTAssertEqual(calendar.component(.hour, from: item.end!), 18)
-            XCTAssertEqual(calendar.component(.hour, from: item.reminderAt!), 9)
+            XCTAssertEqual(calendar.component(.hour, from: item.reminders[0]), 9)
         }
         XCTAssertNotNil(items.first { $0.day == day(24) }?.completedAt)
         XCTAssertFalse(items.first { $0.day == day(28) }!.isComplete)

@@ -42,6 +42,12 @@ public enum RepeatRule: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+public struct ScheduledReminder: Equatable {
+    public let item: PlanItem
+    public let date: Date
+    public init(item: PlanItem, date: Date) { self.item = item; self.date = date }
+}
+
 public struct RepeatingPlan: Codable, Equatable, Identifiable {
     public var id: UUID
     public var familyID: UUID
@@ -79,7 +85,8 @@ public struct PlanItem: Identifiable, Codable, Equatable {
     public var day: Day
     public var minute: Int?
     public var end: Date?
-    public var reminderAt: Date?
+    /// Moments to be reminded; an item can have several.
+    public var reminders: [Date]
     public var completedAt: Date?
     public var parentID: UUID?
     public var originalDay: Day
@@ -88,18 +95,18 @@ public struct PlanItem: Identifiable, Codable, Equatable {
     public var createdAt: Date
     public var isComplete: Bool { completedAt != nil }
     public init(id: UUID = UUID(), title: String, notes: String = "", day: Day,
-                minute: Int? = nil, end: Date? = nil, parentID: UUID? = nil, movesToNextDay: Bool = true, reminderAt: Date? = nil, locations: [String] = [], people: [String] = []) {
+                minute: Int? = nil, end: Date? = nil, parentID: UUID? = nil, movesToNextDay: Bool = true, reminders: [Date] = [], locations: [String] = [], people: [String] = []) {
         self.id = id; self.movesToNextDay = movesToNextDay; self.title = title; self.notes = notes; self.day = day
         self.minute = minute; self.end = end; self.parentID = parentID; originalDay = day
         self.locations = locations; self.people = people
-        self.reminderAt = reminderAt
+        self.reminders = reminders
         suggestionDismissed = false; createdAt = Date()
     }
     // Read the original task/event format without changing IDs or scheduling choices.
     private enum CodingKeys: String, CodingKey {
-        case id, title, notes, locations, people, day, minute, end, reminderAt, completedAt, parentID, originalDay, carriedFrom, suggestionDismissed, createdAt, movesToNextDay, repeatRule, repeatWeekdays, seriesID, occurrenceDay
+        case id, title, notes, locations, people, day, minute, end, reminders, completedAt, parentID, originalDay, carriedFrom, suggestionDismissed, createdAt, movesToNextDay, repeatRule, repeatWeekdays, seriesID, occurrenceDay
     }
-    private enum LegacyKeys: String, CodingKey { case kind }
+    private enum LegacyKeys: String, CodingKey { case kind, reminderAt }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
@@ -114,7 +121,13 @@ public struct PlanItem: Identifiable, Codable, Equatable {
         day = try c.decode(Day.self, forKey: .day)
         minute = try c.decodeIfPresent(Int.self, forKey: .minute)
         end = try c.decodeIfPresent(Date.self, forKey: .end)
-        reminderAt = try c.decodeIfPresent(Date.self, forKey: .reminderAt)
+        if let saved = try c.decodeIfPresent([Date].self, forKey: .reminders) {
+            reminders = saved
+        } else {
+            // Items saved before multiple reminders kept a single optional reminder.
+            let legacy = try decoder.container(keyedBy: LegacyKeys.self)
+            reminders = try legacy.decodeIfPresent(Date.self, forKey: .reminderAt).map { [$0] } ?? []
+        }
         completedAt = try c.decodeIfPresent(Date.self, forKey: .completedAt)
         parentID = try c.decodeIfPresent(UUID.self, forKey: .parentID)
         originalDay = try c.decode(Day.self, forKey: .originalDay)
@@ -131,6 +144,10 @@ public struct PlanItem: Identifiable, Codable, Equatable {
             }
             movesToNextDay = kind == "task"
         }
+    }
+    /// The reminder to show for this item: the next one still to come, otherwise the latest.
+    public func displayedReminder(now: Date) -> Date? {
+        reminders.filter { $0 > now }.min() ?? reminders.max()
     }
     public func start(calendar: Calendar = .current) -> Date? {
         guard let minute else { return nil }
@@ -309,7 +326,7 @@ public enum Planner {
         for index in items.indices where items[index].movesToNextDay && items[index].seriesID == nil && !items[index].isComplete && items[index].day < today {
             // An overnight item still in progress stays on its original schedule.
             if let end = items[index].end, end > now { continue }
-            if let reminder = items[index].reminderAt, reminder < now { items[index].reminderAt = nil }
+            items[index].reminders.removeAll { $0 < now }
             let start = items[index].start(calendar: calendar)
             let duration = items[index].end.flatMap { end in start.map { end.timeIntervalSince($0) } }
             if items[index].carriedFrom == nil { items[index].carriedFrom = items[index].day }
@@ -343,11 +360,13 @@ public enum Planner {
         else { for i in items.indices where items[i].parentID == id { items[i].parentID = nil } }
         items.removeAll { $0.id == id }
     }
-    public static func upcomingReminders(in items: [PlanItem], now: Date, limit: Int = 64) -> [PlanItem] {
-        Array(items.filter { !$0.isComplete && ($0.reminderAt ?? .distantPast) > now }
+    /// The nearest future reminders of unfinished items, one entry per reminder.
+    public static func upcomingReminders(in items: [PlanItem], now: Date, limit: Int = 64) -> [ScheduledReminder] {
+        Array(items.filter { !$0.isComplete }
+            .flatMap { item in Set(item.reminders).filter { $0 > now }.map { ScheduledReminder(item: item, date: $0) } }
             .sorted {
-                if $0.reminderAt != $1.reminderAt { return $0.reminderAt! < $1.reminderAt! }
-                return $0.id.uuidString < $1.id.uuidString
+                if $0.date != $1.date { return $0.date < $1.date }
+                return $0.item.id.uuidString < $1.item.id.uuidString
             }.prefix(max(0, limit)))
     }
     public static func updateStart(_ item: inout PlanItem, day: Day, minute: Int?, calendar: Calendar = .current) {
@@ -355,13 +374,11 @@ public enum Planner {
         let duration = item.end.flatMap { end in oldStart.map { end.timeIntervalSince($0) } }
         let oldDay = item.day
         item.day = day; item.minute = minute
-        if let reminder = item.reminderAt {
-            if let oldStart, let newStart = item.start(calendar: calendar) {
-                item.reminderAt = reminder.addingTimeInterval(newStart.timeIntervalSince(oldStart))
-            } else if oldDay != day {
-                let days = calendar.dateComponents([.day], from: oldDay.date(calendar: calendar), to: day.date(calendar: calendar)).day ?? 0
-                item.reminderAt = calendar.date(byAdding: .day, value: days, to: reminder)
-            }
+        if let oldStart, let newStart = item.start(calendar: calendar) {
+            item.reminders = item.reminders.map { $0.addingTimeInterval(newStart.timeIntervalSince(oldStart)) }
+        } else if oldDay != day {
+            let days = calendar.dateComponents([.day], from: oldDay.date(calendar: calendar), to: day.date(calendar: calendar)).day ?? 0
+            item.reminders = item.reminders.compactMap { calendar.date(byAdding: .day, value: days, to: $0) }
         }
         if let duration, let start = item.start(calendar: calendar) { item.end = start.addingTimeInterval(duration) }
         else { item.end = nil }
