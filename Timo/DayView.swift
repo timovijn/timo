@@ -529,11 +529,18 @@ struct DayView: View {
         // Blend the row variants with each other before compositing over the page.
         .compositingGroup()
         .background(alignment: .topLeading) {
-            TimelineScale(entries: entries, startMinute: startMinute, currentMinute: currentMinute,
-                          date: beginning, lanes: lanes)
-                .equatable()
-                .frame(height: DayTimelineLayout.top * 2 + CGFloat(1440 - startMinute) * DayTimelineLayout.pointsPerMinute)
-                .opacity(showingTimeView ? 1 : 0)
+            ZStack(alignment: .topLeading) {
+                TimelineScale(entries: entries, startMinute: startMinute, date: beginning, lanes: lanes)
+                    .equatable()
+                    .frame(height: DayTimelineLayout.top * 2 + CGFloat(1440 - startMinute) * DayTimelineLayout.pointsPerMinute)
+                // The minute tick only moves this small marker, never redrawing the tall scale.
+                if let currentMinute, currentMinute >= startMinute {
+                    TimelineNowMarker()
+                        .offset(y: DayTimelineLayout.top + CGFloat(currentMinute - startMinute) * DayTimelineLayout.pointsPerMinute
+                                - TimelineNowMarker.height / 2)
+                }
+            }
+            .opacity(showingTimeView ? 1 : 0)
         }
         .animation(reviewAnimation, value: active.map(\.id))
         .accessibilityElement(children: .contain)
@@ -1137,7 +1144,7 @@ private struct DayTimelineLayout: Layout {
 private struct TimelineConnector: View {
     let complete: Bool
     var body: some View {
-        Canvas { context, size in
+        Canvas(rendersAsynchronously: true) { context, size in
             let endY = max(0, size.height - 1)
             var connector = Path()
             connector.move(to: .zero)
@@ -1154,7 +1161,6 @@ private struct TimelineConnector: View {
 private struct TimelineScale: View, Equatable {
     let entries: [TimelineEntry]
     let startMinute: Double
-    let currentMinute: Double?
     let date: Date
     let lanes: [UUID: Int]
 
@@ -1162,7 +1168,9 @@ private struct TimelineScale: View, Equatable {
         DayTimelineLayout.top + CGFloat(minute - startMinute) * DayTimelineLayout.pointsPerMinute
     }
     var body: some View {
-        Canvas { context, size in
+        // The full-day scale is tall; rasterise it off the main thread so
+        // revealing Time view does not stall the first animation frames.
+        Canvas(rendersAsynchronously: true) { context, size in
             let axisX: CGFloat = 54
             var axis = Path()
             axis.move(to: CGPoint(x: axisX, y: y(startMinute)))
@@ -1198,17 +1206,26 @@ private struct TimelineScale: View, Equatable {
                 context.fill(Path(ellipseIn: CGRect(x: barX - 2, y: timeY - 2, width: 4, height: 4)),
                              with: .color(.primary.opacity(entry.complete ? 0.2 : 0.55)))
             }
-            if let currentMinute, currentMinute >= startMinute {
-                let position = y(currentMinute)
-                var current = Path()
-                current.move(to: CGPoint(x: axisX - 4, y: position))
-                current.addLine(to: CGPoint(x: size.width, y: position))
-                context.stroke(current, with: .color(.accentColor.opacity(0.4)),
-                               style: StrokeStyle(lineWidth: 0.5, dash: [3, 4]))
-                context.fill(Path(ellipseIn: CGRect(x: axisX - 2.5, y: position - 2.5, width: 5, height: 5)),
-                             with: .color(.accentColor))
-            }
         }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct TimelineNowMarker: View {
+    static let height: CGFloat = 5
+    var body: some View {
+        Canvas { context, size in
+            let axisX: CGFloat = 54, middle = size.height / 2
+            var current = Path()
+            current.move(to: CGPoint(x: axisX - 4, y: middle))
+            current.addLine(to: CGPoint(x: size.width, y: middle))
+            context.stroke(current, with: .color(.accentColor.opacity(0.4)),
+                           style: StrokeStyle(lineWidth: 0.5, dash: [3, 4]))
+            context.fill(Path(ellipseIn: CGRect(x: axisX - 2.5, y: 0, width: 5, height: 5)),
+                         with: .color(.accentColor))
+        }
+        .frame(height: Self.height)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
