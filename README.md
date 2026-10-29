@@ -23,8 +23,8 @@ Open the same project, select an installed iPhone Simulator as the destination a
 - Tap a circle to complete an item or undo completion. Completed items stay in place.
 - Tap a title to edit dates, times, notes, type or parent. Reschedule through its Day field.
 - Save a parent, reopen it and tap **Add subtask**. Subtasks can be independently scheduled; the daily row shows their parent.
-- Tap **Time passed · Review** for complete / leave open / reschedule actions. Completing every subtask produces a separate parent completion suggestion on its day.
-- Swipe for edit/delete or completion actions. Deleting a parent offers both keep-subtasks and delete-subtasks choices.
+- Items needing review have a small orange dot in the full day view. The orange Liquid Glass button at the top right toggles a review filter in the same list, with complete / leave open / reschedule buttons under each item. Resolving an item removes it from the filtered list. Tap the toolbar button again or Show all to return to the full day; an All clear state also offers Show full day. The filter fades and slides between views (fade only with Reduce Motion). Review actions use a filled Complete capsule, a quieter Leave open capsule and a calendar button for rescheduling; larger text stacks the labelled controls. Changing day clears the filter. Ended events, elapsed task times and finished subtasks can prompt a review.
+- Rows use a compact layout with times beside titles when space permits; longer titles and larger text sizes wrap naturally. Tap a title to edit or delete, and use its circle to change completion. There are no row swipe actions. Deleting a parent offers both keep-subtasks and delete-subtasks choices.
 - Use the bottom arrows and date control to move between days; **Today** returns to the current day.
 
 ## Scheduling decisions
