@@ -136,6 +136,10 @@ public struct PlanItem: Identifiable, Codable, Equatable {
         guard let minute else { return nil }
         return calendar.date(bySettingHour: minute / 60, minute: minute % 60, second: 0, of: day.date(calendar: calendar))
     }
+    public func isInProgress(now: Date, calendar: Calendar = .current) -> Bool {
+        guard !isComplete, let start = start(calendar: calendar), let end else { return false }
+        return start <= now && now < end
+    }
     public func isElapsed(now: Date, calendar: Calendar = .current) -> Bool {
         guard !isComplete else { return false }
         guard let boundary = end ?? start(calendar: calendar) else { return false }

@@ -10,11 +10,15 @@ struct DayView: View {
     private let reviewTint = Color.orange
     @State private var date = Calendar.current.startOfDay(for: Date())
     @State private var editing: PlanItem?
+    @StateObject private var daySwipeInteraction = DaySwipeInteraction()
     @State private var changingReminder: PlanItem?
     @State private var pickingDate = false
+    @State private var calendarTransitionActive = false
+    @Namespace private var calendarTransition
+    @ScaledMetric(relativeTo: .subheadline) private var dateLabelWidth: CGFloat = 110
     @AppStorage("timeView") private var showingTimeView = false
     @State private var showingRelativeDate = true
-    private enum DayFilter { case all, review, reminders }
+    private enum DayFilter: Int { case all, review, reminders }
     @State private var filter: DayFilter = .all
     private var reviewing: Bool { filter == .review }
     private var showingReminders: Bool { filter == .reminders }
@@ -41,31 +45,28 @@ struct DayView: View {
     }
     var body: some View {
         NavigationStack {
-            DayPager(day: day,
-                     content: AnyView(dayList(for: date, filter: filter).environmentObject(store).tint(.primary)),
-                     reduceMotion: reduceMotion)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                ZStack {
-                    HStack {
-                        viewModeButton
-                        Spacer()
-                        Button { add() } label: {
-                            Image(systemName: "plus").font(.title3.weight(.regular)).foregroundStyle(.secondary)
-                                .frame(width: 44, height: 44)
-                        }
-                        .buttonStyle(.glass).tint(.primary)
-                        .accessibilityLabel("Add item")
-                    }.padding(.horizontal, 20)
-                    dayNavigation
+            GeometryReader { viewport in
+                ZStack(alignment: .bottom) {
+                    DayPager(day: day,
+                             content: pageContent(for: date, filter: filter, insets: viewport.safeAreaInsets),
+                             adjacentContent: { adjacentDay in
+                                 pageContent(for: adjacentDay.date(), filter: .all, insets: viewport.safeAreaInsets)
+                             },
+                             revision: DayPageRevision(items: store.items, mode: showingTimeView, filter: filter.rawValue,
+                                                       minute: Int(now.timeIntervalSinceReferenceDate / 60), typeSize: dynamicTypeSize,
+                                                       insets: viewport.safeAreaInsets, reduceMotion: reduceMotion),
+                             reduceMotion: reduceMotion,
+                             onSwipe: { move($0) },
+                             interaction: daySwipeInteraction)
+                        .ignoresSafeArea(.container, edges: .vertical)
+                    dayDock
                 }
-                .frame(maxWidth: .infinity).frame(height: 72)
-                .coordinateSpace(name: "dayNavigationDock")
-                .padding(.top, 18)
-                .padding(.bottom, 4)
+                .frame(width: viewport.size.width, height: viewport.size.height)
             }
             .background(Color(.systemBackground))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.visible, for: .navigationBar)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 if showingReminders || !reminderItems.isEmpty {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -97,14 +98,19 @@ struct DayView: View {
             .sheet(item: $changingReminder) { item in
                 ReminderTimeEditor(item: item).environmentObject(store)
             }
-            .sheet(isPresented: $pickingDate) {
-                NavigationStack {
-                    DatePicker("Day", selection: Binding(get: { date }, set: { navigate(to: $0) }), displayedComponents: .date).datePickerStyle(.graphical).padding()
-                        .navigationTitle("Choose a day").navigationBarTitleDisplayMode(.inline)
-                        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { pickingDate = false } } }
-                }.presentationDetents([.medium, .large])
+            .sheet(isPresented: $pickingDate, onDismiss: { calendarTransitionActive = false }) {
+                if reduceMotion {
+                    calendarPicker
+                } else {
+                    calendarPicker
+                        .navigationTransition(.zoom(sourceID: "daySelector", in: calendarTransition))
+                }
             }
             .task(id: date) {
+                guard !calendarTransitionActive else {
+                    showingRelativeDate = false
+                    return
+                }
                 showingRelativeDate = true
                 do {
                     try await Task.sleep(for: .seconds(1.5))
@@ -117,8 +123,43 @@ struct DayView: View {
             .onChange(of: date) { _, _ in filter = .all; store.showDay(day) }
             .onAppear { store.showDay(day) }
             .onReceive(timer) { refresh($0) }
-            .onChange(of: scenePhase) { _, phase in if phase == .active { refresh(Date()); store.refreshReminders() } }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { refresh(Date()); store.refreshReminders() }
+                else { daySwipeInteraction.cancelExternalDrag() }
+            }
         }.tint(.primary)
+    }
+    private func pageContent(for date: Date, filter: DayFilter, insets: EdgeInsets) -> AnyView {
+        AnyView(dayList(for: date, filter: filter)
+            .contentMargins(.top, insets.top, for: .scrollContent)
+            .contentMargins(.bottom, insets.bottom + 94, for: .scrollContent)
+            .environmentObject(store).tint(.primary))
+    }
+    private var dayDock: some View {
+        ZStack {
+            HStack {
+                viewModeButton
+                Spacer()
+                Button { add() } label: {
+                    Image(systemName: "plus").font(.title3.weight(.regular)).foregroundStyle(.primary)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.glass).tint(.primary)
+                .accessibilityLabel("Add item")
+            }.padding(.horizontal, 20)
+            dayNavigation
+        }
+        .frame(maxWidth: .infinity).frame(height: 72)
+        .coordinateSpace(name: "dayNavigationDock")
+        .padding(.top, 18)
+        .padding(.bottom, 4)
+    }
+    private var calendarPicker: some View {
+        DatePicker("Day", selection: Binding(get: { date }, set: { navigate(to: $0) }), displayedComponents: .date)
+            .datePickerStyle(.graphical)
+            .padding()
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
     }
     private var viewModeButton: some View {
         Button {
@@ -128,7 +169,7 @@ struct DayView: View {
         } label: {
             Image(systemName: showingTimeView ? "list.bullet" : "clock")
                 .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
                 .frame(width: 44, height: 44)
         }
         .buttonStyle(.glass).tint(.primary)
@@ -137,7 +178,10 @@ struct DayView: View {
     }
     private var dayNavigation: some View {
         HStack(spacing: 0) {
-            Button { move(-1) } label: {
+            Button {
+                guard daySwipeInteraction.allowsItemActions else { return }
+                move(-1)
+            } label: {
                 Image(systemName: "chevron.left")
                     .font(.caption.weight(.semibold))
                     .frame(width: 44, height: 56).contentShape(Rectangle())
@@ -150,20 +194,34 @@ struct DayView: View {
                 Text(date, format: .dateTime.day().month(.abbreviated))
                     .font(.caption).foregroundStyle(.secondary)
             }
-                .frame(minWidth: 90, minHeight: 56)
+                .frame(width: dateLabelWidth)
+                .frame(minHeight: 56)
                 .contentShape(Rectangle())
                 .highPriorityGesture(
                     LongPressGesture(minimumDuration: 0.5, maximumDistance: 12)
-                        .onEnded { _ in goToToday() }
+                        .onEnded { _ in
+                            if daySwipeInteraction.isExternalDragging {
+                                daySwipeInteraction.cancelExternalDrag()
+                                return
+                            }
+                            guard daySwipeInteraction.allowsItemActions else { return }
+                            goToToday()
+                        }
                 )
-                .onTapGesture { pickingDate = true }
+                .onTapGesture {
+                    guard daySwipeInteraction.allowsItemActions else { return }
+                    openCalendar()
+                }
                 .accessibilityAddTraits(.isButton)
                 .accessibilityLabel("Choose a day")
                 .accessibilityValue(relativeDateLabel + ", " + date.formatted(date: .complete, time: .omitted))
-                .accessibilityHint("Tap for the calendar or hold for today")
-                .accessibilityAction { pickingDate = true }
+                .accessibilityHint("Tap or swipe up for the calendar, or hold for today")
+                .accessibilityAction { openCalendar() }
                 .accessibilityAction(named: "Go to today") { goToToday() }
-            Button { move(1) } label: {
+            Button {
+                guard daySwipeInteraction.allowsItemActions else { return }
+                move(1)
+            } label: {
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
                     .frame(width: 44, height: 56).contentShape(Rectangle())
@@ -172,20 +230,18 @@ struct DayView: View {
             .accessibilityLabel("Next day")
         }
         .padding(.horizontal, 6)
-        // Include the rim in the glass content so native interaction transforms
-        // deform it together with the capsule, rather than leaving it outside.
-        .overlay {
-            ZStack {
-                if day == Day(now) {
-                    TodayDateGlow()
-                        .transition(.opacity)
-                }
-            }
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: day == Day(now))
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
+        .glassEffect(.regular.interactive(!calendarTransitionActive), in: .capsule)
+        // Keep the animated halo and relative label outside the zoom source.
+        .matchedTransitionSource(id: "daySelector", in: calendarTransition) {
+            $0.clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         }
-        .glassEffect(.regular.interactive(), in: .capsule)
+        // Put the light behind the finished glass so its halo can spill beyond
+        // the capsule instead of being contained by the glass effect.
+        .background {
+            // Keep one glow alive so reversing a day swipe reverses its fade
+            // from the current brightness rather than restarting its entrance.
+            TodayDateGlow(isVisible: day == Day(now) && !calendarTransitionActive)
+        }
         .padding(.horizontal, 10).padding(.vertical, 4)
         .overlay(alignment: .top) {
             Text(relativeDateLabel)
@@ -193,7 +249,7 @@ struct DayView: View {
                 .fixedSize()
                 .padding(.horizontal, 8)
                 .offset(y: -16)
-                .opacity(showingRelativeDate ? 1 : 0)
+                .opacity(showingRelativeDate && !calendarTransitionActive ? 1 : 0)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
         }
@@ -202,7 +258,23 @@ struct DayView: View {
         // high-priority drag blocks the child's long press while it waits to fail.
         .simultaneousGesture(
             DragGesture(minimumDistance: 4, coordinateSpace: .named("dayNavigationDock"))
+                .onChanged { swipe in
+                    guard !calendarTransitionActive else { return }
+                    daySwipeInteraction.updateExternalDrag(horizontal: swipe.translation.width,
+                                                          vertical: swipe.translation.height)
+                }
                 .onEnded { swipe in
+                    guard !calendarTransitionActive else { return }
+                    if daySwipeInteraction.finishExternalDrag(horizontal: swipe.translation.width,
+                                                             projected: swipe.predictedEndTranslation.width) {
+                        return
+                    }
+                    // Release the glass press before the zoom captures its source.
+                    if swipe.translation.height < -18,
+                       -swipe.translation.height > abs(swipe.translation.width) * 1.35 {
+                        openCalendar()
+                        return
+                    }
                     let horizontal = swipe.translation.width
                     guard abs(horizontal) >= 6, abs(horizontal) > abs(swipe.translation.height) * 1.2 else { return }
                     move(horizontal < 0 ? 1 : -1)
@@ -212,6 +284,11 @@ struct DayView: View {
         .accessibilityElement(children: .contain)
         .accessibilityAction(named: "Next day") { move(1) }
         .accessibilityAction(named: "Previous day") { move(-1) }
+    }
+    private func openCalendar() {
+        guard !calendarTransitionActive else { return }
+        calendarTransitionActive = true
+        pickingDate = true
     }
     private var relativeDateLabel: String {
         let calendar = Calendar.current
@@ -240,10 +317,10 @@ struct DayView: View {
     }
     private func filterIcon(_ symbol: String, tint: Color, count: Int, isActive: Bool) -> some View {
         Image(systemName: symbol)
-            .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(isActive ? tint : Color.secondary)
+            .font(.system(size: 16, weight: .medium))
+            .foregroundStyle(isActive ? tint.opacity(0.85) : Color.primary.opacity(0.42))
             .frame(width: 44, height: 44)
-            .glassEffect(.regular.tint(isActive ? tint.opacity(0.32) : .clear).interactive(), in: .circle)
+            .glassEffect(.regular.tint(isActive ? tint.opacity(0.22) : .clear).interactive(), in: .circle)
             .overlay(alignment: .topTrailing) {
                 Text(count > 99 ? "99+" : "\(count)")
                     .font(.system(size: 10, weight: .semibold, design: .rounded).monospacedDigit())
@@ -267,8 +344,6 @@ struct DayView: View {
         let showingReminders = filter == .reminders
         let reviewItems = visible.filter(needsReview)
         let reminderItems = visible.filter(hasOpenReminder)
-        let filteredCount = showingReminders ? reminderItems.count : reviewItems.count
-        let filterTint = showingReminders ? Color.blue : reviewTint
         let filtered = visible.filter { item in
             switch filter {
             case .all: true
@@ -280,27 +355,15 @@ struct DayView: View {
         let displayedTimed = filtered.filter { $0.minute != nil }
         return ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 16) {
-                        Spacer(minLength: 0)
-                        if reviewing {
-                            Text("\(reviewItems.count) to review").font(.caption).foregroundStyle(reviewTint)
-                        } else if showingReminders {
-                            Text("\(reminderItems.count) with reminders").font(.caption).foregroundStyle(.blue)
-                        } else if !visible.isEmpty {
-                            Text("\(visible.filter(\.isComplete).count)/\(visible.count) complete")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    if filter != .all {
-                        HStack(spacing: 8) {
-                            Image(systemName: showingReminders ? "alarm" : "line.3.horizontal.decrease").foregroundStyle(filterTint)
-                            Text("\(visible.count - filteredCount) items hidden").foregroundStyle(.secondary)
-                            Spacer(minLength: 0)
-                            Button("Show all") { setFilter(.all) }.fontWeight(.medium).frame(minHeight: 44)
-                        }
-                        .font(.caption)
-                        .transition(.opacity)
+                HStack(spacing: 16) {
+                    Spacer(minLength: 0)
+                    if reviewing {
+                        Text("\(reviewItems.count) to review").font(.caption).foregroundStyle(reviewTint)
+                    } else if showingReminders {
+                        Text("\(reminderItems.count) with reminders").font(.caption).foregroundStyle(.blue)
+                    } else if !visible.isEmpty {
+                        Text("\(visible.filter(\.isComplete).count)/\(visible.count) complete")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 .padding(.horizontal, 20).padding(.vertical, 6)
@@ -354,6 +417,7 @@ struct DayView: View {
                 if reduceMotion { transaction.animation = nil }
             }
         }
+        .scrollEdgeEffectHidden(true, for: .vertical)
     }
     private func sectionHeading(_ title: String) -> some View {
         Text(title).font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
@@ -378,16 +442,38 @@ struct DayView: View {
         let firstMinute = min(entries.map(\.minute).min() ?? 360, currentMinute ?? 360)
         let startMinute = min(360, floor(firstMinute / 60) * 60)
         let lanes = TimelineEntry.durationLanes(for: entries)
-        let nextItem = items.first { ($0.start() ?? .distantPast) > now }?.id
         let showNow = filter == .all && day == Day(now)
+        let active = showNow ? items.filter { $0.isInProgress(now: now) } : []
+        let activeIDs = Set(active.map(\.id))
+        // Compact order puts all current ranges together, including overlapping
+        // ranges with an already-ended item between their start times.
+        let past = items.filter { !activeIDs.contains($0.id) && ($0.start() ?? .distantPast) <= now }
+        let upcoming = items.filter { !activeIDs.contains($0.id) && ($0.start() ?? .distantPast) > now }
+        let compactItems = showNow ? past + active + upcoming : items
+        let compactOrder = Dictionary(uniqueKeysWithValues: compactItems.enumerated().map { ($0.element.id, $0.offset * 3) })
+        let activeTop = active.first.flatMap { compactOrder[$0.id] }.map { $0 - 1 } ?? 0
         // Keep both text layouts at fixed endpoint widths. Only their positions
         // and opacity animate, so wrapping never changes in the middle of a frame.
         return DayTimelineLayout(startMinute: startMinute, laneCount: (lanes.values.max() ?? 0) + 1,
                                  progress: showingTimeView ? 1 : 0) {
+            if showNow, let first = past.first {
+                let order = (compactOrder[first.id] ?? 0) - 1
+                compactSectionDivider("Past")
+                    .layoutValue(key: TimelineCompactOrderKey.self, value: order)
+                    .accessibilitySortPriority(-Double(order))
+            }
+            if !active.isEmpty {
+                compactSectionDivider("In progress", showTime: true)
+                    .layoutValue(key: TimelineCompactOrderKey.self, value: activeTop)
+                    .accessibilitySortPriority(-Double(activeTop))
+            }
+            if showNow, let first = upcoming.first {
+                let order = (compactOrder[first.id] ?? 0) - 1
+                compactSectionDivider("Upcoming")
+                    .layoutValue(key: TimelineCompactOrderKey.self, value: order)
+                    .accessibilitySortPriority(-Double(order))
+            }
             ForEach(items) { item in
-                if showNow && item.id == nextItem {
-                    compactNowMarker
-                }
                 ForEach([false, true], id: \.self) { timedVariant in
                     row(item, filter: filter, day: day, feedbackEnabled: showingTimeView == timedVariant)
                         .overlay(alignment: .bottom) {
@@ -400,6 +486,8 @@ struct DayView: View {
                         .opacity(showingTimeView == timedVariant ? 1 : 0)
                         .allowsHitTesting(showingTimeView == timedVariant)
                         .accessibilityHidden(showingTimeView != timedVariant)
+                        .accessibilitySortPriority(showingTimeView || !showNow ? 0 : -Double(compactOrder[item.id] ?? 0))
+                        .layoutValue(key: TimelineCompactOrderKey.self, value: compactOrder[item.id] ?? 0)
                         .layoutValue(key: TimelineTimedVariantKey.self, value: timedVariant)
                         .layoutValue(key: TimelineMinuteKey.self, value: entries.first(where: { $0.id == item.id })?.minute ?? 0)
                         .anchorPreference(key: TimelineRowAnchors.self, value: .bounds) {
@@ -407,7 +495,6 @@ struct DayView: View {
                         }
                 }
             }
-            if showNow && nextItem == nil { compactNowMarker }
         }
         .backgroundPreferenceValue(TimelineRowAnchors.self) { anchors in
             GeometryReader { geometry in
@@ -416,25 +503,27 @@ struct DayView: View {
                     .opacity(showingTimeView ? 1 : 0)
             }
         }
+        .animation(reviewAnimation, value: active.map(\.id))
         .accessibilityElement(children: .contain)
     }
-    private var compactNowMarker: some View {
-        nowMarker
-            .padding(.horizontal, 8)
-            .frame(height: 24)
-            .opacity(showingTimeView ? 0 : 1)
-            .accessibilityHidden(showingTimeView)
-            .layoutValue(key: TimelineMarkerKey.self, value: true)
-    }
-    private var nowMarker: some View {
+    private func compactSectionDivider(_ title: String, showTime: Bool = false) -> some View {
         HStack(spacing: 10) {
-            Circle().fill(Color.accentColor).frame(width: 5, height: 5)
-            Text(now, style: .time).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-            Rectangle().fill(Color.primary.opacity(0.12)).frame(height: 0.5)
-        }.accessibilityLabel("Current time \(now.formatted(date: .omitted, time: .shortened))")
-            .listRowSeparator(.hidden)
-            .listRowInsets(EdgeInsets(top: 2, leading: 20, bottom: 2, trailing: 20))
-            .environment(\.defaultMinListRowHeight, 24)
+            Text(title)
+            Rectangle().fill(Color.primary.opacity(0.06)).frame(height: 0.5)
+            if showTime {
+                Text(now, style: .time).monospacedDigit()
+            }
+        }
+        .font(.caption2)
+        .foregroundStyle(.tertiary)
+        .padding(.horizontal, 8)
+        .frame(height: 24)
+        .opacity(showingTimeView ? 0 : 1)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityHidden(showingTimeView)
+        .allowsHitTesting(false)
+        .layoutValue(key: TimelineMarkerKey.self, value: true)
     }
     private func row(_ item: PlanItem, filter: DayFilter, day: Day, feedbackEnabled: Bool = true) -> some View {
         let reviewing = filter == .review
@@ -442,6 +531,7 @@ struct DayView: View {
         return VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 8) {
                 Button {
+                    guard daySwipeInteraction.allowsItemActions else { return }
                     withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.toggle(item) }
                 } label: {
                     Image(systemName: item.isComplete ? "checkmark.circle.fill" : "circle")
@@ -449,11 +539,14 @@ struct DayView: View {
                         .foregroundStyle(item.isComplete ? .secondary : .primary)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
-                }.buttonStyle(.plain)
+                }.buttonStyle(ItemPressStyle())
                     .accessibilityLabel(item.isComplete ? "Mark \(item.title) incomplete" : "Complete \(item.title)")
                     .accessibilityValue([needsReview(item) ? "Needs review" : nil, hasOpenReminder(item) ? "Reminder set" : nil].compactMap { $0 }.joined(separator: ", "))
                     .sensoryFeedback(.success, trigger: item.isComplete) { _, _ in feedbackEnabled }
-                Button { editing = item } label: {
+                Button {
+                    guard daySwipeInteraction.allowsItemActions else { return }
+                    editing = item
+                } label: {
                     HStack(alignment: .center, spacing: 12) {
                         VStack(alignment: .leading, spacing: 3) {
                             itemTitle(item)
@@ -476,7 +569,7 @@ struct DayView: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     .padding(.vertical, 2).contentShape(Rectangle())
-                }.buttonStyle(.plain)
+                }.buttonStyle(ItemPressStyle())
                     .accessibilityHint((needsReview(item) ? "Needs review. " : "") + (hasOpenReminder(item) ? "Reminder set. " : "") + "Open details and edit")
             }
             if reviewing || showingReminders {
@@ -587,7 +680,12 @@ struct DayView: View {
         }
         return FilteredItemPanel(symbol: reminder ? "alarm" : "exclamationmark.triangle",
                                  message: message, tint: reminder ? .blue : reviewTint,
-                                 itemTitle: item.title, actions: actions)
+                                 itemTitle: item.title, actions: actions.map { action in
+            FilteredItemAction(title: action.title, symbol: action.symbol) {
+                guard daySwipeInteraction.allowsItemActions else { return }
+                action.action()
+            }
+        })
     }
     private func itemTitle(_ item: PlanItem) -> some View {
         Text(item.title).font(.body.weight(.medium))
@@ -595,12 +693,9 @@ struct DayView: View {
             .strikethrough(item.isComplete, pattern: .solid, color: Color.secondary.opacity(0.45))
     }
     private func scheduleLabel(_ item: PlanItem, start: Date, day: Day) -> some View {
-        HStack(spacing: 6) {
-            Text(timeLabel(item, start: start, day: day)).font(.caption.monospacedDigit())
-            if item.end != nil, !item.isComplete, start <= now, (item.end ?? .distantPast) > now {
-                Text("In progress").font(.caption2.weight(.medium))
-            }
-        }.foregroundStyle(.secondary)
+        Text(timeLabel(item, start: start, day: day))
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
     }
     private func timeLabel(_ item: PlanItem, start: Date, day: Day) -> String {
         let startText = (item.day == day ? "" : start.formatted(.dateTime.day().month(.abbreviated)) + " · ") + start.formatted(date: .omitted, time: .shortened)
@@ -696,6 +791,19 @@ private struct FilteredItemPanel: View {
     }
 }
 
+// Use the button's native pressed state so scrolling cancels the highlight
+// automatically and opening still happens immediately on release.
+private struct ItemPressStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.6 : 1)
+            .animation(reduceMotion ? nil : .easeOut(duration: configuration.isPressed ? 0.06 : 0.16),
+                       value: configuration.isPressed)
+    }
+}
+
 private struct ReminderTimeEditor: View {
     @EnvironmentObject private var store: PlanStore
     @Environment(\.dismiss) private var dismiss
@@ -744,37 +852,54 @@ private struct ReminderTimeEditor: View {
     }
 }
 
-// The rim sweeps in once on arrival, then settles into quiet continuous motion.
+// Layer diffuse light around a soft core. Every layer is blurred, so the
+// capsule emits a halo rather than displaying a coloured border.
 private struct TodayDateGlow: View {
+    let isVisible: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @State private var appearedAt = Date()
+    @State private var revealed = false
+    @State private var running = true
+    private let fadeDuration = 1.6
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion || scenePhase != .active)) { tick in
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion || scenePhase != .active || !running)) { tick in
             let elapsed = max(0, tick.date.timeIntervalSince(appearedAt))
-            let entrance = reduceMotion ? 1 : min(elapsed / 1.35, 1)
-            let bloom = sin(entrance * .pi)
-            let reveal = reduceMotion ? 1 : 1 - pow(1 - min(elapsed / 0.85, 1), 3)
-            // Start with a quicker sweep and smoothly slow to the idle orbit.
-            let phase = reduceMotion ? 0 : elapsed / 12 + 0.55 * (1 - exp(-elapsed * 3))
+            let phase = reduceMotion ? 0 : elapsed / 20
             let gradient = AngularGradient(
                 colors: [.cyan, .blue, .purple, .pink, .purple, .blue, .cyan],
                 center: .center, angle: .degrees(phase * 360))
             ZStack {
-                Capsule().trim(from: 0, to: reveal)
-                    .stroke(gradient, style: StrokeStyle(lineWidth: 2.5 + bloom * 3, lineCap: .round))
-                    .blur(radius: 4 + bloom * 2).opacity(0.22 + bloom * 0.2)
-                Capsule().trim(from: 0, to: reveal)
-                    .stroke(gradient, style: StrokeStyle(lineWidth: 0.75 + bloom * 0.65, lineCap: .round))
-                    .opacity(0.28 + bloom * 0.28)
-                Capsule().trim(from: max(0, reveal - 0.2), to: reveal)
-                    .stroke(gradient, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-                    .blur(radius: 0.7).opacity((1 - entrance) * 0.65)
+                Capsule()
+                    .stroke(gradient, lineWidth: 12)
+                    .blur(radius: 12).opacity(0.32)
+                Capsule()
+                    .stroke(gradient, lineWidth: 6)
+                    .blur(radius: 5).opacity(0.36)
+                Capsule()
+                    .stroke(gradient, lineWidth: 2)
+                    .blur(radius: 2).opacity(0.38)
             }
             .padding(1)
+            .opacity(0.48)
         }
-        .onAppear { appearedAt = Date() }
+        .opacity(revealed ? 1 : 0)
+        .animation(reduceMotion ? nil : .easeInOut(duration: fadeDuration), value: revealed)
+        .task(id: isVisible) {
+            revealed = isVisible
+            if isVisible {
+                running = true
+            } else {
+                // Finish the same fade used on arrival before stopping frames.
+                // Returning to today cancels this task and resumes immediately.
+                do {
+                    if !reduceMotion { try await Task.sleep(for: .seconds(fadeDuration)) }
+                    try Task.checkCancellation()
+                    running = false
+                } catch { /* A reversed fade keeps the current glow alive. */ }
+            }
+        }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
@@ -795,6 +920,10 @@ private struct TimelineEntry: Equatable {
 
 private struct TimelineMinuteKey: LayoutValueKey {
     static let defaultValue: Double = 0
+}
+
+private struct TimelineCompactOrderKey: LayoutValueKey {
+    static let defaultValue = 0
 }
 
 private struct TimelineTimedVariantKey: LayoutValueKey {
@@ -867,6 +996,18 @@ private struct DayTimelineLayout: Layout {
             cache.proposals.append(ProposedViewSize(width: width, height: compactHeight))
             compactBottom += compactHeight
             if !marker { timeBottom = timeTop + timeHeight }
+        }
+        // Timeline positions stay chronological. Only compact placement groups
+        // active items; both endpoint text layouts retain their view identities.
+        compactBottom = 0
+        let compactIndices = subviews.indices.filter { !subviews[$0][TimelineTimedVariantKey.self] }
+            .sorted { subviews[$0][TimelineCompactOrderKey.self] < subviews[$1][TimelineCompactOrderKey.self] }
+        for index in compactIndices {
+            cache.compact[index].origin.y = compactBottom
+            if !subviews[index][TimelineMarkerKey.self] {
+                cache.compact[index + 1].origin.y = compactBottom
+            }
+            compactBottom += cache.compact[index].height
         }
         let axisHeight = Self.top + CGFloat(1440 - startMinute) * Self.pointsPerMinute
         cache.compactHeight = compactBottom
@@ -992,84 +1133,395 @@ private struct TimelineScale: View, Equatable {
     }
 }
 
-// An interruptible UIKit transition keeps rapid flicks immediate, without a queue.
+// UIKit and SwiftUI can both recognise the same touch sequence. Keep a
+// synchronous gate shared by the pager and all item actions, including the
+// release event that SwiftUI may deliver just after the pan ends.
+@MainActor
+private final class DaySwipeInteraction: ObservableObject {
+    private var swiping = false
+    private var suppressUntil: TimeInterval = 0
+    private var externalDragging = false
+    var isPaging = false
+    var externalDragChanged: ((CGFloat) -> Void)?
+    var externalDragEnded: ((CGFloat, CGFloat, Bool) -> Void)?
+    private let now: () -> TimeInterval
+
+    init(now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
+        self.now = now
+    }
+    var allowsItemActions: Bool { !swiping && !isPaging && now() >= suppressUntil }
+    var isExternalDragging: Bool { externalDragging }
+    func begin() { swiping = true }
+    func end() {
+        guard swiping else { return }
+        swiping = false
+        suppressUntil = now() + 0.2
+    }
+    func updateExternalDrag(horizontal: CGFloat, vertical: CGFloat) {
+        if !externalDragging {
+            guard abs(horizontal) >= 4, abs(horizontal) > abs(vertical) * 1.35 else { return }
+            externalDragging = true
+            begin()
+        }
+        externalDragChanged?(horizontal)
+    }
+    @discardableResult
+    func finishExternalDrag(horizontal: CGFloat, projected: CGFloat) -> Bool {
+        guard externalDragging else { return false }
+        externalDragging = false
+        end()
+        externalDragEnded?(horizontal, projected, false)
+        return true
+    }
+    func cancelExternalDrag() {
+        guard externalDragging else { return }
+        externalDragging = false
+        end()
+        externalDragEnded?(0, 0, true)
+    }
+
+}
+
+// Only plan, layout or minute changes update hosted content. Dock/glow/relative
+// label updates must not rebuild three pages during a horizontal animation.
+private struct DayPageRevision: Equatable {
+    let items: [PlanItem]
+    let mode: Bool
+    let filter: Int
+    let minute: Int
+    let typeSize: DynamicTypeSize
+    let insets: EdgeInsets
+    let reduceMotion: Bool
+}
+
+// Retain the current page and its neighbours. A swipe only moves existing
+// layers; the preview itself becomes the selected page after settling.
 private struct DayPager: UIViewControllerRepresentable {
     let day: Day
     let content: AnyView
+    let adjacentContent: (Day) -> AnyView
+    let revision: DayPageRevision
     let reduceMotion: Bool
+    let onSwipe: (Int) -> Void
+    let interaction: DaySwipeInteraction
 
-    func makeCoordinator() -> Coordinator { Coordinator(day: day, content: content) }
-
+    func makeCoordinator() -> Coordinator {
+        Coordinator(day: day, content: content, adjacentContent: adjacentContent,
+                    revision: revision, reduceMotion: reduceMotion, onSwipe: onSwipe, interaction: interaction)
+    }
     func makeUIViewController(context: Context) -> UIViewController {
-        let controller = UIViewController()
+        let controller = Controller()
         controller.view.backgroundColor = .systemBackground
         controller.view.clipsToBounds = true
-        context.coordinator.install(context.coordinator.host, in: controller)
+        let coordinator = context.coordinator
+        coordinator.container = controller
+        coordinator.install(coordinator.host, in: controller)
+        controller.onLayout = { [weak coordinator] size in coordinator?.layout(size: size) }
+        interaction.externalDragChanged = { [weak coordinator] translation in coordinator?.drag(to: translation) }
+        interaction.externalDragEnded = { [weak coordinator] translation, projected, cancelled in
+            coordinator?.endDrag(translation: translation, projected: projected, minimumTravel: 6, cancelled: cancelled)
+        }
+        let pan = UIPanGestureRecognizer(target: coordinator, action: #selector(Coordinator.panned(_:)))
+        pan.maximumNumberOfTouches = 1
+        pan.delegate = coordinator
+        pan.delaysTouchesBegan = false
+        pan.cancelsTouchesInView = true
+        controller.view.addGestureRecognizer(pan)
         return controller
     }
-
     func updateUIViewController(_ controller: UIViewController, context: Context) {
         let coordinator = context.coordinator
-        guard day != coordinator.day else {
-            coordinator.host.rootView = content
-            return
+        coordinator.onSwipe = onSwipe
+        coordinator.adjacentContent = adjacentContent
+        coordinator.reduceMotion = reduceMotion
+        coordinator.requestedDay = day
+        coordinator.latestContent = content
+        if revision != coordinator.latestRevision { coordinator.previewsDirty = true }
+        coordinator.latestRevision = revision
+        if day != coordinator.day {
+            coordinator.navigate(to: day)
+        } else {
+            coordinator.refreshIfIdle()
         }
-        let direction: CGFloat = day > coordinator.day ? 1 : -1
-        // Capture the current visual position before interrupting an earlier slide.
-        let outgoing = reduceMotion ? nil : controller.view.snapshotView(afterScreenUpdates: false)
-        coordinator.finishTransition()
-        let previous = coordinator.host
-        previous.willMove(toParent: nil)
-        previous.view.removeFromSuperview()
-        previous.removeFromParent()
-
-        let next = Coordinator.makeHost(content)
-        coordinator.day = day
-        coordinator.host = next
-        coordinator.install(next, in: controller)
-        controller.view.layoutIfNeeded()
-        guard let outgoing else { return }
-        outgoing.frame = controller.view.bounds
-        outgoing.isUserInteractionEnabled = false
-        outgoing.accessibilityElementsHidden = true
-        controller.view.addSubview(outgoing)
-        coordinator.outgoing = outgoing
-
-        let distance = controller.view.bounds.width * direction
-        next.view.transform = CGAffineTransform(translationX: distance, y: 0)
-        let animator = UIViewPropertyAnimator(duration: 0.18, curve: .easeOut) {
-            next.view.transform = .identity
-            outgoing.transform = CGAffineTransform(translationX: -distance, y: 0)
-        }
-        animator.addCompletion { [weak coordinator, weak outgoing] _ in
-            outgoing?.removeFromSuperview()
-            coordinator?.outgoing = nil
-            coordinator?.animator = nil
-        }
-        coordinator.animator = animator
-        animator.startAnimation()
     }
-
     static func dismantleUIViewController(_ controller: UIViewController, coordinator: Coordinator) {
-        coordinator.finishTransition()
+        coordinator.interaction.cancelExternalDrag()
+        coordinator.interaction.externalDragChanged = nil
+        coordinator.interaction.externalDragEnded = nil
+        coordinator.dispose()
     }
-
-    final class Coordinator {
+    private final class Controller: UIViewController {
+        var onLayout: ((CGSize) -> Void)?
+        override func viewDidLayoutSubviews() {
+            super.viewDidLayoutSubviews()
+            onLayout?(view.bounds.size)
+        }
+    }
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var onSwipe: (Int) -> Void
+        let interaction: DaySwipeInteraction
+        weak var container: UIViewController?
+        var adjacentContent: (Day) -> AnyView
+        var reduceMotion: Bool
+        var previews: [Int: UIHostingController<AnyView>] = [:]
+        var previewsDirty = false
+        var latestRevision: DayPageRevision
+        var displayedRevision: DayPageRevision?
+        var latestContent: AnyView
+        var requestedDay: Day
         var day: Day
         var host: UIHostingController<AnyView>
-        var animator: UIViewPropertyAnimator?
-        var outgoing: UIView?
+        private var animator: UIViewPropertyAnimator?
+        private var settlingDirection: Int?
+        private var notifyOnSettle = false
+        private var warmTask: Task<Void, Never>?
+        private var size: CGSize = .zero
+        private var dragging = false
+        private var dragOrigin: CGFloat = 0
+        private var offset: CGFloat = 0
 
-        init(day: Day, content: AnyView) {
+        init(day: Day, content: AnyView, adjacentContent: @escaping (Day) -> AnyView,
+             revision: DayPageRevision, reduceMotion: Bool, onSwipe: @escaping (Int) -> Void,
+             interaction: DaySwipeInteraction) {
+            self.adjacentContent = adjacentContent
+            self.reduceMotion = reduceMotion
             self.day = day
+            self.requestedDay = day
+            self.latestRevision = revision
+            self.displayedRevision = revision
+            self.latestContent = content
+            self.onSwipe = onSwipe
+            self.interaction = interaction
             host = Self.makeHost(content)
+            super.init()
         }
-        func finishTransition() {
+        func layout(size: CGSize) {
+            guard size.width > 0, size.height > 0, self.size != size else { return }
+            haltMotion(notify: true)
+            self.size = size
+            offset = 0
+            positionPages()
+            scheduleWarm()
+        }
+        private func positionPages() {
+            UIView.performWithoutAnimation {
+                host.view.transform = .identity
+                host.view.frame = CGRect(origin: .zero, size: size)
+                host.view.transform = CGAffineTransform(translationX: offset, y: 0)
+                for (direction, preview) in previews {
+                    preview.view.transform = .identity
+                    preview.view.frame = CGRect(x: CGFloat(direction) * size.width, y: 0, width: size.width, height: size.height)
+                    preview.view.transform = CGAffineTransform(translationX: offset, y: 0)
+                }
+            }
+        }
+        func refreshIfIdle() {
+            guard !dragging, animator == nil, requestedDay == day else { return }
+            if displayedRevision != latestRevision {
+                host.rootView = latestContent
+                displayedRevision = latestRevision
+            }
+            scheduleWarm()
+        }
+        private func scheduleWarm() {
+            guard warmTask == nil, !dragging, animator == nil, requestedDay == day, size.width > 0 else { return }
+            warmTask = Task { [weak self] in
+                await Task.yield()
+                guard !Task.isCancelled, let self else { return }
+                self.warmTask = nil
+                guard !self.dragging, self.animator == nil, self.requestedDay == self.day else { return }
+                self.preparePreviews()
+            }
+        }
+        private func preparePreviews() {
+            guard !reduceMotion, let container, size.width > 0,
+                  previewsDirty || previews[-1] == nil || previews[1] == nil else { return }
+            for direction in [-1, 1] {
+                guard let date = Calendar.current.date(byAdding: .day, value: direction, to: day.date()) else { continue }
+                let previewDay = Day(date)
+                if let preview = previews[direction] {
+                    if previewsDirty { preview.rootView = adjacentContent(previewDay) }
+                } else {
+                    let preview = Self.makeHost(adjacentContent(previewDay))
+                    install(preview, in: container)
+                    preview.view.isUserInteractionEnabled = false
+                    preview.view.accessibilityElementsHidden = true
+                    previews[direction] = preview
+                }
+            }
+            previewsDirty = false
+            positionPages()
+            // Warm text/layout before the next gesture instead of forcing it
+            // when a finger moves or when the destination is being revealed.
+            for preview in previews.values { preview.view.layoutIfNeeded() }
+        }
+        @objc func panned(_ gesture: UIPanGestureRecognizer) {
+            let translation = gesture.translation(in: gesture.view)
+            switch gesture.state {
+            case .began:
+                interaction.begin()
+                drag(to: translation.x)
+            case .changed:
+                drag(to: translation.x)
+            case .ended:
+                interaction.end()
+                let projected = translation.x + gesture.velocity(in: gesture.view).x * 0.16
+                endDrag(translation: translation.x, projected: projected,
+                        minimumTravel: max(32, size.width * 0.18), cancelled: false)
+            case .cancelled, .failed:
+                interaction.end()
+                endDrag(translation: 0, projected: 0, minimumTravel: 24, cancelled: true)
+            default: break
+            }
+        }
+        func drag(to translation: CGFloat) {
+            guard size.width > 0 else { return }
+            if !dragging {
+                warmTask?.cancel()
+                warmTask = nil
+                haltMotion(notify: true)
+                // Usually already warm. This is a fallback for a gesture that
+                // arrives before the first idle turn or immediately reverses.
+                preparePreviews()
+                dragging = true
+                dragOrigin = offset
+            }
+            offset = min(size.width, max(-size.width, dragOrigin + translation))
+            guard !reduceMotion else { return }
+            setTranslation(offset)
+        }
+        private func setTranslation(_ translation: CGFloat) {
+            let transform = CGAffineTransform(translationX: translation, y: 0)
+            host.view.transform = transform
+            for preview in previews.values { preview.view.transform = transform }
+        }
+        func endDrag(translation: CGFloat, projected: CGFloat, minimumTravel: CGFloat, cancelled: Bool) {
+            guard dragging else { return }
+            dragging = false
+            let travel = dragOrigin + translation
+            let projection = dragOrigin + projected
+            let commit = !cancelled && (abs(travel) >= minimumTravel ||
+                (abs(travel) >= 10 && abs(projection) > size.width * 0.2))
+            let direction: Int? = commit ? ((abs(travel) >= minimumTravel ? travel : projection) < 0 ? 1 : -1) : nil
+            settle(direction: direction, notify: true)
+        }
+        private func settle(direction: Int?, notify: Bool) {
+            warmTask?.cancel()
+            warmTask = nil
+            settlingDirection = direction
+            notifyOnSettle = notify
+            interaction.isPaging = true
+            let target = direction.map { -CGFloat($0) * size.width } ?? 0
+            if reduceMotion {
+                offset = target
+                completeSettle()
+                return
+            }
+            let animation = UIViewPropertyAnimator(duration: 0.28, dampingRatio: 1) {
+                self.setTranslation(target)
+            }
+            animation.addCompletion { [weak self] position in
+                guard position == .end else { return }
+                self?.offset = target
+                self?.completeSettle()
+            }
+            animator = animation
+            animation.startAnimation()
+        }
+        private func completeSettle() {
+            animator = nil
+            let direction = settlingDirection
+            let notify = notifyOnSettle
+            settlingDirection = nil
+            notifyOnSettle = false
+            if let direction { promote(direction: direction, preserving: 0) }
+            else { offset = 0; setTranslation(0) }
+            interaction.isPaging = false
+            if let direction, notify { onSwipe(direction) }
+            refreshIfIdle()
+        }
+        private func promote(direction: Int, preserving translation: CGFloat) {
+            guard let next = previews.removeValue(forKey: direction),
+                  let date = Calendar.current.date(byAdding: .day, value: direction, to: day.date()) else { return }
+            if let distant = previews.removeValue(forKey: -direction) { remove(distant) }
+            let previous = host
+            previous.view.isUserInteractionEnabled = false
+            previous.view.accessibilityElementsHidden = true
+            previews[-direction] = previous
+            host = next
+            host.view.isUserInteractionEnabled = true
+            host.view.accessibilityElementsHidden = false
+            day = Day(date)
+            displayedRevision = nil
+            offset = translation
+            positionPages()
+        }
+        private func haltMotion(notify: Bool) {
+            guard let animator else { return }
+            let visibleOffset = host.view.layer.presentation()?.affineTransform().tx ?? host.view.transform.tx
+            animator.stopAnimation(true)
+            self.animator = nil
+            let direction = settlingDirection
+            let shouldNotify = notify && notifyOnSettle
+            settlingDirection = nil
+            notifyOnSettle = false
+            if let direction {
+                promote(direction: direction, preserving: visibleOffset + CGFloat(direction) * size.width)
+                if shouldNotify { onSwipe(direction) }
+            } else {
+                offset = visibleOffset
+                setTranslation(visibleOffset)
+            }
+            interaction.isPaging = false
+        }
+        func navigate(to selected: Day) {
+            // Repeated SwiftUI updates must not interrupt an animation already
+            // settling towards the requested date.
+            if let direction = settlingDirection,
+               let target = Calendar.current.date(byAdding: .day, value: direction, to: day.date()),
+               Day(target) == selected { return }
+            haltMotion(notify: false)
+            dragging = false
+            guard selected != day else { refreshIfIdle(); return }
+            let delta = Calendar.current.dateComponents([.day], from: day.date(), to: selected.date()).day ?? 0
+            if abs(delta) == 1, !reduceMotion {
+                preparePreviews()
+                // The source page is kept intact and the cached neighbour is
+                // used directly, including its existing scroll/text layout.
+                settle(direction: delta, notify: false)
+            } else {
+                for preview in previews.values { remove(preview) }
+                previews.removeAll()
+                remove(host)
+                host = Self.makeHost(latestContent)
+                if let container { install(host, in: container) }
+                day = selected
+                displayedRevision = latestRevision
+                offset = 0
+                positionPages()
+                refreshIfIdle()
+            }
+        }
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return true }
+            let velocity = pan.velocity(in: pan.view)
+            return abs(velocity.x) > abs(velocity.y) * 1.35
+        }
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool { true }
+        func dispose() {
+            warmTask?.cancel()
+            warmTask = nil
             animator?.stopAnimation(true)
             animator = nil
-            outgoing?.removeFromSuperview()
-            outgoing = nil
-            host.view.transform = .identity
+            interaction.isPaging = false
+            for preview in previews.values { remove(preview) }
+            previews.removeAll()
+        }
+        private func remove(_ controller: UIHostingController<AnyView>) {
+            controller.willMove(toParent: nil)
+            controller.view.removeFromSuperview()
+            controller.removeFromParent()
         }
         func install(_ host: UIHostingController<AnyView>, in controller: UIViewController) {
             controller.addChild(host)
@@ -1081,7 +1533,6 @@ private struct DayPager: UIViewControllerRepresentable {
         static func makeHost(_ content: AnyView) -> UIHostingController<AnyView> {
             let host = UIHostingController(rootView: content)
             host.view.backgroundColor = .systemBackground
-            // The outer navigation view already accounts for safe areas and the date dock.
             host.safeAreaRegions = []
             return host
         }

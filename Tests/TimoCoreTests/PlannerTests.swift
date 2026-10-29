@@ -7,6 +7,24 @@ final class PlannerTests: XCTestCase {
         calendar.date(from: DateComponents(year: 2026, month: month, day: day, hour: hour))!
     }
     func task(_ day: Int, minute: Int? = nil) -> PlanItem { PlanItem(title: "Task", day: Day(date(day), calendar: calendar), minute: minute) }
+    func testInProgressUsesStartInclusiveAndEndExclusive() {
+        let item = PlanItem(title: "Work", day: Day(date(29), calendar: calendar), minute: 540, end: date(29, 17))
+        XCTAssertFalse(item.isInProgress(now: date(29, 8), calendar: calendar))
+        XCTAssertTrue(item.isInProgress(now: date(29, 9), calendar: calendar))
+        XCTAssertTrue(item.isInProgress(now: date(29, 12), calendar: calendar))
+        XCTAssertFalse(item.isInProgress(now: date(29, 17), calendar: calendar))
+        XCTAssertFalse(task(29, minute: 540).isInProgress(now: date(29, 9), calendar: calendar))
+        XCTAssertFalse(task(29).isInProgress(now: date(29), calendar: calendar))
+    }
+    func testInProgressHandlesOvernightAndCompletedRanges() {
+        var overnight = PlanItem(title: "Overnight", day: Day(date(29), calendar: calendar), minute: 23 * 60, end: date(30, 2))
+        XCTAssertTrue(overnight.isInProgress(now: date(30, 1), calendar: calendar))
+        XCTAssertFalse(overnight.isInProgress(now: date(30, 2), calendar: calendar))
+        overnight.completedAt = date(30, 1)
+        XCTAssertFalse(overnight.isInProgress(now: date(30, 1), calendar: calendar))
+        let zeroLength = PlanItem(title: "Point", day: Day(date(29), calendar: calendar), minute: 540, end: date(29, 9))
+        XCTAssertFalse(zeroLength.isInProgress(now: date(29, 9), calendar: calendar))
+    }
     func testMissedDaysMoveExistingTaskToTodayAndClearTime() {
         let original = task(20, minute: 540); var items = [original]
         XCTAssertTrue(Planner.reconcile(&items, now: date(29), calendar: calendar))
