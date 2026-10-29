@@ -16,6 +16,7 @@ struct DayView: View {
     @State private var calendarTransitionActive = false
     @Namespace private var calendarTransition
     @ScaledMetric(relativeTo: .subheadline) private var dateLabelWidth: CGFloat = 110
+    @ScaledMetric(relativeTo: .caption) private var scheduleColumnWidth: CGFloat = 90
     @AppStorage("timeView") private var showingTimeView = false
     @State private var showingRelativeDate = true
     private enum DayFilter: Int { case all, review, reminders }
@@ -68,31 +69,9 @@ struct DayView: View {
             .toolbar(.visible, for: .navigationBar)
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
-                if showingReminders || !reminderItems.isEmpty {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button { setFilter(showingReminders ? .all : .reminders) } label: {
-                            filterIcon("alarm.fill", tint: .blue, count: reminderItems.count, isActive: showingReminders)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(showingReminders ? "Show full day" : "Show \(reminderItems.count) items with reminders")
-                        .accessibilityValue(showingReminders ? "Reminder filter on" : "Reminder filter off")
-                        .accessibilityAddTraits(showingReminders ? .isSelected : [])
-                        .accessibilityHint("Toggles unfinished items with a reminder set for this day")
-                    }.sharedBackgroundVisibility(.hidden)
-                }
-                if reviewing || !reviewItems.isEmpty {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button { setReviewing(!reviewing) } label: {
-                            filterIcon("exclamationmark.triangle.fill", tint: reviewTint, count: reviewItems.count, isActive: reviewing)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(reviewing ? "Show full day" : "Review \(reviewItems.count) items")
-                        .accessibilityValue(reviewing ? "Review filter on" : "Review filter off")
-                        .accessibilityAddTraits(reviewing ? .isSelected : [])
-                        .accessibilityHint("Toggles items needing review for this day")
-                    }.sharedBackgroundVisibility(.hidden)
-                }
-
+                ToolbarItem(placement: .topBarTrailing) {
+                    filterButtons
+                }.sharedBackgroundVisibility(.hidden)
             }
             .sheet(item: $editing) { item in ItemEditor(item: item).environmentObject(store) }
             .sheet(item: $changingReminder) { item in
@@ -168,6 +147,7 @@ struct DayView: View {
             }
         } label: {
             Image(systemName: showingTimeView ? "list.bullet" : "clock")
+                .contentTransition(.symbolEffect(.replace))
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(.primary)
                 .frame(width: 44, height: 44)
@@ -315,6 +295,44 @@ struct DayView: View {
     private func goToToday() {
         navigate(to: Calendar.current.startOfDay(for: Date()))
     }
+    private var filterButtons: some View {
+        let reminderCount = reminderItems.count
+        let reviewCount = reviewItems.count
+        let showReminders = showingReminders || reminderCount > 0
+        let showReview = reviewing || reviewCount > 0
+        let transition: AnyTransition = reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.92, anchor: .trailing))
+        return HStack(spacing: 10) {
+            if showReminders {
+                Button { setFilter(showingReminders ? .all : .reminders) } label: {
+                    filterIcon("alarm.fill", tint: .blue, count: reminderCount, isActive: showingReminders)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(showingReminders ? "Show full day" : "Show \(reminderCount) items with reminders")
+                .accessibilityValue(showingReminders ? "Reminder filter on" : "Reminder filter off")
+                .accessibilityAddTraits(showingReminders ? .isSelected : [])
+                .accessibilityHint("Toggles unfinished items with a reminder set for this day")
+                .transition(transition)
+            }
+            if showReview {
+                Button { setReviewing(!reviewing) } label: {
+                    filterIcon("exclamationmark.triangle.fill", tint: reviewTint, count: reviewCount, isActive: reviewing)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(reviewing ? "Show full day" : "Review \(reviewCount) items")
+                .accessibilityValue(reviewing ? "Review filter on" : "Review filter off")
+                .accessibilityAddTraits(reviewing ? .isSelected : [])
+                .accessibilityHint("Toggles items needing review for this day")
+                .transition(transition)
+            }
+        }
+        // A stable toolbar host lets SwiftUI finish both sides of the transition
+        // instead of UIKit immediately inserting/removing separate toolbar items.
+        .frame(width: 98, height: 44, alignment: .trailing)
+        .animation(reduceMotion ? .easeInOut(duration: 0.2) : .smooth(duration: 0.32), value: showReminders)
+        .animation(reduceMotion ? .easeInOut(duration: 0.2) : .smooth(duration: 0.32), value: showReview)
+        .accessibilityElement(children: .contain)
+        .accessibilityHidden(!showReminders && !showReview)
+    }
     private func filterIcon(_ symbol: String, tint: Color, count: Int, isActive: Bool) -> some View {
         Image(systemName: symbol)
             .font(.system(size: 16, weight: .medium))
@@ -393,11 +411,6 @@ struct DayView: View {
                     ForEach(displayedAnyTime) { item in
                         row(item, filter: filter, day: day)
                             .padding(.leading, 12).padding(.trailing, 20)
-                            .overlay(alignment: .bottom) {
-                                Color.primary.opacity(0.07).frame(height: 0.5)
-                                    .padding(.leading, 64).padding(.trailing, 20)
-                                    .allowsHitTesting(false)
-                            }
                     }
                 }
                 if !displayedTimed.isEmpty {
@@ -454,8 +467,11 @@ struct DayView: View {
         let activeTop = active.first.flatMap { compactOrder[$0.id] }.map { $0 - 1 } ?? 0
         // Keep both text layouts at fixed endpoint widths. Only their positions
         // and opacity animate, so wrapping never changes in the middle of a frame.
+        let contentKey = TimelineContentKey(items: items, order: compactItems.map(\.id),
+                                            markers: items.map { [needsReview($0), hasOpenReminder($0)] },
+                                            filter: filter.rawValue, showNow: showNow, typeSize: dynamicTypeSize)
         return DayTimelineLayout(startMinute: startMinute, laneCount: (lanes.values.max() ?? 0) + 1,
-                                 progress: showingTimeView ? 1 : 0) {
+                                 contentKey: contentKey, progress: showingTimeView ? 1 : 0) {
             if showNow, let first = past.first {
                 let order = (compactOrder[first.id] ?? 0) - 1
                 compactSectionDivider("Past")
@@ -475,33 +491,49 @@ struct DayView: View {
             }
             ForEach(items) { item in
                 ForEach([false, true], id: \.self) { timedVariant in
-                    row(item, filter: filter, day: day, feedbackEnabled: showingTimeView == timedVariant)
-                        .overlay(alignment: .bottom) {
-                            if !timedVariant {
-                                Color.primary.opacity(0.07)
-                                    .frame(height: 0.5).padding(.leading, 52)
-                                    .allowsHitTesting(false)
-                            }
-                        }
+                    row(item, filter: filter, day: day, feedbackEnabled: showingTimeView == timedVariant,
+                        sharedSchedule: filter == .all)
                         .opacity(showingTimeView == timedVariant ? 1 : 0)
+                        // Both variants share a position, so additive blending keeps
+                        // identical pixels fully opaque instead of dipping to 75%
+                        // halfway through a normal crossfade.
+                        .blendMode(.plusLighter)
                         .allowsHitTesting(showingTimeView == timedVariant)
                         .accessibilityHidden(showingTimeView != timedVariant)
                         .accessibilitySortPriority(showingTimeView || !showNow ? 0 : -Double(compactOrder[item.id] ?? 0))
                         .layoutValue(key: TimelineCompactOrderKey.self, value: compactOrder[item.id] ?? 0)
                         .layoutValue(key: TimelineTimedVariantKey.self, value: timedVariant)
                         .layoutValue(key: TimelineMinuteKey.self, value: entries.first(where: { $0.id == item.id })?.minute ?? 0)
-                        .anchorPreference(key: TimelineRowAnchors.self, value: .bounds) {
-                            timedVariant ? [item.id: $0] : [:]
-                        }
+                }
+                if filter == .all, let start = item.start() {
+                    // Keep one visible time label across both modes. The rows
+                    // reserve its measured space but never crossfade its text.
+                    scheduleLabel(item, start: start, day: day)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: scheduleColumnWidth, alignment: .trailing)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.trailing, CGFloat((needsReview(item) ? 14 : 0) + (hasOpenReminder(item) ? 14 : 0)))
+                        .overlay(alignment: .trailing) { rowMarkers(item, filter: filter) }
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                        .layoutValue(key: TimelineSharedTimeInsetKey.self, value: 0)
+                }
+                if let entry = entries.first(where: { $0.id == item.id }) {
+                    TimelineConnector(complete: entry.complete)
+                        .opacity(showingTimeView ? 1 : 0)
+                        .layoutValue(key: TimelineConnectorLaneKey.self, value: lanes[item.id] ?? 0)
+                        .layoutValue(key: TimelineMinuteKey.self, value: entry.minute)
                 }
             }
         }
-        .backgroundPreferenceValue(TimelineRowAnchors.self) { anchors in
-            GeometryReader { geometry in
-                TimelineDrawing(entries: entries, startMinute: startMinute, currentMinute: currentMinute,
-                                date: beginning, rowFrames: anchors.mapValues { geometry[$0] }, lanes: lanes)
-                    .opacity(showingTimeView ? 1 : 0)
-            }
+        // Blend the row variants with each other before compositing over the page.
+        .compositingGroup()
+        .background(alignment: .topLeading) {
+            TimelineScale(entries: entries, startMinute: startMinute, currentMinute: currentMinute,
+                          date: beginning, lanes: lanes)
+                .equatable()
+                .frame(height: DayTimelineLayout.top * 2 + CGFloat(1440 - startMinute) * DayTimelineLayout.pointsPerMinute)
+                .opacity(showingTimeView ? 1 : 0)
         }
         .animation(reviewAnimation, value: active.map(\.id))
         .accessibilityElement(children: .contain)
@@ -509,7 +541,7 @@ struct DayView: View {
     private func compactSectionDivider(_ title: String, showTime: Bool = false) -> some View {
         HStack(spacing: 10) {
             Text(title)
-            Rectangle().fill(Color.primary.opacity(0.06)).frame(height: 0.5)
+            Spacer(minLength: 0)
             if showTime {
                 Text(now, style: .time).monospacedDigit()
             }
@@ -519,13 +551,17 @@ struct DayView: View {
         .padding(.horizontal, 8)
         .frame(height: 24)
         .opacity(showingTimeView ? 0 : 1)
+        // Headers travel across rows mid-transition. Leave quickly, and only
+        // return once the rows have nearly settled into the list.
+        .animation(reduceMotion ? nil : showingTimeView ? .easeOut(duration: 0.12)
+                   : .easeIn(duration: 0.18).delay(0.32), value: showingTimeView)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
         .accessibilityHidden(showingTimeView)
         .allowsHitTesting(false)
         .layoutValue(key: TimelineMarkerKey.self, value: true)
     }
-    private func row(_ item: PlanItem, filter: DayFilter, day: Day, feedbackEnabled: Bool = true) -> some View {
+    private func row(_ item: PlanItem, filter: DayFilter, day: Day, feedbackEnabled: Bool = true, sharedSchedule: Bool = false) -> some View {
         let reviewing = filter == .review
         let showingReminders = filter == .reminders
         return VStack(alignment: .leading, spacing: 0) {
@@ -563,13 +599,17 @@ struct DayView: View {
                         if let start = item.start() {
                             scheduleLabel(item, start: start, day: day)
                                 .multilineTextAlignment(.trailing)
+                                .frame(width: sharedSchedule ? scheduleColumnWidth : nil, alignment: .trailing)
                                 .fixedSize(horizontal: false, vertical: true)
+                                .opacity(sharedSchedule ? 0 : 1)
+                                .accessibilityHidden(sharedSchedule)
                                 .layoutPriority(1)
                         }
                     }
                     .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     .padding(.vertical, 2).contentShape(Rectangle())
                 }.buttonStyle(ItemPressStyle())
+                    .accessibilityValue(sharedSchedule ? item.start().map { timeLabel(item, start: $0, day: day) } ?? "" : "")
                     .accessibilityHint((needsReview(item) ? "Needs review. " : "") + (hasOpenReminder(item) ? "Reminder set. " : "") + "Open details and edit")
             }
             if reviewing || showingReminders {
@@ -580,19 +620,24 @@ struct DayView: View {
         }
         .padding(.trailing, (!reviewing && needsReview(item) ? 14.0 : 0) + (!showingReminders && hasOpenReminder(item) ? 14.0 : 0))
         .overlay(alignment: .trailing) {
-            HStack(spacing: 8) {
-                if !reviewing && needsReview(item) {
-                    Circle().fill(reviewTint).frame(width: 6, height: 6)
-                }
-                if !showingReminders && hasOpenReminder(item) {
-                    Circle().fill(.blue).frame(width: 6, height: 6)
-                }
-            }
-            .accessibilityHidden(true)
-            .allowsHitTesting(false)
+            // Shared schedules draw the dots beside the shared time label, so
+            // they cannot drift apart while the row variants slide.
+            if !sharedSchedule { rowMarkers(item, filter: filter) }
         }
         .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 20))
         .listRowSeparatorTint(Color.primary.opacity(0.07))
+    }
+    private func rowMarkers(_ item: PlanItem, filter: DayFilter) -> some View {
+        HStack(spacing: 8) {
+            if filter != .review && needsReview(item) {
+                Circle().fill(reviewTint).frame(width: 6, height: 6)
+            }
+            if filter != .reminders && hasOpenReminder(item) {
+                Circle().fill(.blue).frame(width: 6, height: 6)
+            }
+        }
+        .accessibilityHidden(true)
+        .allowsHitTesting(false)
     }
     private func itemDetailsLine(_ item: PlanItem) -> some View {
         HStack(spacing: 5) {
@@ -934,11 +979,22 @@ private struct TimelineMarkerKey: LayoutValueKey {
     static let defaultValue = false
 }
 
-private struct TimelineRowAnchors: PreferenceKey {
-    static let defaultValue: [UUID: Anchor<CGRect>] = [:]
-    static func reduce(value: inout [UUID: Anchor<CGRect>], nextValue: () -> [UUID: Anchor<CGRect>]) {
-        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
-    }
+private struct TimelineSharedTimeInsetKey: LayoutValueKey {
+    static let defaultValue: CGFloat? = nil
+}
+
+private struct TimelineConnectorLaneKey: LayoutValueKey {
+    static let defaultValue: Int? = nil
+}
+
+// Everything that can change a row's measured size or compact order.
+private struct TimelineContentKey: Equatable {
+    let items: [PlanItem]
+    let order: [UUID]
+    let markers: [[Bool]]
+    let filter: Int
+    let showNow: Bool
+    let typeSize: DynamicTypeSize
 }
 
 // Measure the two endpoint layouts once, then only interpolate positions while
@@ -946,6 +1002,7 @@ private struct TimelineRowAnchors: PreferenceKey {
 private struct DayTimelineLayout: Layout {
     let startMinute: Double
     let laneCount: Int
+    let contentKey: TimelineContentKey
     var progress: Double
     var animatableData: Double {
         get { progress }
@@ -956,6 +1013,7 @@ private struct DayTimelineLayout: Layout {
     static let pointsPerMinute: CGFloat = 1
 
     struct Cache {
+        var key: TimelineContentKey?
         var width: CGFloat?
         var start: Double?
         var gutter: CGFloat?
@@ -965,19 +1023,49 @@ private struct DayTimelineLayout: Layout {
         var compactHeight: CGFloat = 0
         var timedHeight: CGFloat = 0
     }
-    func makeCache(subviews: Subviews) -> Cache { Cache() }
-    func updateCache(_ cache: inout Cache, subviews: Subviews) { cache = Cache() }
+    func makeCache(subviews: Subviews) -> Cache { Cache(key: contentKey) }
+    // SwiftUI updates the cache on every animation frame as `progress` changes.
+    // Only discard measurements when what the rows display has changed.
+    func updateCache(_ cache: inout Cache, subviews: Subviews) {
+        guard cache.key != contentKey else { return }
+        cache = Cache(key: contentKey)
+    }
 
     private func prepare(width: CGFloat, subviews: Subviews, cache: inout Cache) {
         guard cache.width != width || cache.start != startMinute || cache.gutter != gutter || cache.compact.count != subviews.count else { return }
         let timeWidth = max(1, width - gutter)
         var compactBottom: CGFloat = 0
         var timeBottom: CGFloat = -8
+        var lastTimedRow: CGRect = .zero
         cache.compact = []
         cache.timed = []
         cache.proposals = []
         for index in subviews.indices {
             let subview = subviews[index]
+            if let lane = subview[TimelineConnectorLaneKey.self] {
+                // The preceding timed row supplies a fixed endpoint. Connector
+                // bounds never interpolate, so Canvas does not redraw each frame.
+                let row = lastTimedRow
+                let x = 54 + CGFloat(lane) * 6 + 3
+                let y = Self.top + CGFloat(subview[TimelineMinuteKey.self] - startMinute) * Self.pointsPerMinute
+                let frame = CGRect(x: x, y: y, width: max(1, row.minX + 7 - x), height: max(1, row.midY - y + 1))
+                cache.compact.append(frame)
+                cache.timed.append(frame)
+                cache.proposals.append(ProposedViewSize(width: frame.width, height: frame.height))
+                continue
+            }
+            if let trailingInset = subview[TimelineSharedTimeInsetKey.self] {
+                let first = cache.compact[index - 1], second = cache.timed[index - 1]
+                let size = subview.sizeThatFits(.unspecified)
+                func labelFrame(in row: CGRect) -> CGRect {
+                    CGRect(x: row.maxX - trailingInset - size.width, y: row.midY - size.height / 2,
+                           width: size.width, height: size.height)
+                }
+                cache.compact.append(labelFrame(in: first))
+                cache.timed.append(labelFrame(in: second))
+                cache.proposals.append(ProposedViewSize(width: size.width, height: size.height))
+                continue
+            }
             if subview[TimelineTimedVariantKey.self] {
                 // The preceding compact variant already measured both endpoints.
                 cache.compact.append(cache.compact[index - 1])
@@ -995,17 +1083,26 @@ private struct DayTimelineLayout: Layout {
             cache.timed.append(CGRect(x: gutter, y: timeTop, width: timeWidth, height: timeHeight))
             cache.proposals.append(ProposedViewSize(width: width, height: compactHeight))
             compactBottom += compactHeight
-            if !marker { timeBottom = timeTop + timeHeight }
+            if !marker {
+                timeBottom = timeTop + timeHeight
+                lastTimedRow = CGRect(x: gutter, y: timeTop, width: timeWidth, height: timeHeight)
+            }
         }
         // Timeline positions stay chronological. Only compact placement groups
         // active items; both endpoint text layouts retain their view identities.
         compactBottom = 0
-        let compactIndices = subviews.indices.filter { !subviews[$0][TimelineTimedVariantKey.self] }
+        let compactIndices = subviews.indices.filter {
+            !subviews[$0][TimelineTimedVariantKey.self] && subviews[$0][TimelineConnectorLaneKey.self] == nil &&
+            subviews[$0][TimelineSharedTimeInsetKey.self] == nil
+        }
             .sorted { subviews[$0][TimelineCompactOrderKey.self] < subviews[$1][TimelineCompactOrderKey.self] }
         for index in compactIndices {
             cache.compact[index].origin.y = compactBottom
             if !subviews[index][TimelineMarkerKey.self] {
                 cache.compact[index + 1].origin.y = compactBottom
+                if index + 2 < subviews.count, subviews[index + 2][TimelineSharedTimeInsetKey.self] != nil {
+                    cache.compact[index + 2].origin.y = compactBottom + (cache.compact[index].height - cache.compact[index + 2].height) / 2
+                }
             }
             compactBottom += cache.compact[index].height
         }
@@ -1037,33 +1134,17 @@ private struct DayTimelineLayout: Layout {
     }
 }
 
-private struct TimelineDrawing: View {
-    let entries: [TimelineEntry]
-    let startMinute: Double
-    let currentMinute: Double?
-    let date: Date
-    let rowFrames: [UUID: CGRect]
-    let lanes: [UUID: Int]
-
+private struct TimelineConnector: View {
+    let complete: Bool
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            TimelineScale(entries: entries, startMinute: startMinute, currentMinute: currentMinute,
-                          date: date, lanes: lanes)
-                .equatable()
-                .frame(height: DayTimelineLayout.top * 2 + CGFloat(1440 - startMinute) * DayTimelineLayout.pointsPerMinute)
-            Canvas { context, _ in
-                for entry in entries {
-                    guard let frame = rowFrames[entry.id] else { continue }
-                    let timeY = DayTimelineLayout.top + CGFloat(entry.minute - startMinute) * DayTimelineLayout.pointsPerMinute
-                    let barX = 54 + CGFloat(lanes[entry.id] ?? 0) * 6
-                    var connector = Path()
-                    connector.move(to: CGPoint(x: barX + 3, y: timeY))
-                    connector.addCurve(to: CGPoint(x: frame.minX + 7, y: frame.midY),
-                                       control1: CGPoint(x: barX + 12, y: timeY),
-                                       control2: CGPoint(x: frame.minX - 4, y: frame.midY))
-                    context.stroke(connector, with: .color(.primary.opacity(entry.complete ? 0.12 : 0.3)), lineWidth: 0.5)
-                }
-            }
+        Canvas { context, size in
+            let endY = max(0, size.height - 1)
+            var connector = Path()
+            connector.move(to: .zero)
+            connector.addCurve(to: CGPoint(x: size.width, y: endY),
+                               control1: CGPoint(x: 9, y: 0),
+                               control2: CGPoint(x: size.width - 11, y: endY))
+            context.stroke(connector, with: .color(.primary.opacity(complete ? 0.12 : 0.3)), lineWidth: 0.5)
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
@@ -1257,20 +1338,49 @@ private struct DayPager: UIViewControllerRepresentable {
             onLayout?(view.bounds.size)
         }
     }
+    final class PageAnimationPolicy {
+        var isForeground: Bool
+        init(isForeground: Bool) { self.isForeground = isForeground }
+    }
+    struct PageSurface: View {
+        let content: AnyView
+        let policy: PageAnimationPolicy
+        var body: some View {
+            content.transaction { transaction in
+                if !policy.isForeground {
+                    transaction.animation = nil
+                    transaction.disablesAnimations = true
+                }
+            }
+        }
+    }
+    final class PageHost: UIHostingController<PageSurface> {
+        let policy: PageAnimationPolicy
+        var content: AnyView {
+            get { rootView.content }
+            set { rootView = PageSurface(content: newValue, policy: policy) }
+        }
+        init(content: AnyView, isForeground: Bool) {
+            let policy = PageAnimationPolicy(isForeground: isForeground)
+            self.policy = policy
+            super.init(rootView: PageSurface(content: content, policy: policy))
+        }
+        required init?(coder: NSCoder) { fatalError("PageHost is created programmatically") }
+    }
     final class Coordinator: NSObject, UIGestureRecognizerDelegate {
         var onSwipe: (Int) -> Void
         let interaction: DaySwipeInteraction
         weak var container: UIViewController?
         var adjacentContent: (Day) -> AnyView
         var reduceMotion: Bool
-        var previews: [Int: UIHostingController<AnyView>] = [:]
+        var previews: [Int: PageHost] = [:]
         var previewsDirty = false
         var latestRevision: DayPageRevision
         var displayedRevision: DayPageRevision?
         var latestContent: AnyView
         var requestedDay: Day
         var day: Day
-        var host: UIHostingController<AnyView>
+        var host: PageHost
         private var animator: UIViewPropertyAnimator?
         private var settlingDirection: Int?
         private var notifyOnSettle = false
@@ -1317,16 +1427,25 @@ private struct DayPager: UIViewControllerRepresentable {
         }
         func refreshIfIdle() {
             guard !dragging, animator == nil, requestedDay == day else { return }
+            let modeChanged = displayedRevision.map { $0.mode != latestRevision.mode } ?? false
             if displayedRevision != latestRevision {
-                host.rootView = latestContent
+                host.content = latestContent
                 displayedRevision = latestRevision
             }
-            scheduleWarm()
+            if modeChanged {
+                warmTask?.cancel()
+                warmTask = nil
+                scheduleWarm(delay: .milliseconds(600))
+            } else {
+                scheduleWarm()
+            }
         }
-        private func scheduleWarm() {
+        private func scheduleWarm(delay: Duration = .zero) {
             guard warmTask == nil, !dragging, animator == nil, requestedDay == day, size.width > 0 else { return }
             warmTask = Task { [weak self] in
-                await Task.yield()
+                if delay > .zero {
+                    do { try await Task.sleep(for: delay) } catch { return }
+                } else { await Task.yield() }
                 guard !Task.isCancelled, let self else { return }
                 self.warmTask = nil
                 guard !self.dragging, self.animator == nil, self.requestedDay == self.day else { return }
@@ -1340,9 +1459,9 @@ private struct DayPager: UIViewControllerRepresentable {
                 guard let date = Calendar.current.date(byAdding: .day, value: direction, to: day.date()) else { continue }
                 let previewDay = Day(date)
                 if let preview = previews[direction] {
-                    if previewsDirty { preview.rootView = adjacentContent(previewDay) }
+                    if previewsDirty { preview.content = adjacentContent(previewDay) }
                 } else {
-                    let preview = Self.makeHost(adjacentContent(previewDay))
+                    let preview = Self.makeHost(adjacentContent(previewDay), isForeground: false)
                     install(preview, in: container)
                     preview.view.isUserInteractionEnabled = false
                     preview.view.accessibilityElementsHidden = true
@@ -1445,10 +1564,12 @@ private struct DayPager: UIViewControllerRepresentable {
                   let date = Calendar.current.date(byAdding: .day, value: direction, to: day.date()) else { return }
             if let distant = previews.removeValue(forKey: -direction) { remove(distant) }
             let previous = host
+            previous.policy.isForeground = false
             previous.view.isUserInteractionEnabled = false
             previous.view.accessibilityElementsHidden = true
             previews[-direction] = previous
             host = next
+            host.policy.isForeground = true
             host.view.isUserInteractionEnabled = true
             host.view.accessibilityElementsHidden = false
             day = Day(date)
@@ -1518,20 +1639,20 @@ private struct DayPager: UIViewControllerRepresentable {
             for preview in previews.values { remove(preview) }
             previews.removeAll()
         }
-        private func remove(_ controller: UIHostingController<AnyView>) {
+        private func remove(_ controller: PageHost) {
             controller.willMove(toParent: nil)
             controller.view.removeFromSuperview()
             controller.removeFromParent()
         }
-        func install(_ host: UIHostingController<AnyView>, in controller: UIViewController) {
+        func install(_ host: PageHost, in controller: UIViewController) {
             controller.addChild(host)
             host.view.frame = controller.view.bounds
             host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             controller.view.addSubview(host.view)
             host.didMove(toParent: controller)
         }
-        static func makeHost(_ content: AnyView) -> UIHostingController<AnyView> {
-            let host = UIHostingController(rootView: content)
+        static func makeHost(_ content: AnyView, isForeground: Bool = true) -> PageHost {
+            let host = PageHost(content: content, isForeground: isForeground)
             host.view.backgroundColor = .systemBackground
             host.safeAreaRegions = []
             return host
