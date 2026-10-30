@@ -1,0 +1,19 @@
+{
+  "" : {
+    "diagnostics" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCore-t.build/Objects-normal/arm64/TimoCore-primary.dia",
+    "emit-module-dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCore-t.build/Objects-normal/arm64/TimoCore-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCore-t.build/Objects-normal/arm64/TimoCore-primary-emit-module.dia",
+    "pch" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCore-t.build/Objects-normal/arm64/TimoCore-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCore-t.build/Objects-normal/arm64/TimoCore-primary.swiftdeps"
+  },
+  "/Users/timovijn/Timo/GitHub/timo/Sources/TimoCore/Planner.swift" : {
+    "const-values" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCore-t.build/Objects-normal/arm64/Planner.swiftconstvalues",
+    "dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCore-t.build/Objects-normal/arm64/Planner.d",
+    "diagnostics" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCore-t.build/Objects-normal/arm64/Planner.dia",
+    "index-unit-output-path" : "/TimoCore.build/Debug/TimoCore-t.build/Objects-normal/arm64/Planner.o",
+    "llvm-bc" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCore-t.build/Objects-normal/arm64/Planner.bc",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCore-t.build/Objects-normal/arm64/Planner.o",
+    "swift-dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCore-t.build/Objects-normal/arm64/Planner.swiftdeps",
+    "swiftmodule" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCore-t.build/Objects-normal/arm64/Planner~partial.swiftmodule"
+  }
+}

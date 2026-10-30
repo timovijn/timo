@@ -16,6 +16,8 @@ struct DayView: View {
     @State private var pickingDate = false
     @State private var calendarTransitionActive = false
     @Namespace private var calendarTransition
+    /// The calendar's size, which the glass it sits on grows to.
+    @State private var calendarSize = CGSize(width: 360, height: 340)
     @ScaledMetric(relativeTo: .subheadline) private var dateLabelWidth: CGFloat = 110
     @ScaledMetric(relativeTo: .caption) private var scheduleColumnWidth: CGFloat = 90
     // Only the views that move or fade read the mode, so switching never
@@ -26,6 +28,8 @@ struct DayView: View {
     @State private var showingRelativeDate = true
     private enum DayFilter: Int { case all, review, reminders }
     @State private var filter: DayFilter = .all
+    /// The persona shown in the top left. All keeps the day view; a persona swaps in its history.
+    @State private var persona: Persona?
     private var reviewing: Bool { filter == .review }
     private var showingReminders: Bool { filter == .reminders }
     private var reminderItems: [PlanItem] { visible.filter(hasOpenReminder) }
@@ -34,7 +38,7 @@ struct DayView: View {
     private let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
     private var day: Day { Day(date) }
     private var visible: [PlanItem] {
-        store.items.filter { $0.appears(on: day) }.sorted {
+        store.items.filter { $0.shows(on: day, now: now) }.sorted {
             if $0.minute != $1.minute { return ($0.minute ?? -1) < ($1.minute ?? -1) }
             return $0.createdAt < $1.createdAt
         }
@@ -46,7 +50,8 @@ struct DayView: View {
         !item.isComplete && item.reminders.contains { $0 > now }
     }
     private func needsReview(_ item: PlanItem) -> Bool {
-        !item.isComplete && !item.suggestionDismissed &&
+        // A carried item is already late and shown as untimed, so its old time isn't flagged.
+        !item.isComplete && !item.suggestionDismissed && !item.isCarried(now: now) &&
         item.isElapsed(now: now)
     }
     var body: some View {
@@ -65,7 +70,33 @@ struct DayView: View {
                              onSwipe: { move($0) },
                              interaction: daySwipeInteraction)
                         .ignoresSafeArea(.container, edges: .vertical)
+                    if pickingDate {
+                        // Tapping anywhere outside the calendar closes it.
+                        Color.black.opacity(0.08)
+                            .ignoresSafeArea()
+                            .contentShape(Rectangle())
+                            .onTapGesture { closeCalendar() }
+                            .transition(.opacity)
+                            .accessibilityHidden(true)
+                    }
                     dayDock
+                }
+                // The day view stays alive underneath, so returning to All is instant.
+                .opacity(persona == nil ? 1 : 0)
+                .allowsHitTesting(persona == nil)
+                .accessibilityHidden(persona != nil)
+                .overlay {
+                    ZStack(alignment: .bottomTrailing) {
+                        PersonaPages(persona: persona, now: now, open: { editing = $0 }, add: add)
+                            .contentMargins(.bottom, 94, for: .scrollContent)
+                        if persona != nil {
+                            // Sits where the day dock's add button does, and stays put as pages slide.
+                            addButton
+                                .frame(height: 72)
+                                .padding(.horizontal, 20).padding(.bottom, 4)
+                                .transition(.opacity)
+                        }
+                    }
                 }
                 .frame(width: viewport.size.width, height: viewport.size.height)
             }
@@ -74,21 +105,20 @@ struct DayView: View {
             .toolbar(.visible, for: .navigationBar)
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    PersonaSwitcher(selection: $persona)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
+                    // The filters belong to a single day, so they rest while a persona is shown.
                     filterButtons
+                        .opacity(persona == nil ? 1 : 0)
+                        .allowsHitTesting(persona == nil)
+                        .accessibilityHidden(persona != nil)
                 }.sharedBackgroundVisibility(.hidden)
             }
             .sheet(item: $editing) { item in ItemEditor(item: item).environmentObject(store) }
             .sheet(item: $changingReminder) { item in
                 ReminderTimeEditor(item: item).environmentObject(store)
-            }
-            .sheet(isPresented: $pickingDate, onDismiss: { calendarTransitionActive = false }) {
-                if reduceMotion {
-                    calendarPicker
-                } else {
-                    calendarPicker
-                        .navigationTransition(.zoom(sourceID: "daySelector", in: calendarTransition))
-                }
             }
             .task(id: date) {
                 guard !calendarTransitionActive else {
@@ -125,26 +155,89 @@ struct DayView: View {
             HStack {
                 ViewModeButton(mode: viewMode, previewMode: previewMode)
                 Spacer()
-                Button { add() } label: {
-                    Image(systemName: "plus").font(.title3.weight(.regular)).foregroundStyle(.primary)
-                        .frame(width: 44, height: 44)
+                addButton
+            }
+            .padding(.horizontal, 20)
+            // The calendar spans the dock, so its neighbours step aside while it is open.
+            .opacity(pickingDate ? 0 : 1)
+            .allowsHitTesting(!pickingDate)
+            .accessibilityHidden(pickingDate)
+            // Only the day capsule and the calendar share this container, so the capsule can
+            // stretch into the calendar and back as one piece of glass.
+            GlassEffectContainer {
+                ZStack {
+                    if !pickingDate { dayNavigation }
                 }
-                .buttonStyle(.glass).tint(.primary)
-                .accessibilityLabel("Add item")
-            }.padding(.horizontal, 20)
-            dayNavigation
+                .frame(maxWidth: .infinity).frame(height: 72)
+                .overlay(alignment: .bottom) {
+                    // Bottom-aligned with the capsule, so the calendar grows up out of it.
+                    if pickingDate {
+                        Color.clear
+                            .frame(width: calendarSize.width, height: calendarSize.height)
+                            .glassEffect(.regular, in: .rect(cornerRadius: 32, style: .continuous))
+                            .glassEffectID("day", in: calendarTransition)
+                            .glassEffectTransition(reduceMotion ? .materialize : .matchedGeometry)
+                            .padding(.bottom, 8)
+                    }
+                }
+            }
+            // Outside the glass container, which would draw its glass over it.
+            .overlay(alignment: .bottom) {
+                calendarCard.padding(.horizontal, 16).padding(.bottom, 8)
+            }
         }
         .frame(maxWidth: .infinity).frame(height: 72)
         .coordinateSpace(name: "dayNavigationDock")
         .padding(.top, 18)
         .padding(.bottom, 4)
     }
-    private var calendarPicker: some View {
-        DatePicker("Day", selection: Binding(get: { date }, set: { navigate(to: $0) }), displayedComponents: .date)
+    private var addButton: some View {
+        Button { add() } label: {
+            Image(systemName: "plus").font(.title3.weight(.regular)).foregroundStyle(.primary)
+                .frame(width: 56, height: 56)
+                .contentShape(.circle)
+        }
+        .buttonStyle(.plain)
+        // A circle as tall as the date capsule, rather than the glass style's wider capsule.
+        .glassEffect(.regular.interactive(), in: .circle)
+        .accessibilityLabel(persona.map { "Add \($0.title) item" } ?? "Add item")
+    }
+    /// The calendar, on the same glass as the day capsule it opens from. Choosing a day,
+    /// tapping outside or pulling it down folds it back into the capsule.
+    ///
+    /// The calendar itself stays built while hidden: creating it took long enough on device to
+    /// stall the opening frames. Only a plain glass shape behind it morphs, which stays cheap,
+    /// and the calendar fades in on top as the glass grows.
+    private var calendarCard: some View {
+        DatePicker("Day", selection: Binding(get: { date }, set: { picked in
+            navigate(to: picked)
+            // Leave the new selection visible for a moment before folding away.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(180))
+                closeCalendar()
+            }
+        }), displayedComponents: .date)
             .datePickerStyle(.graphical)
-            .padding()
-            .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
+            .labelsHidden()
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .frame(maxWidth: 380)
+            .onGeometryChange(for: CGSize.self, of: \.size) { calendarSize = $0 }
+            // Grows from the capsule with the glass, so the days never hang outside it.
+            .scaleEffect(pickingDate || reduceMotion ? 1 : 0.4, anchor: .bottom)
+            .animation(calendarAnimation, value: pickingDate)
+            .opacity(pickingDate ? 1 : 0)
+            // In once the glass has started to grow; out quickly, before it folds away.
+            .animation(pickingDate ? .easeOut(duration: 0.2).delay(0.12) : .easeIn(duration: 0.1), value: pickingDate)
+            .allowsHitTesting(pickingDate)
+            .accessibilityHidden(!pickingDate)
+            .gesture(DragGesture(minimumDistance: 20).onEnded { drag in
+                if drag.translation.height > 50 { closeCalendar() }
+            }, isEnabled: pickingDate)
+            .accessibilityAddTraits(.isModal)
+            .accessibilityAction(.escape) { closeCalendar() }
+    }
+    private var calendarAnimation: Animation {
+        reduceMotion ? .easeInOut(duration: 0.2) : .spring(response: 0.45, dampingFraction: 0.86)
     }
     private var dayNavigation: some View {
         HStack(spacing: 0) {
@@ -200,11 +293,12 @@ struct DayView: View {
             .accessibilityLabel("Next day")
         }
         .padding(.horizontal, 6)
-        .glassEffect(.regular.interactive(!calendarTransitionActive), in: .capsule)
-        // Keep the animated halo and relative label outside the zoom source.
-        .matchedTransitionSource(id: "daySelector", in: calendarTransition) {
-            $0.clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        }
+        // A fixed radius, the capsule's own at this height: a capsule shape would keep its
+        // ends fully round while growing, swelling the glass into a circle on the way.
+        .glassEffect(.regular.interactive(!calendarTransitionActive), in: .rect(cornerRadius: 28, style: .continuous))
+        // The same glass as the calendar card, so one stretches into the other.
+        .glassEffectID("day", in: calendarTransition)
+        .glassEffectTransition(reduceMotion ? .materialize : .matchedGeometry)
         // Put the light behind the finished glass so its halo can spill beyond
         // the capsule instead of being contained by the glass effect.
         .background {
@@ -214,14 +308,19 @@ struct DayView: View {
         }
         .padding(.horizontal, 10).padding(.vertical, 4)
         .overlay(alignment: .top) {
-            Text(relativeDateLabel)
-                .font(.caption2).foregroundStyle(.secondary)
-                .fixedSize()
-                .padding(.horizontal, 8)
-                .offset(y: -16)
-                .opacity(showingRelativeDate && !calendarTransitionActive ? 1 : 0)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
+            if showingRelativeDate && !calendarTransitionActive {
+                Text(relativeDateLabel)
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize()
+                    .padding(.horizontal, 8).padding(.vertical, 3)
+                    // A small glass pill keeps the label readable over the list behind it. Glass
+                    // ignores opacity, so the pill is added and removed and fades as glass does.
+                    .glassEffect(.regular, in: .capsule)
+                    .glassEffectTransition(.materialize)
+                    .offset(y: -22)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
         }
         .contentShape(Rectangle())
         // Observe swipes alongside the date's press gesture. An ancestor's
@@ -257,8 +356,20 @@ struct DayView: View {
     }
     private func openCalendar() {
         guard !calendarTransitionActive else { return }
-        calendarTransitionActive = true
-        pickingDate = true
+        // Run the morph at the display's full rate rather than SwiftUI's default 60 Hz.
+        if !reduceMotion { FrameRateBoost.shared.request(for: .milliseconds(800)) }
+        withAnimation(calendarAnimation) {
+            calendarTransitionActive = true
+            pickingDate = true
+        }
+    }
+    private func closeCalendar() {
+        guard pickingDate else { return }
+        if !reduceMotion { FrameRateBoost.shared.request(for: .milliseconds(800)) }
+        withAnimation(calendarAnimation) {
+            pickingDate = false
+            calendarTransitionActive = false
+        }
     }
     private var relativeDateLabel: String {
         let calendar = Calendar.current
@@ -269,8 +380,9 @@ struct DayView: View {
         case 0: return "Today"
         case 1: return "Tomorrow"
         case -1: return "Yesterday"
-        case 2...7: return "Next " + date.formatted(.dateTime.weekday(.wide))
-        case -7 ... -2: return "Last " + date.formatted(.dateTime.weekday(.wide))
+        // The button already names the weekday, so the label only says which one.
+        case 2...7: return "Next"
+        case -7 ... -2: return "Last"
         case 8...: return "In \(offset) days"
         default: return "\(-offset) days ago"
         }
@@ -344,7 +456,7 @@ struct DayView: View {
     }
     private func dayList(for date: Date, filter: DayFilter) -> some View {
         let day = Day(date)
-        let visible = store.items.filter { $0.appears(on: day) }.sorted {
+        let visible = store.items.filter { $0.shows(on: day, now: now) }.sorted {
             if $0.minute != $1.minute { return ($0.minute ?? -1) < ($1.minute ?? -1) }
             return $0.createdAt < $1.createdAt
         }
@@ -359,8 +471,12 @@ struct DayView: View {
             case .reminders: hasOpenReminder(item)
             }
         }
-        let displayedAnyTime = filtered.filter { $0.minute == nil }
-        let displayedTimed = filtered.filter { $0.minute != nil }
+        // A carried item keeps its old time on its scheduled day; here it is untimed.
+        let displayedAnyTime = filtered.filter { $0.minute == nil || $0.isCarried(now: now) }
+        let displayedTimed = filtered.filter { $0.minute != nil && !$0.isCarried(now: now) }
+        // Items carried on from this day stay as quiet entries, outside the
+        // counts and filters: they are counted and reviewed on their live day.
+        let moved = filter == .all ? Planner.movedItems(from: day, in: store.items, now: now) : []
         return ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 16) {
@@ -386,7 +502,7 @@ struct DayView: View {
                         Button("Show full day") { setFilter(.all) }.buttonStyle(.bordered)
                     }.frame(minHeight: 280)
                 }
-                if filter == .all && visible.isEmpty {
+                if filter == .all && visible.isEmpty && moved.isEmpty {
                     ContentUnavailableView {
                         Label("Room for your day", systemImage: "sun.horizon")
                     } description: {
@@ -407,6 +523,16 @@ struct DayView: View {
                     sectionHeading("Scheduled")
                     scheduledItems(items: displayedTimed, day: day, filter: filter)
                         .padding(.leading, 12).padding(.trailing, 20)
+                }
+                if !moved.isEmpty {
+                    // No heading: each entry's "Carried to" line says what it is.
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(moved) { item in
+                            movedRow(item, day: day)
+                                .padding(.leading, 12).padding(.trailing, 20)
+                        }
+                    }
+                    .padding(.top, visible.isEmpty ? 0 : 16)
                 }
                 Text("timo").font(.system(.footnote, design: .rounded).weight(.medium)).foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity).padding(.vertical, 28)
@@ -553,7 +679,7 @@ struct DayView: View {
             HStack(alignment: .center, spacing: 8) {
                 Button {
                     guard daySwipeInteraction.allowsItemActions else { return }
-                    withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.toggle(item) }
+                    withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.toggle(item, on: day) }
                 } label: {
                     Image(systemName: item.isComplete ? "checkmark.circle.fill" : "circle")
                         .resizable().scaledToFit().frame(width: 22, height: 22)
@@ -575,13 +701,13 @@ struct DayView: View {
                             if !item.people.isEmpty || !item.locations.isEmpty {
                                 itemDetailsLine(item)
                             }
-                            if let from = item.carriedFrom {
-                                Text("Carried from \(from.date().formatted(.dateTime.day().month(.abbreviated)))")
+                            if item.isCarried(now: now) {
+                                Text("Carried from \(item.day.date().formatted(.dateTime.day().month(.abbreviated)))")
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        if let start = item.start() {
+                        if let start = item.start(), !item.isCarried(now: now) {
                             scheduleLabel(item, start: start, day: day)
                                 .multilineTextAlignment(.trailing)
                                 .frame(width: sharedSchedule ? scheduleColumnWidth : nil, alignment: .trailing)
@@ -609,8 +735,50 @@ struct DayView: View {
             // they cannot drift apart while the row variants slide.
             if !sharedSchedule { rowMarkers(item, filter: filter) }
         }
+        .deletableOnHold(item, isEnabled: { daySwipeInteraction.allowsItemActions })
         .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 20))
         .listRowSeparatorTint(Color.primary.opacity(0.07))
+    }
+    // An item carried on from an earlier day. It is the same item as on its live
+    // day, so completing or opening it here acts on that copy.
+    private func movedRow(_ item: PlanItem, day: Day) -> some View {
+        let live = item.liveDay(now: now)
+        let destination = live == Day(now) ? "today"
+            : live.date().formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
+        return HStack(alignment: .center, spacing: 8) {
+            Button {
+                guard daySwipeInteraction.allowsItemActions else { return }
+                withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.toggle(item, on: day) }
+            } label: {
+                Image(systemName: item.isComplete ? "checkmark.circle.fill" : "circle")
+                    .resizable().scaledToFit().frame(width: 22, height: 22)
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }.buttonStyle(ItemPressStyle())
+                .accessibilityLabel(item.isComplete ? "Mark \(item.title) incomplete" : "Complete \(item.title)")
+                .accessibilityValue("Carried to \(destination)")
+            Button {
+                guard daySwipeInteraction.allowsItemActions else { return }
+                editing = item
+            } label: {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.title).font(.body)
+                        .foregroundStyle(.secondary)
+                        .strikethrough(item.isComplete, pattern: .solid, color: Color.secondary.opacity(0.45))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Label("Carried to \(destination)", systemImage: "arrow.turn.down.right")
+                        .font(.caption).foregroundStyle(.tertiary)
+                }
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .padding(.vertical, 2).contentShape(Rectangle())
+            }.buttonStyle(ItemPressStyle())
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(item.title)
+                .accessibilityValue("Carried to \(destination)" + (item.isComplete ? ", completed" : ""))
+                .accessibilityHint("Open details and edit")
+        }
+        .deletableOnHold(item, isEnabled: { daySwipeInteraction.allowsItemActions })
     }
     private func rowMarkers(_ item: PlanItem, filter: DayFilter) -> some View {
         HStack(spacing: 8) {
@@ -688,7 +856,7 @@ struct DayView: View {
             message = item.end != nil ? "This time has ended" : "The scheduled time has passed"
         }
         var actions = [FilteredItemAction(title: "Complete", symbol: "checkmark") {
-            withAnimation(self.reviewAnimation) { self.store.toggle(item) }
+            withAnimation(self.reviewAnimation) { self.store.toggle(item, on: day) }
         }]
         if reminder {
             actions.append(FilteredItemAction(title: "Change time", symbol: "clock.arrow.circlepath") {
@@ -737,7 +905,12 @@ struct DayView: View {
         if today != lastToday && day == lastToday { date = Calendar.current.startOfDay(for: tick) }
         lastToday = today; now = tick; store.reconcile(now: tick)
     }
-    private func add() { editing = PlanItem(title: "", day: day) }
+    private func add() {
+        // From a persona's history, a new item starts today in that persona.
+        var item = PlanItem(title: "", day: persona == nil ? day : Day(now))
+        item.persona = persona
+        editing = item
+    }
     private func move(_ delta: Int) {
         guard let next = Calendar.current.date(byAdding: .day, value: delta, to: date) else { return }
         navigate(to: next)
@@ -865,9 +1038,12 @@ private struct ViewModeButton: View {
                 .contentTransition(.symbolEffect(.replace))
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(.primary)
-                .frame(width: 44, height: 44)
+                .frame(width: 56, height: 56)
+                .contentShape(.circle)
         }
-        .buttonStyle(.glass).tint(.primary)
+        .buttonStyle(.plain)
+        // A circle as tall as the date capsule, rather than the glass style's wider capsule.
+        .glassEffect(.regular.interactive(), in: .circle)
         .accessibilityLabel(mode.showingTime ? "Switch to list view" : "Switch to time view")
         .accessibilityValue(mode.showingTime ? "Time view" : "List view")
     }

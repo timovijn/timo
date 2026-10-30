@@ -25,45 +25,33 @@ final class PlannerTests: XCTestCase {
         let zeroLength = PlanItem(title: "Point", day: Day(date(29), calendar: calendar), minute: 540, end: date(29, 9))
         XCTAssertFalse(zeroLength.isInProgress(now: date(29, 9), calendar: calendar))
     }
-    func testMissedDaysMoveExistingTaskToTodayAndClearTime() {
-        let original = task(20, minute: 540); var items = [original]
-        XCTAssertTrue(Planner.reconcile(&items, now: date(29), calendar: calendar))
-        XCTAssertEqual(items.count, 1); XCTAssertEqual(items[0].id, original.id)
-        XCTAssertEqual(items[0].day, Day(date(29), calendar: calendar)); XCTAssertNil(items[0].minute)
-        XCTAssertEqual(items[0].originalDay, original.day); XCTAssertEqual(items[0].carriedFrom, original.day)
-        XCTAssertFalse(Planner.reconcile(&items, now: date(29), calendar: calendar))
-        Planner.reconcile(&items, now: date(30), calendar: calendar)
-        XCTAssertEqual(items[0].carriedFrom, original.day)
+    func testUnfinishedTaskShowsOnTodayWithoutMovingItsSchedule() {
+        let item = task(20, minute: 540)
+        func day(_ d: Int) -> Day { Day(date(d), calendar: calendar) }
+        XCTAssertEqual(item.liveDay(now: date(29), calendar: calendar), day(29))
+        XCTAssertTrue(item.shows(on: day(29), now: date(29), calendar: calendar))
+        XCTAssertFalse(item.shows(on: day(20), now: date(29), calendar: calendar))
+        XCTAssertTrue(item.isCarried(now: date(29), calendar: calendar))
+        // The schedule itself is untouched.
+        XCTAssertEqual(item.day, day(20)); XCTAssertEqual(item.minute, 540)
     }
     func testEventsCompletedTasksAndFutureTasksStayPut() {
         var completed = task(20); completed.completedAt = date(20)
         let event = PlanItem(title: "Work", day: Day(date(20), calendar: calendar), minute: 540, end: date(20, 17), movesToNextDay: false)
-        let future = task(30); var items = [completed, event, future]
-        XCTAssertFalse(Planner.reconcile(&items, now: date(29), calendar: calendar))
-        XCTAssertEqual(items, [completed, event, future])
-    }
-    func testCarryOverKeepsCompletedParentAndPastEventLinks() {
-        var parent = task(20); parent.completedAt = date(20)
-        let event = PlanItem(title: "Dinner", day: Day(date(21), calendar: calendar), minute: 540, end: date(21, 17), movesToNextDay: false)
-        var first = task(22); first.parentID = parent.id
-        var second = task(23); second.parentID = event.id
-        var items = [parent, event, first, second]
-        Planner.reconcile(&items, now: date(29), calendar: calendar)
-        XCTAssertEqual(items[2].parentID, parent.id); XCTAssertEqual(items[3].parentID, event.id)
-        XCTAssertEqual(items[2].day, Day(date(29), calendar: calendar)); XCTAssertEqual(items[3].day, items[2].day)
-        XCTAssertEqual(items[0], parent); XCTAssertEqual(items[1], event)
+        let future = task(30)
+        for item in [completed, event, future] {
+            XCTAssertEqual(item.liveDay(now: date(29), calendar: calendar), item.day)
+            XCTAssertFalse(item.isCarried(now: date(29), calendar: calendar))
+        }
     }
     func testMidnightAndDaylightSavingUseLocalDays() {
         // Amsterdam moves back to winter time on 25 October 2026.
-        var items = [task(24, minute: 540)]
-        Planner.reconcile(&items, now: date(25, 0), calendar: calendar)
-        XCTAssertEqual(items[0].day, Day(date(25), calendar: calendar))
-        XCTAssertFalse(Planner.reconcile(&items, now: date(25, 23), calendar: calendar))
-        XCTAssertTrue(Planner.reconcile(&items, now: date(26, 0), calendar: calendar))
+        let item = task(24, minute: 540)
+        XCTAssertEqual(item.liveDay(now: date(25, 0), calendar: calendar), Day(date(25), calendar: calendar))
+        XCTAssertEqual(item.liveDay(now: date(25, 23), calendar: calendar), Day(date(25), calendar: calendar))
+        XCTAssertEqual(item.liveDay(now: date(26, 0), calendar: calendar), Day(date(26), calendar: calendar))
         let utc = ISO8601DateFormatter().date(from: "2026-10-28T23:30:00Z")!
-        items = [task(28)]
-        Planner.reconcile(&items, now: utc, calendar: calendar)
-        XCTAssertEqual(items[0].day, Day(date(29), calendar: calendar))
+        XCTAssertEqual(task(28).liveDay(now: utc, calendar: calendar), Day(date(29), calendar: calendar))
     }
     func testSuggestionsNeverCompleteAndUntimedTasksHaveNone() {
         let untimed = task(29); let timed = task(29, minute: 540)
@@ -116,11 +104,11 @@ final class PlannerTests: XCTestCase {
         XCTAssertFalse(Planner.suggestsParentCompletion(completedParent, in: [completedParent, child]))
     }
     func testReschedulingAndPersistenceRoundTrip() throws {
-        var item = task(20, minute: 540); item.carriedFrom = item.day
+        var item = task(20, minute: 540)
         let original = item.originalDay
         Planner.reschedule(&item, to: Day(date(30), calendar: calendar), minute: 1200)
-        XCTAssertNil(item.carriedFrom); XCTAssertEqual(item.originalDay, original)
-        var items = [item]; XCTAssertFalse(Planner.reconcile(&items, now: date(29), calendar: calendar))
+        XCTAssertEqual(item.day, Day(date(30), calendar: calendar)); XCTAssertEqual(item.originalDay, original)
+        let items = [item]
         let encoded = try JSONEncoder().encode(items)
         XCTAssertEqual(try JSONDecoder().decode([PlanItem].self, from: encoded), items)
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -143,22 +131,16 @@ final class PlannerTests: XCTestCase {
         let flexible = PlanItem(title: "Read", day: day, minute: 20 * 60, end: date(20, 21))
         let fixedPoint = PlanItem(title: "Call", day: day, minute: 9 * 60, movesToNextDay: false)
         let fixedRange = PlanItem(title: "Appointment", day: day, minute: 9 * 60, end: date(20, 10), movesToNextDay: false)
-        var items = [flexible, fixedPoint, fixedRange]
-        Planner.reconcile(&items, now: date(29), calendar: calendar)
-        XCTAssertEqual(items[0].day, Day(date(29), calendar: calendar))
-        XCTAssertEqual(items[0].minute, 20 * 60)
-        XCTAssertEqual(items[0].end, date(29, 21))
-        XCTAssertEqual(items[0].carriedFrom, day)
-        XCTAssertEqual(items[1], fixedPoint)
-        XCTAssertEqual(items[2], fixedRange)
+        XCTAssertEqual(flexible.liveDay(now: date(29), calendar: calendar), Day(date(29), calendar: calendar))
+        XCTAssertEqual(fixedPoint.liveDay(now: date(29), calendar: calendar), day)
+        XCTAssertEqual(fixedRange.liveDay(now: date(29), calendar: calendar), day)
     }
     func testOngoingOvernightRangeDoesNotCarryUntilItEnds() {
         let item = PlanItem(title: "Overnight", day: Day(date(28), calendar: calendar), minute: 23 * 60, end: date(29, 2))
-        var items = [item]
-        XCTAssertFalse(Planner.reconcile(&items, now: date(29, 1), calendar: calendar))
-        XCTAssertEqual(items[0], item)
-        XCTAssertTrue(Planner.reconcile(&items, now: date(29, 3), calendar: calendar))
-        XCTAssertEqual(items[0].end, date(30, 2))
+        XCTAssertFalse(item.isCarried(now: date(29, 1), calendar: calendar))
+        XCTAssertTrue(item.shows(on: Day(date(29), calendar: calendar), now: date(29, 1), calendar: calendar))
+        XCTAssertTrue(item.isCarried(now: date(29, 3), calendar: calendar))
+        XCTAssertTrue(item.movedAway(from: Day(date(28), calendar: calendar), now: date(29, 3), calendar: calendar))
     }
     func testChangingStartPreservesDurationAndRemovingTimeClearsEnd() throws {
         var item = PlanItem(title: "Read", day: Day(date(24), calendar: calendar), minute: 23 * 60, end: date(25, 0))
@@ -249,29 +231,18 @@ final class PlannerTests: XCTestCase {
         Planner.updateStart(&item, day: Day(date(30), calendar: calendar), minute: nil, calendar: calendar)
         XCTAssertEqual(item.reminders, [date(30, 20), date(30, 19)])
     }
-    func testCarryOverDoesNotReplayExpiredReminders() {
+    func testCarriedItemsOnlyRemindAboutUpcomingTimes() {
         let day = Day(date(28), calendar: calendar)
-        let expired = PlanItem(title: "Read", day: day, reminders: [date(28, 20), date(29, 18)])
-        let upcoming = PlanItem(title: "Call", day: day, reminders: [date(29, 18)])
-        var items = [expired, upcoming]
-        Planner.reconcile(&items, now: date(29), calendar: calendar)
-        XCTAssertEqual(items[0].reminders, [date(29, 18)])
-        XCTAssertEqual(items[1].reminders, [date(29, 18)])
+        let item = PlanItem(title: "Read", day: day, reminders: [date(28, 20), date(29, 18)])
+        XCTAssertEqual(Planner.upcomingReminders(in: [item], now: date(29)).map(\.date), [date(29, 18)])
     }
-
-    func testMultipleLocationsAndPeoplePersistAndSurviveCarryOver() throws {
+    func testMultipleLocationsAndPeoplePersist() throws {
         let item = PlanItem(title: "Dinner", day: Day(date(28), calendar: calendar),
                             locations: ["Home", "Market, Amsterdam"], people: ["Mum", "Merel"])
-        let encoded = try JSONEncoder().encode(item)
-        var decoded = try JSONDecoder().decode(PlanItem.self, from: encoded)
+        let decoded = try JSONDecoder().decode(PlanItem.self, from: JSONEncoder().encode(item))
         XCTAssertEqual(decoded, item)
-        var items = [decoded]
-        Planner.reconcile(&items, now: date(29), calendar: calendar)
-        decoded = items[0]
         XCTAssertEqual(decoded.locations, item.locations)
         XCTAssertEqual(decoded.people, item.people)
-        XCTAssertEqual(decoded.id, item.id)
-        XCTAssertEqual(decoded.day, Day(date(29), calendar: calendar))
     }
     func testExistingItemsWithoutLocationsOrPeopleStillOpen() throws {
         let original = PlanItem(title: "Existing", day: Day(date(29), calendar: calendar))
@@ -283,5 +254,85 @@ final class PlannerTests: XCTestCase {
         XCTAssertTrue(decoded.people.isEmpty)
         XCTAssertEqual(decoded, original)
     }
-
+    func testCarriedItemStaysVisibleAsMovedOnEveryEarlierDay() {
+        var item = task(20, minute: 540)
+        func day(_ d: Int) -> Day { Day(date(d), calendar: calendar) }
+        func moved(_ d: Int, now: Date) -> [UUID] { Planner.movedItems(from: day(d), in: [item], now: now, calendar: calendar).map(\.id) }
+        XCTAssertEqual(moved(20, now: date(21)), [item.id])
+        XCTAssertTrue(moved(21, now: date(21)).isEmpty)
+        for d in 20...23 { XCTAssertEqual(moved(d, now: date(24)), [item.id], "day \(d)") }
+        XCTAssertTrue(moved(19, now: date(24)).isEmpty)
+        XCTAssertTrue(moved(24, now: date(24)).isEmpty)
+        // Only the live day shows the item itself, so it is counted once.
+        XCTAssertEqual((19...25).filter { item.shows(on: day($0), now: date(24), calendar: calendar) }, [24])
+        // Completed on the 24th, it stays there and the trail shows it as done.
+        item.completedAt = date(24)
+        XCTAssertEqual((19...26).filter { item.shows(on: day($0), now: date(26), calendar: calendar) }, [24])
+        XCTAssertEqual(moved(22, now: date(26)), [item.id])
+        XCTAssertTrue(moved(25, now: date(26)).isEmpty)
+    }
+    func testCompletingOnTheScheduledDayEndsTheTrailThere() {
+        // An event added after the fact, then ticked off on the day it happened.
+        var item = PlanItem(title: "Tonsillectomy", day: Day(date(26), calendar: calendar))
+        func day(_ d: Int) -> Day { Day(date(d), calendar: calendar) }
+        let now = date(30, 15)
+        XCTAssertEqual(item.liveDay(now: now, calendar: calendar), day(30))
+        item.completedAt = Planner.completionDate(on: day(26), now: now, calendar: calendar)
+        XCTAssertEqual(item.liveDay(now: now, calendar: calendar), day(26))
+        XCTAssertEqual((25...31).filter { item.shows(on: day($0), now: now, calendar: calendar) }, [26])
+        XCTAssertTrue((25...31).allSatisfy { !item.movedAway(from: day($0), now: now, calendar: calendar) })
+        XCTAssertEqual(item.day, day(26))
+        // Ticked off on the 28th instead, the 26th and 27th show where it went.
+        item.completedAt = Planner.completionDate(on: day(28), now: now, calendar: calendar)
+        XCTAssertEqual((25...31).filter { item.movedAway(from: day($0), now: now, calendar: calendar) }, [26, 27])
+        XCTAssertEqual((25...31).filter { item.shows(on: day($0), now: now, calendar: calendar) }, [28])
+    }
+    func testCompletionDateFollowsTheViewedDay() {
+        let now = date(30, 15)
+        XCTAssertEqual(Planner.completionDate(on: Day(date(26), calendar: calendar), now: now, calendar: calendar), date(26, 15))
+        XCTAssertEqual(Planner.completionDate(on: Day(date(30), calendar: calendar), now: now, calendar: calendar), now)
+        XCTAssertEqual(Planner.completionDate(on: Day(date(31), calendar: calendar), now: now, calendar: calendar), now)
+    }
+    func testLegacyCarriedPlansGetTheirScheduledDayBack() {
+        var moved = PlanItem(title: "Read", day: Day(date(29), calendar: calendar), minute: 20 * 60, end: date(29, 21))
+        moved.carriedFrom = Day(date(20), calendar: calendar)
+        let untouched = task(25)
+        var items = [moved, untouched]
+        XCTAssertTrue(Planner.restoreScheduledDays(&items, calendar: calendar))
+        XCTAssertEqual(items[0].day, Day(date(20), calendar: calendar))
+        XCTAssertEqual(items[0].minute, 20 * 60)
+        XCTAssertEqual(items[0].end, date(20, 21))
+        XCTAssertNil(items[0].carriedFrom)
+        XCTAssertEqual(items[1], untouched)
+        XCTAssertFalse(Planner.restoreScheduledDays(&items, calendar: calendar))
+    }
+    func testMovedEntriesSkipItemsThatNeverCarried() {
+        var completed = task(20); completed.completedAt = date(20)
+        let fixed = PlanItem(title: "Dentist", day: Day(date(20), calendar: calendar), minute: 540, movesToNextDay: false)
+        let items = [completed, fixed, task(30)]
+        for d in 19...30 { XCTAssertTrue(Planner.movedItems(from: Day(date(d), calendar: calendar), in: items, now: date(29), calendar: calendar).isEmpty) }
+    }
+    func testCarriedOvernightRangeShowsOnceOnItsLiveDay() {
+        let item = PlanItem(title: "Overnight", day: Day(date(27), calendar: calendar), minute: 23 * 60, end: date(28, 2))
+        let now = date(29, 3)
+        func day(_ d: Int) -> Day { Day(date(d), calendar: calendar) }
+        XCTAssertEqual((26...30).filter { item.movedAway(from: day($0), now: now, calendar: calendar) }, [27, 28])
+        XCTAssertEqual((26...30).filter { item.shows(on: day($0), now: now, calendar: calendar) }, [29])
+    }
+    func testRescheduledItemsTakeTheirTrailAlong() {
+        var item = task(20)
+        let now = date(22)
+        func day(_ d: Int) -> Day { Day(date(d), calendar: calendar) }
+        XCTAssertTrue(item.movedAway(from: day(21), now: now, calendar: calendar))
+        Planner.updateStart(&item, day: item.day, minute: 600, calendar: calendar)
+        XCTAssertTrue(item.movedAway(from: day(21), now: now, calendar: calendar))
+        // Planned for a later day, earlier days let it go.
+        Planner.updateStart(&item, day: day(25), minute: 600, calendar: calendar)
+        XCTAssertFalse(item.movedAway(from: day(21), now: now, calendar: calendar))
+        XCTAssertEqual(item.liveDay(now: now, calendar: calendar), day(25))
+    }
+    func testMovedEntriesAddNoReminders() {
+        var item = task(20); item.reminders = [date(23, 9)]
+        XCTAssertEqual(Planner.upcomingReminders(in: [item], now: date(22)).count, 1)
+    }
 }

@@ -71,8 +71,7 @@ final class RepeatingTests: XCTestCase {
         var items: [PlanItem] = []
         Planner.materialize([plan], in: &items, from: day(26), through: day(28), calendar: calendar)
         items[0].movesToNextDay = true // Even an old preference cannot pile up repeats.
-        XCTAssertFalse(Planner.reconcile(&items, now: date(29), calendar: calendar))
-        XCTAssertEqual(items.map(\.day), [day(26), day(27), day(28)])
+        XCTAssertEqual(items.map { $0.liveDay(now: date(29), calendar: calendar) }, [day(26), day(27), day(28)])
     }
     func testLegacyExclusionsPersistAndDeletingSeriesStopsAllGeneration() throws {
         var series = [RepeatingPlan(template: template(.daily))]

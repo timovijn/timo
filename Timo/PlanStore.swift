@@ -13,7 +13,7 @@ import UserNotifications
     private var reminderWorker: Task<Void, Never>?
     private let notificationCenter = UNUserNotificationCenter.current()
     private struct Document: Codable {
-        var version = 5
+        var version = 6
         var items: [PlanItem]
         var series: [RepeatingPlan]
         private enum CodingKeys: String, CodingKey { case version, items, series }
@@ -30,7 +30,7 @@ import UserNotifications
         do {
             if FileManager.default.fileExists(atPath: url.path) {
                 let document = try JSONDecoder().decode(Document.self, from: Data(contentsOf: url))
-                guard (1...5).contains(document.version) else { throw CocoaError(.fileReadCorruptFile) }
+                guard (1...6).contains(document.version) else { throw CocoaError(.fileReadCorruptFile) }
                 items = document.items
                 series = document.series
             }
@@ -74,8 +74,9 @@ import UserNotifications
     func reconcile(now: Date = Date()) {
         var updated = items
         let generated = materialize(&updated, series: series, now: now)
-        let carried = Planner.reconcile(&updated, now: now)
-        if generated || carried { commit(updated) }
+        // Plans saved when carrying moved an item's day get their scheduled days back once.
+        let restored = Planner.restoreScheduledDays(&updated)
+        if generated || restored { commit(updated) }
     }
     func requestReminderPermission() async throws -> Bool {
         try await notificationCenter.requestAuthorization(options: [.alert, .sound])
@@ -135,15 +136,15 @@ import UserNotifications
             var fresh = item; fresh.originalDay = fresh.day; updated.append(fresh)
         }
         materialize(&updated, series: plans, now: Date())
-        Planner.reconcile(&updated, now: Date())
         commit(updated, series: plans)
     }
-    func toggle(_ item: PlanItem) {
+    /// Ticks an item off, or undoes it. Ticked off while viewing a past day, it counts as done on
+    /// that day, so a carried item stops there instead of showing on the days after.
+    func toggle(_ item: PlanItem, on day: Day) {
         var updated = items
         guard let i = updated.firstIndex(where: { $0.id == item.id }) else { return }
-        updated[i].completedAt = updated[i].isComplete ? nil : Date()
+        updated[i].completedAt = updated[i].isComplete ? nil : Planner.completionDate(on: day, now: Date())
         updated[i].suggestionDismissed = false
-        Planner.reconcile(&updated, now: Date())
         commit(updated)
     }
     func dismissSuggestion(_ item: PlanItem) {
@@ -167,15 +168,16 @@ import UserNotifications
         guard items.isEmpty else { return }
         let calendar = Calendar.current; let today = Day(Date())
         func date(_ hour: Int, _ minute: Int = 0) -> Date { calendar.date(bySettingHour: hour, minute: minute, second: 0, of: today.date())! }
-        let cooking = PlanItem(title: "Cook dinner", day: today, minute: 19 * 60, end: date(19, 45), movesToNextDay: false)
+        func persona(_ persona: Persona, _ item: PlanItem) -> PlanItem { var item = item; item.persona = persona; return item }
+        let cooking = persona(.family, PlanItem(title: "Cook dinner", day: today, minute: 19 * 60, end: date(19, 45), movesToNextDay: false))
         let samples = [
             PlanItem(title: "Shave", day: today, minute: 8 * 60),
-            PlanItem(title: "Work", day: today, minute: 9 * 60, end: date(17), movesToNextDay: false),
-            PlanItem(title: "Sport", day: today, minute: 17 * 60 + 30, end: date(18, 30), movesToNextDay: false),
+            persona(.work, PlanItem(title: "Work", day: today, minute: 9 * 60, end: date(17), movesToNextDay: false)),
+            persona(.health, PlanItem(title: "Sport", day: today, minute: 17 * 60 + 30, end: date(18, 30), movesToNextDay: false)),
             cooking,
             PlanItem(title: "Go to the supermarket", day: today, parentID: cooking.id),
-            PlanItem(title: "Call Mum", day: today),
-            PlanItem(title: "Read", day: today, minute: 21 * 60)
+            persona(.family, PlanItem(title: "Call Mum", day: today)),
+            persona(.personal, PlanItem(title: "Read", day: today, minute: 21 * 60))
         ]
         commit(samples)
     }

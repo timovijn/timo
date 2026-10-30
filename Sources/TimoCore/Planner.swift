@@ -42,6 +42,29 @@ public enum RepeatRule: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+/// A focus in someone's life that an item can belong to. The set is fixed for now.
+/// Items store the raw value, so a persona this version doesn't know reads as none.
+public enum Persona: String, Codable, CaseIterable, Identifiable {
+    case health, work, family, friends, personal
+    public var id: String { rawValue }
+    public var title: String {
+        switch self {
+        case .health: return "Health"
+        case .work: return "Work"
+        case .family: return "Family"
+        case .friends: return "Friends"
+        case .personal: return "Personal"
+        }
+    }
+}
+
+/// One day of a persona's history: its items on that day, in day-view order.
+public struct PersonaDay: Equatable, Identifiable {
+    public let day: Day
+    public let items: [PlanItem]
+    public var id: Day { day }
+}
+
 public struct ScheduledReminder: Equatable {
     public let item: PlanItem
     public let date: Date
@@ -78,6 +101,7 @@ public struct PlanItem: Identifiable, Codable, Equatable {
     public var repeatWeekdays: [Int] = []
     public var seriesID: UUID?
     public var occurrenceDay: Day?
+    public var persona: Persona?
     public var title: String
     public var notes: String
     public var locations: [String]
@@ -90,6 +114,8 @@ public struct PlanItem: Identifiable, Codable, Equatable {
     public var completedAt: Date?
     public var parentID: UUID?
     public var originalDay: Day
+    /// Only in plans saved before the scheduled day stayed fixed: the day an item was moved on
+    /// from. Opening such a plan restores it as the scheduled day (see `restoreScheduledDays`).
     public var carriedFrom: Day?
     public var suggestionDismissed: Bool
     public var createdAt: Date
@@ -104,7 +130,7 @@ public struct PlanItem: Identifiable, Codable, Equatable {
     }
     // Read the original task/event format without changing IDs or scheduling choices.
     private enum CodingKeys: String, CodingKey {
-        case id, title, notes, locations, people, day, minute, end, reminders, completedAt, parentID, originalDay, carriedFrom, suggestionDismissed, createdAt, movesToNextDay, repeatRule, repeatWeekdays, seriesID, occurrenceDay
+        case id, title, notes, locations, people, day, minute, end, reminders, completedAt, parentID, originalDay, carriedFrom, suggestionDismissed, createdAt, movesToNextDay, repeatRule, repeatWeekdays, seriesID, occurrenceDay, persona
     }
     private enum LegacyKeys: String, CodingKey { case kind, reminderAt }
     public init(from decoder: Decoder) throws {
@@ -114,6 +140,7 @@ public struct PlanItem: Identifiable, Codable, Equatable {
         repeatWeekdays = try c.decodeIfPresent([Int].self, forKey: .repeatWeekdays) ?? []
         seriesID = try c.decodeIfPresent(UUID.self, forKey: .seriesID)
         occurrenceDay = try c.decodeIfPresent(Day.self, forKey: .occurrenceDay)
+        persona = try c.decodeIfPresent(String.self, forKey: .persona).flatMap(Persona.init(rawValue:))
         title = try c.decode(String.self, forKey: .title)
         notes = try c.decode(String.self, forKey: .notes)
         locations = try c.decodeIfPresent([String].self, forKey: .locations) ?? []
@@ -167,6 +194,33 @@ public struct PlanItem: Identifiable, Codable, Equatable {
         let beginning = calendar.startOfDay(for: selected.date(calendar: calendar))
         let next = calendar.date(byAdding: .day, value: 1, to: beginning)!
         return start < next && end > beginning
+    }
+    /// Whether an unfinished item is shown on later days until it is done. Repeats never are.
+    public var carries: Bool { movesToNextDay && seriesID == nil }
+    /// The day this item is shown as itself. Its scheduled `day` never changes: an item that
+    /// carries is shown on the day it was completed, or while unfinished on today. A time range
+    /// still running stays on its own day until it ends.
+    public func liveDay(now: Date, calendar: Calendar = .current) -> Day {
+        guard carries else { return day }
+        if let completedAt { return max(day, Day(completedAt, calendar: calendar)) }
+        if let end, end > now { return day }
+        return max(day, Day(now, calendar: calendar))
+    }
+    /// Whether this item is shown on a later day than it was scheduled for.
+    public func isCarried(now: Date, calendar: Calendar = .current) -> Bool {
+        liveDay(now: now, calendar: calendar) > day
+    }
+    /// Whether `selected` shows this item as itself. A carried item is shown once, on its live
+    /// day, as an untimed item; otherwise it is shown on every day its schedule covers.
+    public func shows(on selected: Day, now: Date, calendar: Calendar = .current) -> Bool {
+        let live = liveDay(now: now, calendar: calendar)
+        return live == day ? appears(on: selected, calendar: calendar) : selected == live
+    }
+    /// Whether this item was carried on from `selected`: every day from its scheduled day up
+    /// to its live day keeps a quiet entry pointing to where it went.
+    public func movedAway(from selected: Day, now: Date, calendar: Calendar = .current) -> Bool {
+        let live = liveDay(now: now, calendar: calendar)
+        return live > day && day <= selected && selected < live
     }
 }
 
@@ -320,27 +374,29 @@ public enum Planner {
         for id in ids { delete(id, includingChildren: false, from: &items) }
         series.removeAll { related.contains($0.id) }
     }
-    @discardableResult public static func reconcile(_ items: inout [PlanItem], now: Date, calendar: Calendar = .current) -> Bool {
-        let today = Day(now, calendar: calendar)
+    /// Plans saved before the scheduled day stayed fixed moved an unfinished item's `day` to
+    /// today. This puts it back on the day it was carried from, with its time range shifted
+    /// along. A single time was dropped when it moved and cannot be recovered.
+    @discardableResult public static func restoreScheduledDays(_ items: inout [PlanItem], calendar: Calendar = .current) -> Bool {
         var changed = false
-        for index in items.indices where items[index].movesToNextDay && items[index].seriesID == nil && !items[index].isComplete && items[index].day < today {
-            // An overnight item still in progress stays on its original schedule.
-            if let end = items[index].end, end > now { continue }
-            items[index].reminders.removeAll { $0 < now }
-            let start = items[index].start(calendar: calendar)
-            let duration = items[index].end.flatMap { end in start.map { end.timeIntervalSince($0) } }
-            if items[index].carriedFrom == nil { items[index].carriedFrom = items[index].day }
-            items[index].day = today
-            if let duration, let newStart = items[index].start(calendar: calendar) {
-                items[index].end = newStart.addingTimeInterval(duration)
-            } else {
-                items[index].minute = nil
-                items[index].end = nil
-            }
-            items[index].suggestionDismissed = false
+        for index in items.indices {
+            guard let from = items[index].carriedFrom else { continue }
+            let shift = calendar.dateComponents([.day], from: from.date(calendar: calendar),
+                                                to: items[index].day.date(calendar: calendar)).day ?? 0
+            items[index].day = from
+            items[index].end = items[index].end.flatMap { calendar.date(byAdding: .day, value: -shift, to: $0) }
+            items[index].carriedFrom = nil
             changed = true
         }
         return changed
+    }
+    /// When an item ticked off while viewing `day` counts as done: on that day if it is in the
+    /// past (at the current time of day), otherwise now.
+    public static func completionDate(on day: Day, now: Date, calendar: Calendar = .current) -> Date {
+        guard day < Day(now, calendar: calendar) else { return now }
+        let time = calendar.dateComponents([.hour, .minute, .second], from: now)
+        return calendar.date(bySettingHour: time.hour ?? 12, minute: time.minute ?? 0, second: time.second ?? 0,
+                             of: day.date(calendar: calendar)) ?? now
     }
     public static func validate(_ item: PlanItem, in items: [PlanItem], calendar: Calendar = .current) throws {
         guard !item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw PlannerError.title }
@@ -359,6 +415,26 @@ public enum Planner {
         if includingChildren { items.removeAll { $0.parentID == id } }
         else { for i in items.indices where items[i].parentID == id { items[i].parentID = nil } }
         items.removeAll { $0.id == id }
+    }
+    /// Items carried on from `day`, oldest first. They are the same items as on their live
+    /// day, so they are not counted, reviewed or reminded about again.
+    public static func movedItems(from day: Day, in items: [PlanItem], now: Date, calendar: Calendar = .current) -> [PlanItem] {
+        items.filter { $0.movedAway(from: day, now: now, calendar: calendar) }.sorted { $0.createdAt < $1.createdAt }
+    }
+    /// Every item in `persona`, grouped by its live day, newest day first. A carried item is
+    /// listed once, where it is shown as itself. Repeating items only list occurrences up to
+    /// today, since future ones are generated ahead and would bury the history.
+    public static func history(of persona: Persona, in items: [PlanItem], now: Date, calendar: Calendar = .current) -> [PersonaDay] {
+        let today = Day(now, calendar: calendar)
+        let matching = items.filter { $0.persona == persona && ($0.seriesID == nil || $0.day <= today) }
+        return Dictionary(grouping: matching, by: { $0.liveDay(now: now, calendar: calendar) })
+            .map { day, items in
+                PersonaDay(day: day, items: items.sorted {
+                    if $0.minute != $1.minute { return ($0.minute ?? -1) < ($1.minute ?? -1) }
+                    return $0.createdAt < $1.createdAt
+                })
+            }
+            .sorted { $0.day > $1.day }
     }
     /// The nearest future reminders of unfinished items, one entry per reminder.
     public static func upcomingReminders(in items: [PlanItem], now: Date, limit: Int = 64) -> [ScheduledReminder] {
@@ -382,7 +458,7 @@ public enum Planner {
         }
         if let duration, let start = item.start(calendar: calendar) { item.end = start.addingTimeInterval(duration) }
         else { item.end = nil }
-        item.carriedFrom = nil; item.suggestionDismissed = false
+        item.suggestionDismissed = false
     }
     public static func reschedule(_ item: inout PlanItem, to day: Day, minute: Int?, end: Date? = nil) {
         updateStart(&item, day: day, minute: minute)

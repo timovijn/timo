@@ -12,21 +12,29 @@ struct ItemEditor: View {
     @State private var requestingReminder = false
     @State private var needsNotificationSettings = false
     @State private var editingField: ScheduleField?
+    /// Whether carry-over was set by hand. Until then a new item follows its schedule: Anytime
+    /// items move on to the next day if unfinished, items with a time stay on their day.
+    @State private var carryChosen = false
+    /// A picker about to open, once its row has scrolled up to leave it room below.
+    @State private var pendingField: ScheduleField?
     @State private var removedDuration: TimeInterval?
     /// Identities for `item.reminders`, kept in the same order, so a button follows its reminder when sorting.
     @State private var reminderIDs: [UUID]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var titleFocused: Bool
+    /// Sections whose explanation is open. Explanations start closed, behind a small (i).
+    @State private var openInfo: Set<String> = []
     private var existing: Bool { store.item(item.id) != nil }
     init(item: PlanItem) {
         _item = State(initialValue: item)
-        _locations = State(initialValue: (item.locations.isEmpty ? [""] : item.locations).map { ItemTextEntry(text: $0) })
-        _people = State(initialValue: (item.people.isEmpty ? [""] : item.people).map { ItemTextEntry(text: $0) })
+        _locations = State(initialValue: item.locations.map { ItemTextEntry(text: $0) })
+        _people = State(initialValue: item.people.map { ItemTextEntry(text: $0) })
         _reminderIDs = State(initialValue: item.reminders.map { _ in UUID() })
     }
     var body: some View {
         NavigationStack {
-            Form {
+            // The reader lets a place or person row scroll well clear of the keyboard.
+            ScrollViewReader { form in Form {
                 Section {
                     TextField("What’s on your day?", text: $item.title, axis: .vertical)
                         .font(.title3.weight(.medium)).focused($titleFocused)
@@ -37,6 +45,18 @@ struct ItemEditor: View {
                             item.title = title.split(whereSeparator: \.isNewline).joined(separator: " ")
                             titleFocused = false
                         }
+                }
+                Section {
+                    PersonaChips(selection: $item.persona)
+                        .padding(.vertical, 2)
+                        .sensoryFeedback(.selection, trigger: item.persona)
+                } header: {
+                    InfoHeader("Persona", isExpanded: infoBinding("persona"))
+                } footer: {
+                    InfoFooter(isExpanded: openInfo.contains("persona")) {
+                        Text("Personas gather items by focus, such as health or work. Tap the orb at the top left of your day to see everything in one persona, past and present."
+                             + (item.repeatRule != .never || item.seriesID != nil ? " Every occurrence of this repeating item shares its persona." : ""))
+                    }
                 }
                 Section {
                     // One line of buttons: the day, then an optional start and duration, each removable.
@@ -79,12 +99,23 @@ struct ItemEditor: View {
                         }
                     }
                     .padding(.vertical, 2)
+                    .id(PickerRow.schedule)
                     .sensoryFeedback(.selection, trigger: "\(item.day) \(item.minute != nil) \(item.end != nil)")
-                    if let from = item.carriedFrom {
-                        Text("Carried from \(from.date().formatted(date: .abbreviated, time: .omitted)). Choosing a date gives this item a fresh plan.")
+                    if existing && item.isCarried(now: Date()) {
+                        Text("Not done yet, so it is shown on today")
                             .font(.caption).foregroundStyle(.secondary)
                     }
-                } header: { Text("Schedule") }
+                } header: {
+                    if existing && item.isCarried(now: Date()) {
+                        InfoHeader("Schedule", isExpanded: infoBinding("schedule"))
+                    } else {
+                        Text("Schedule")
+                    }
+                } footer: {
+                    InfoFooter(isExpanded: openInfo.contains("schedule")) {
+                        Text("The schedule stays as planned. Until it is done, the item is also shown on today. Tick it off on the day it actually happened to keep it there.")
+                    }
+                }
                 Section {
                     Picker("Repeat", selection: $item.repeatRule) {
                         ForEach(RepeatRule.allCases) { rule in
@@ -105,9 +136,13 @@ struct ItemEditor: View {
                         Text("Every " + item.day.date().formatted(.dateTime.weekday(.wide)))
                             .font(.caption).foregroundStyle(.secondary)
                     }
-                } header: { Text("Repeat") } footer: {
-                    if item.repeatRule != .never || item.seriesID != nil {
-                        Text("Starts on the first matching day on or after the selected date. Each occurrence can be completed independently and stays on its scheduled day. Edits apply to every occurrence of this repeating item, including earlier days. Completion is separate for each day. Choosing Never keeps only this occurrence.")
+                } header: {
+                    InfoHeader("Repeat", isExpanded: infoBinding("repeat"))
+                } footer: {
+                    InfoFooter(isExpanded: openInfo.contains("repeat")) {
+                        Text(item.repeatRule != .never || item.seriesID != nil
+                             ? "Starts on the first matching day on or after the selected date. Each occurrence can be completed independently and stays on its scheduled day. Edits apply to every occurrence of this repeating item, including earlier days. Completion is separate for each day. Choosing Never keeps only this occurrence."
+                             : "Repeat this item every day, every weekday, every week or on days you choose. Each occurrence stays on its own day and is completed separately.")
                     }
                 }
                 .onChange(of: item.repeatRule) { _, rule in
@@ -118,11 +153,18 @@ struct ItemEditor: View {
                 }
                 if item.repeatRule == .never && item.seriesID == nil {
                     Section {
-                        Toggle("Move to next day if unfinished", isOn: $item.movesToNextDay)
+                        Toggle("Move to next day if unfinished", isOn: Binding(get: { item.movesToNextDay }, set: {
+                            item.movesToNextDay = $0
+                            carryChosen = true
+                        }))
+                    } header: {
+                        InfoHeader("Carry over", isExpanded: infoBinding("carryOver"))
                     } footer: {
-                        Text(item.movesToNextDay
-                             ? "Unfinished items move to today. A time range keeps its time and duration; a single time becomes any time."
-                             : "This item stays on its scheduled day, even if unfinished.")
+                        InfoFooter(isExpanded: openInfo.contains("carryOver")) {
+                            Text(item.movesToNextDay
+                                 ? "Unfinished items move to today. A time range keeps its time and duration; a single time becomes any time."
+                                 : "This item stays on its scheduled day, even if unfinished.")
+                        }
                     }
                 }
                 Section {
@@ -143,6 +185,7 @@ struct ItemEditor: View {
                             .disabled(requestingReminder)
                     }
                     .padding(.vertical, 2)
+                    .id(PickerRow.reminders)
                     .sensoryFeedback(.selection, trigger: item.reminders.count)
                     .onChange(of: editingField) { old, new in
                         // Re-order once a reminder's popover closes, so its button doesn't move mid-edit.
@@ -155,30 +198,45 @@ struct ItemEditor: View {
                             }
                         }
                     }
-                    if item.reminders.contains(where: { $0 <= Date() }) {
-                        Text("Grey reminders have passed and won’t notify you.")
-                            .font(.caption).foregroundStyle(.secondary)
+                } header: {
+                    InfoHeader("Reminders", isExpanded: infoBinding("reminders"))
+                } footer: {
+                    InfoFooter(isExpanded: openInfo.contains("reminders")) {
+                        Text("Upcoming reminders appear in the blue alarm filter and notify you at the chosen times."
+                             + (item.reminders.contains(where: { $0 <= Date() }) ? " Grey reminders have passed and won’t notify you." : ""))
                     }
-                } header: { Text("Reminders") } footer: {
-                    Text("Upcoming reminders appear in the blue alarm filter and notify you at the chosen times.")
                 }
                 Section("Locations") {
-                    ItemTextFields(entries: $locations, placeholder: "Location", symbol: "mappin.and.ellipse", addLabel: "Add location")
+                    TextPills(kind: .location, entries: $locations) { reveal("locations", in: form) }
+                        .id("locations")
                 }
                 Section("People") {
-                    ItemTextFields(entries: $people, placeholder: "Name", symbol: "person", addLabel: "Add person")
+                    TextPills(kind: .person, entries: $people) { reveal("people", in: form) }
+                        .id("people")
                 }
                 Section("Notes") { TextField("Anything to remember", text: $item.notes, axis: .vertical).lineLimit(3...8) }
                 if existing {
                     Section {
-                        Button(item.isComplete ? "Mark incomplete" : "Mark complete", systemImage: item.isComplete ? "arrow.uturn.backward" : "checkmark") {
-                            // Save current edits together with the completion change.
-                            item.completedAt = item.isComplete ? nil : Date(); save()
-                        }
                         Button(item.seriesID == nil ? "Delete item" : "Delete repeating item", role: .destructive) { showingDelete = true }
                     }
                 }
             }
+            .onChange(of: item.minute != nil) { _, timed in
+                guard !existing, !carryChosen, item.repeatRule == .never else { return }
+                item.movesToNextDay = !timed
+            }
+            .onChange(of: pendingField) { _, field in
+                guard let field else { return }
+                // Pickers open below their button; lift the row first so a tall calendar
+                // is never cut off by the bottom of the screen.
+                let row: PickerRow = if case .reminder = field { .reminders } else { .schedule }
+                withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { form.scrollTo(row, anchor: .top) }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(reduceMotion ? 50 : 280))
+                    editingField = field
+                    pendingField = nil
+                }
+            } }
             .navigationTitle(existing ? "Your item" : "New item").navigationBarTitleDisplayMode(.inline)
             .background(KeyboardDismissal())
             // A popover replaces the keyboard, whichever field was being typed in.
@@ -206,11 +264,28 @@ struct ItemEditor: View {
             }
         }
     }
+    /// Brings a row being typed in to the middle of the space above the keyboard, once the
+    /// keyboard is up; the form's own scrolling only just uncovers the text cursor.
+    private func reveal(_ row: String, in form: ScrollViewProxy) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) { form.scrollTo(row, anchor: .center) }
+        }
+    }
+    private func infoBinding(_ section: String) -> Binding<Bool> {
+        Binding(get: { openInfo.contains(section) }, set: { open in
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
+                if open { openInfo.insert(section) } else { openInfo.remove(section) }
+            }
+        })
+    }
     private func animate(_ change: () -> Void) {
         withAnimation(reduceMotion ? nil : .snappy) { change() }
     }
     private func editing(_ field: ScheduleField) -> Binding<Bool> {
-        Binding(get: { editingField == field }, set: { editingField = $0 ? field : nil })
+        Binding(get: { editingField == field }, set: { open in
+            if open { pendingField = field } else { editingField = nil }
+        })
     }
     private func setDay(_ day: Day) { Planner.updateStart(&item, day: day, minute: item.minute) }
     private func setMinute(_ minute: Int) { Planner.updateStart(&item, day: item.day, minute: minute) }
@@ -306,7 +381,7 @@ struct ItemEditor: View {
                 animate { item.reminders.append(newReminder); reminderIDs.append(UUID()) }
                 // Let the new button appear before anchoring its popover to it.
                 try? await Task.sleep(for: .milliseconds(300))
-                editingField = .reminder(item.reminders.count - 1)
+                pendingField = .reminder(item.reminders.count - 1)
             } catch { issue = "Reminders could not be enabled. \(error.localizedDescription)" }
         }
     }
@@ -385,6 +460,50 @@ struct ItemEditor: View {
     }
 }
 
+/// A section title with a small (i) beside it that shows or hides the section's explanation,
+/// which appears beneath the section's content.
+private struct InfoHeader: View {
+    let title: LocalizedStringKey
+    @Binding var isExpanded: Bool
+    @ScaledMetric(relativeTo: .footnote) private var iconSize: CGFloat = 15
+
+    init(_ title: LocalizedStringKey, isExpanded: Binding<Bool>) {
+        self.title = title; _isExpanded = isExpanded
+    }
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(title).accessibilityAddTraits(.isHeader)
+            Button { isExpanded.toggle() } label: {
+                Image(systemName: isExpanded ? "info.circle.fill" : "info.circle")
+                    .font(.system(size: iconSize))
+                    .foregroundStyle(.secondary)
+                    // Reach a 44-point target without making the header taller.
+                    .frame(width: 28, height: 22)
+                    .contentShape(.rect.inset(by: -11))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("About \(Text(title))"))
+            .accessibilityValue(isExpanded ? "Shown" : "Hidden")
+            .accessibilityHint("Shows or hides an explanation below this section")
+        }
+    }
+}
+
+/// A section's explanation, shown in its footer while its (i) is on.
+private struct InfoFooter<Info: View>: View {
+    let isExpanded: Bool
+    @ViewBuilder let info: () -> Info
+    var body: some View {
+        if isExpanded {
+            info()
+                .fixedSize(horizontal: false, vertical: true)
+                .transition(.opacity)
+        }
+    }
+}
+
+private enum PickerRow: Hashable { case schedule, reminders }
+
 private enum ScheduleField: Equatable { case day, time, end, reminder(Int) }
 
 /// A capsule showing a schedule value, or an add button while it is unset. Tapping it opens
@@ -419,7 +538,7 @@ private struct SchedulePill<Picker: View>: View {
                         .foregroundStyle(tint.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.primary))
                     } else {
                         HStack(spacing: 6) { Image(systemName: "plus").accessibilityHidden(true); Text(addLabel ?? addTitle) }
-                            .foregroundStyle(tint.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.tint))
+                            .foregroundStyle(.secondary)
                     }
                 }
                 .padding(.leading, 12).padding(.trailing, value != nil && onRemove != nil ? 2 : 12)
@@ -431,7 +550,9 @@ private struct SchedulePill<Picker: View>: View {
             if value != nil, let onRemove {
                 Button(action: onRemove) {
                     Image(systemName: "xmark.circle.fill")
-                        .symbolRenderingMode(.hierarchical).foregroundStyle(.secondary)
+                        // A tinted pill (a reminder) tints its remove button to match.
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(tint.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.secondary))
                         .padding(.leading, 4).padding(.trailing, 8)
                         .frame(minHeight: 36)
                         // Reach a 44-point target without making the capsule taller.
@@ -442,7 +563,15 @@ private struct SchedulePill<Picker: View>: View {
         }
         .buttonStyle(.borderless)
         .fixedSize()
-        .background(tint.map { AnyShapeStyle($0.opacity(0.14)) } ?? AnyShapeStyle(.fill.tertiary), in: .capsule)
+        // A set value is a filled capsule; an add button is a dashed outline, like AddPillLabel.
+        .background(value == nil ? AnyShapeStyle(.clear)
+                    : tint.map { AnyShapeStyle($0.opacity(0.14)) } ?? AnyShapeStyle(.fill.tertiary), in: .capsule)
+        .overlay {
+            if value == nil {
+                Capsule().strokeBorder(Color.secondary.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                    .allowsHitTesting(false)
+            }
+        }
         // Keep the arrow on top so the popover opens below the button at full width,
         // rather than beside it where a calendar would be clipped.
         .popover(isPresented: $isEditing, attachmentAnchor: .rect(.bounds), arrowEdge: .top) {
@@ -496,6 +625,42 @@ private struct ScheduleChips<Value: Hashable>: View {
     }
 }
 
+/// An optional persona: None, or one of the personas with its orb. The chosen one is filled.
+private struct PersonaChips: View {
+    @Binding var selection: Persona?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .body) private var orbSize: CGFloat = 14
+
+    var body: some View {
+        FlowLayout(spacing: 8) {
+            chip(nil)
+            ForEach(Persona.allCases) { chip($0) }
+        }
+    }
+    private func chip(_ persona: Persona?) -> some View {
+        let isSelected = persona == selection
+        return Button {
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) { selection = persona }
+        } label: {
+            HStack(spacing: 6) {
+                if let persona { PersonaOrb(persona: persona, size: orbSize, glows: false) }
+                Text(persona?.title ?? "None").fixedSize()
+            }
+            .padding(.leading, persona == nil ? 12 : 8).padding(.trailing, 12).frame(minHeight: 34)
+            // Chosen, it reads like a reminder pill in the persona's colour; None chosen
+            // takes a darker grey. The others stay quiet.
+            .foregroundStyle(!isSelected ? AnyShapeStyle(.secondary)
+                             : persona.map { AnyShapeStyle($0.color) } ?? AnyShapeStyle(.primary))
+            .background(!isSelected ? AnyShapeStyle(.fill.tertiary)
+                        : persona.map { AnyShapeStyle($0.color.opacity(0.14)) } ?? AnyShapeStyle(.fill.secondary), in: .capsule)
+            .contentShape(.capsule)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(persona?.title ?? "No persona")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
 /// Places views left to right, wrapping onto further lines when they do not fit.
 private struct FlowLayout: Layout {
     var spacing: CGFloat = 8
@@ -529,46 +694,118 @@ private struct ItemTextEntry: Identifiable {
     var text: String
 }
 
-private struct ItemTextFields: View {
+private enum TextKind: Equatable {
+    case location, person
+    var name: LocalizedStringKey { self == .location ? "Location" : "Person" }
+    var addTitle: LocalizedStringKey { self == .location ? "Add location" : "Add person" }
+    var removeTitle: LocalizedStringKey { self == .location ? "Remove location" : "Remove person" }
+    var placeholder: String { self == .location ? "Location" : "Person" }
+    var symbol: String { self == .location ? "mappin.and.ellipse" : "person" }
+}
+
+/// Places or people as one line of pills that you type in directly. Each pill is its own small
+/// field with a remove button; the dashed pill at the end turns into a new field.
+private struct TextPills: View {
+    let kind: TextKind
     @Binding var entries: [ItemTextEntry]
-    let placeholder: String
-    let symbol: String
-    let addLabel: String
-    @FocusState private var focusedEntry: UUID?
+    /// Called when one of the pills starts being typed in.
+    var onEditing: () -> Void = {}
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @FocusState private var focus: Field?
+    @State private var adding = false
+    @State private var draft = ""
+    private enum Field: Hashable { case entry(UUID), new }
 
     var body: some View {
-        ForEach($entries) { $entry in
-            HStack(spacing: 10) {
-                Image(systemName: symbol).foregroundStyle(.secondary).frame(width: 22)
-                    .accessibilityHidden(true)
-                TextField(placeholder, text: $entry.text, axis: .vertical)
-                    .textInputAutocapitalization(.words)
-                    .focused($focusedEntry, equals: entry.id)
-                    .accessibilityLabel(placeholder == "Name" ? "Person" : placeholder)
-                if entries.count > 1 || !entry.text.isEmpty {
-                    Button {
-                        let id = entry.id
-                        focusedEntry = nil
-                        if entries.count == 1 { entries[0].text = "" }
-                        else { entries.removeAll { $0.id == id } }
-                    } label: {
-                        Image(systemName: "minus.circle").foregroundStyle(.secondary)
-                            .frame(width: 44, height: 44)
+        FlowLayout(spacing: 8) {
+            ForEach($entries) { $entry in
+                HStack(spacing: 6) {
+                    Image(systemName: kind.symbol).foregroundStyle(.secondary).accessibilityHidden(true)
+                    field(text: $entry.text, focusedAs: .entry(entry.id))
+                    Button { animate { entries.removeAll { $0.id == entry.id } } } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .symbolRenderingMode(.hierarchical).foregroundStyle(.secondary)
+                            .frame(minHeight: 36)
+                            // Reach a 44-point target without making the pill taller.
+                            .contentShape(.rect.inset(by: -6))
                     }
                     .buttonStyle(.borderless)
-                    .accessibilityLabel("Remove \(entry.text.isEmpty ? placeholder.lowercased() : entry.text)")
+                    .accessibilityLabel(Text("\(Text(kind.removeTitle)): \(entry.text)"))
+                }
+                .padding(.leading, 12).padding(.trailing, 8)
+                .frame(minHeight: 36)
+                .background(.fill.tertiary, in: .capsule)
+                .transition(.scale(scale: 0.8).combined(with: .opacity))
+            }
+            if adding {
+                HStack(spacing: 6) {
+                    Image(systemName: kind.symbol).foregroundStyle(.secondary).accessibilityHidden(true)
+                    field(text: $draft, focusedAs: .new)
+                }
+                .padding(.horizontal, 12)
+                .frame(minHeight: 36)
+                .background(.fill.tertiary, in: .capsule)
+            } else {
+                Button {
+                    adding = true
+                    // Focus once the field exists.
+                    Task { @MainActor in focus = .new }
+                } label: {
+                    AddPillLabel(title: kind.name)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(kind.addTitle)
+            }
+        }
+        .padding(.vertical, 2)
+        .sensoryFeedback(.selection, trigger: entries.count)
+        .onChange(of: focus) { old, new in
+            if new != nil { onEditing() }
+            // Settle a pill once its field loses focus: keep new text, and drop any left empty.
+            if old == .new {
+                let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+                draft = ""
+                animate {
+                    if !text.isEmpty { entries.append(ItemTextEntry(text: text)) }
+                    adding = false
                 }
             }
-        }
-        Button(addLabel, systemImage: "plus") {
-            if let empty = entries.first(where: { $0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) {
-                focusedEntry = empty.id
-            } else {
-                let entry = ItemTextEntry(text: "")
-                entries.append(entry)
-                focusedEntry = entry.id
+            if case .entry(let id) = old, let index = entries.firstIndex(where: { $0.id == id }) {
+                let text = entries[index].text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if text.isEmpty { animate { entries.remove(at: index) } } else { entries[index].text = text }
             }
         }
+    }
+    private func field(text: Binding<String>, focusedAs field: Field) -> some View {
+        TextField(kind.placeholder, text: text)
+            .textInputAutocapitalization(.words)
+            .submitLabel(.done)
+            .onSubmit { focus = nil }
+            .focused($focus, equals: field)
+            // The pill grows with what is typed, from a small minimum.
+            .fixedSize()
+            .frame(minWidth: 48, alignment: .leading)
+            .accessibilityLabel(kind.name)
+    }
+    private func animate(_ change: () -> Void) {
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25), change)
+    }
+}
+
+/// An add button in the editor's pill rows: a dashed outline with a plus, so it reads as
+/// a place for something new rather than a value already set.
+private struct AddPillLabel: View {
+    let title: LocalizedStringKey
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "plus").accessibilityHidden(true)
+            Text(title)
+        }
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 12)
+        .frame(minHeight: 36)
+        .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+        .contentShape(.capsule)
     }
 }
 

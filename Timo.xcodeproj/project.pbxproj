@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0376400FDE1030E0FE917C4D /* Timo/TimoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC6864D4F6482CA3DEF937AD /* Timo/TimoApp.swift */; };
+		5E7A0C3D9F1B4A2E8C6D0F11 /* Timo/PersonaViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E7A0C3D9F1B4A2E8C6D0F12 /* Timo/PersonaViews.swift */; };
 		124C42E500BB571FA1B41FA8 /* Timo/ItemEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D817EF2461BD1202B03023E /* Timo/ItemEditor.swift */; };
 		1CADA818579E1792F1E74D6B /* Timo/PlanStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CEA8AA3E9EF380055DA8E77 /* Timo/PlanStore.swift */; };
 		1FC8B6921AA115A479B98253 /* Sources/TimoCore/Planner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83DD306496F70F3A81ED3AB1 /* Sources/TimoCore/Planner.swift */; };
@@ -15,6 +16,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		5E7A0C3D9F1B4A2E8C6D0F12 /* Timo/PersonaViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/PersonaViews.swift; sourceTree = "<group>"; };
 		2D817EF2461BD1202B03023E /* Timo/ItemEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/ItemEditor.swift; sourceTree = "<group>"; };
 		4CEA8AA3E9EF380055DA8E77 /* Timo/PlanStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/PlanStore.swift; sourceTree = "<group>"; };
 		7D1043473D55BFA90E8530D3 /* Timo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = Timo.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -38,6 +40,7 @@
 			isa = PBXGroup;
 			children = (
 				83DD306496F70F3A81ED3AB1 /* Sources/TimoCore/Planner.swift */,
+				5E7A0C3D9F1B4A2E8C6D0F12 /* Timo/PersonaViews.swift */,
 				4CEA8AA3E9EF380055DA8E77 /* Timo/PlanStore.swift */,
 				CC6864D4F6482CA3DEF937AD /* Timo/TimoApp.swift */,
 				A65AF34DED73459E58BCC7D5 /* Timo/DayView.swift */,
@@ -126,6 +129,7 @@
 				0376400FDE1030E0FE917C4D /* Timo/TimoApp.swift in Sources */,
 				23A958BBB730D3775CE701BE /* Timo/DayView.swift in Sources */,
 				124C42E500BB571FA1B41FA8 /* Timo/ItemEditor.swift in Sources */,
+				5E7A0C3D9F1B4A2E8C6D0F11 /* Timo/PersonaViews.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

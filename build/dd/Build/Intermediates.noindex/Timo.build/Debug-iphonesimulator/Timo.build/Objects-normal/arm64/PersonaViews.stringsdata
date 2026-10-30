@@ -1,0 +1,136 @@
+{
+  "source": "/Users/timovijn/Timo/GitHub/timo/Timo/PersonaViews.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Persona",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 110
+        }
+      },
+      {
+        "comment": "",
+        "key": "Opens the list of personas",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 112
+        }
+      },
+      {
+        "comment": "",
+        "key": "Persona",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 72
+        }
+      },
+      {
+        "comment": "",
+        "key": "timo",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 183
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld/%lld complete",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 157
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nothing in %@ yet",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 164
+        }
+      },
+      {
+        "comment": "",
+        "key": "Give an item the %@ persona and it will be gathered here, with everything before and after it.",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 166
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add an item",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 168
+        }
+      },
+      {
+        "comment": "",
+        "key": "Mark %@ incomplete",
+        "location": {
+          "startingColumn": 51,
+          "startingLine": 212
+        }
+      },
+      {
+        "comment": "",
+        "key": "Complete %@",
+        "location": {
+          "startingColumn": 85,
+          "startingLine": 212
+        }
+      },
+      {
+        "comment": "",
+        "key": "Open details and edit",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 250
+        }
+      },
+      {
+        "comment": "",
+        "key": "Carried from %@",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 222
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete all occurrences of this repeating item?",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 310
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete",
+        "location": {
+          "startingColumn": 50,
+          "startingLine": 304
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete repeating item",
+        "location": {
+          "startingColumn": 61,
+          "startingLine": 304
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete all occurrences",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 311
+        }
+      }
+    ]
+  },
+  "version": 1
+}

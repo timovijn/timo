@@ -5,11 +5,11 @@
       "name" : "TimoCore",
       "path" : "/Users/timovijn/Timo/GitHub/timo",
       "projects" : [
-        "c06881d6f77b8813cac267baa132539af0dcf0432d2d4ae5ee78bf46098df65c",
+        "2dd6656efd266363830a0a8306f33ec34bdeb6c15c6475502ef1143e74aed31d",
         "72dd102170f9e5f6463e92fabcfbfdf52c97afba9cf7d1d03272b32cdafd0d0a"
       ]
     },
-    "signature" : "25f19a212566d03bf7b4b080e2c162559a8aaf30cf73a11d4d45924e8f32ee51",
+    "signature" : "83a394955fbebfdd4503106d6c0797e5f4ddedfa59a1d560e171d7f3d0696901",
     "type" : "workspace"
   },
   {
@@ -195,6 +195,14 @@
               {
                 "fileType" : "sourcecode.swift",
                 "guid" : "PACKAGE:timo::MAINGROUP::REF_2::REF_0",
+                "name" : "PersonaTests.swift",
+                "path" : "PersonaTests.swift",
+                "sourceTree" : "<group>",
+                "type" : "file"
+              },
+              {
+                "fileType" : "sourcecode.swift",
+                "guid" : "PACKAGE:timo::MAINGROUP::REF_2::REF_1",
                 "name" : "PlannerTests.swift",
                 "path" : "PlannerTests.swift",
                 "sourceTree" : "<group>",
@@ -202,7 +210,7 @@
               },
               {
                 "fileType" : "sourcecode.swift",
-                "guid" : "PACKAGE:timo::MAINGROUP::REF_2::REF_1",
+                "guid" : "PACKAGE:timo::MAINGROUP::REF_2::REF_2",
                 "name" : "RepeatingTests.swift",
                 "path" : "RepeatingTests.swift",
                 "sourceTree" : "<group>",
@@ -210,7 +218,7 @@
               },
               {
                 "fileType" : "sourcecode.swift",
-                "guid" : "PACKAGE:timo::MAINGROUP::REF_2::REF_2",
+                "guid" : "PACKAGE:timo::MAINGROUP::REF_2::REF_3",
                 "name" : "TimelineLaneTests.swift",
                 "path" : "TimelineLaneTests.swift",
                 "sourceTree" : "<group>",
@@ -270,7 +278,7 @@
       "projectIsPackage" : "true",
       "projectName" : "TimoCore",
       "targets" : [
-        "c4fb07aae944dc85f19e66bf0f8c7d6c9b2aff42bf8c2d74e3e234a5afafe5f9",
+        "a12a168eec3b8da6f6cceccbb15ccd2258d17c39318f57544d07564b49af0c61",
         "0068c00f7338aed27ef9a9f25b62fb791678c8383ffa1d1f4e7dc0f70d938c77",
         "acebaae97ab0d454827717af16db4772865f117deaef14883a0ef6eeb50f1a54",
         "9e893def52649ca53901515a81fe18a63b0b604f89e2cca17fb9bd5471fbbcfd",
@@ -278,7 +286,7 @@
         "f9c53bae774d88d6841e3b66001eac691af3e9e60174290ca7100ad6f77b67d5"
       ]
     },
-    "signature" : "c06881d6f77b8813cac267baa132539af0dcf0432d2d4ae5ee78bf46098df65c",
+    "signature" : "2dd6656efd266363830a0a8306f33ec34bdeb6c15c6475502ef1143e74aed31d",
     "type" : "project"
   },
   {
@@ -479,6 +487,15 @@
 
               ],
               "removeHeadersOnCopy" : "false"
+            },
+            {
+              "codeSignOnCopy" : "false",
+              "fileReference" : "PACKAGE:timo::MAINGROUP::REF_2::REF_3",
+              "guid" : "PACKAGE-PRODUCT:timo_TimoCoreTests.TimoCoreTests::BUILDPHASE_0::3",
+              "platformFilters" : [
+
+              ],
+              "removeHeadersOnCopy" : "false"
             }
           ],
           "guid" : "PACKAGE-PRODUCT:timo_TimoCoreTests.TimoCoreTests::BUILDPHASE_0",
@@ -522,7 +539,7 @@
       "productTypeIdentifier" : "com.apple.product-type.bundle.unit-test",
       "type" : "standard"
     },
-    "signature" : "c4fb07aae944dc85f19e66bf0f8c7d6c9b2aff42bf8c2d74e3e234a5afafe5f9",
+    "signature" : "a12a168eec3b8da6f6cceccbb15ccd2258d17c39318f57544d07564b49af0c61",
     "type" : "target"
   },
   {
