@@ -56,6 +56,12 @@ public enum Persona: String, Codable, CaseIterable, Identifiable {
         case .personal: return "Personal"
         }
     }
+    /// Personas without repeats, in their standard order, so saved plans and comparisons
+    /// don't depend on the order they were chosen in.
+    public static func ordered<S: Sequence>(_ personas: S) -> [Persona] where S.Element == Persona {
+        let chosen = Set(personas)
+        return allCases.filter(chosen.contains)
+    }
 }
 
 /// One day of a persona's history: its items on that day, in day-view order.
@@ -101,7 +107,8 @@ public struct PlanItem: Identifiable, Codable, Equatable {
     public var repeatWeekdays: [Int] = []
     public var seriesID: UUID?
     public var occurrenceDay: Day?
-    public var persona: Persona?
+    /// The personas this item belongs to; it can be in several, or none.
+    public var personas: [Persona] = []
     public var title: String
     public var notes: String
     public var locations: [String]
@@ -130,9 +137,9 @@ public struct PlanItem: Identifiable, Codable, Equatable {
     }
     // Read the original task/event format without changing IDs or scheduling choices.
     private enum CodingKeys: String, CodingKey {
-        case id, title, notes, locations, people, day, minute, end, reminders, completedAt, parentID, originalDay, carriedFrom, suggestionDismissed, createdAt, movesToNextDay, repeatRule, repeatWeekdays, seriesID, occurrenceDay, persona
+        case id, title, notes, locations, people, day, minute, end, reminders, completedAt, parentID, originalDay, carriedFrom, suggestionDismissed, createdAt, movesToNextDay, repeatRule, repeatWeekdays, seriesID, occurrenceDay, personas
     }
-    private enum LegacyKeys: String, CodingKey { case kind, reminderAt }
+    private enum LegacyKeys: String, CodingKey { case kind, reminderAt, persona }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
@@ -140,7 +147,13 @@ public struct PlanItem: Identifiable, Codable, Equatable {
         repeatWeekdays = try c.decodeIfPresent([Int].self, forKey: .repeatWeekdays) ?? []
         seriesID = try c.decodeIfPresent(UUID.self, forKey: .seriesID)
         occurrenceDay = try c.decodeIfPresent(Day.self, forKey: .occurrenceDay)
-        persona = try c.decodeIfPresent(String.self, forKey: .persona).flatMap(Persona.init(rawValue:))
+        // Personas this version doesn't know are left out. Version 6 kept a single persona.
+        if let saved = try c.decodeIfPresent([String].self, forKey: .personas) {
+            personas = Persona.ordered(saved.compactMap(Persona.init(rawValue:)))
+        } else {
+            let legacy = try decoder.container(keyedBy: LegacyKeys.self)
+            personas = try legacy.decodeIfPresent(String.self, forKey: .persona).flatMap(Persona.init(rawValue:)).map { [$0] } ?? []
+        }
         title = try c.decode(String.self, forKey: .title)
         notes = try c.decode(String.self, forKey: .notes)
         locations = try c.decodeIfPresent([String].self, forKey: .locations) ?? []
@@ -421,12 +434,12 @@ public enum Planner {
     public static func movedItems(from day: Day, in items: [PlanItem], now: Date, calendar: Calendar = .current) -> [PlanItem] {
         items.filter { $0.movedAway(from: day, now: now, calendar: calendar) }.sorted { $0.createdAt < $1.createdAt }
     }
-    /// Every item in `persona`, grouped by its live day, newest day first. A carried item is
+    /// Every item in `persona` (among any others it has), grouped by its live day, newest day first. A carried item is
     /// listed once, where it is shown as itself. Repeating items only list occurrences up to
     /// today, since future ones are generated ahead and would bury the history.
     public static func history(of persona: Persona, in items: [PlanItem], now: Date, calendar: Calendar = .current) -> [PersonaDay] {
         let today = Day(now, calendar: calendar)
-        let matching = items.filter { $0.persona == persona && ($0.seriesID == nil || $0.day <= today) }
+        let matching = items.filter { $0.personas.contains(persona) && ($0.seriesID == nil || $0.day <= today) }
         return Dictionary(grouping: matching, by: { $0.liveDay(now: now, calendar: calendar) })
             .map { day, items in
                 PersonaDay(day: day, items: items.sorted {

@@ -10,28 +10,44 @@ final class PersonaTests: XCTestCase {
     func item(_ title: String, _ value: Int, persona: Persona?, minute: Int? = nil) -> PlanItem {
         // Done on its day, so it stays there rather than carrying on to today.
         var item = PlanItem(title: title, day: day(value), minute: minute)
-        item.persona = persona
+        item.personas = persona.map { [$0] } ?? []
         item.completedAt = date(value)
         return item
     }
-    func testPersonaPersistsAndRemovingItClearsIt() throws {
-        var saved = item("Run", 20, persona: .health)
+    func testPersonasPersistInOrderAndCanAllBeRemoved() throws {
+        var saved = item("Run with Sam", 20, persona: nil)
+        saved.personas = Persona.ordered([.friends, .health, .friends])
+        XCTAssertEqual(saved.personas, [.health, .friends])
         var decoded = try JSONDecoder().decode(PlanItem.self, from: JSONEncoder().encode(saved))
-        XCTAssertEqual(decoded.persona, .health)
+        XCTAssertEqual(decoded.personas, [.health, .friends])
         XCTAssertEqual(decoded, saved)
-        saved.persona = nil
+        saved.personas = []
         decoded = try JSONDecoder().decode(PlanItem.self, from: JSONEncoder().encode(saved))
-        XCTAssertNil(decoded.persona)
+        XCTAssertTrue(decoded.personas.isEmpty)
     }
-    func testOlderItemsAndUnknownPersonasOpenWithoutOne() throws {
+    func testOlderSinglePersonaAndUnknownPersonasOpen() throws {
         let saved = item("Call", 20, persona: .family)
         var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(saved)) as? [String: Any])
-        json.removeValue(forKey: "persona")
-        XCTAssertNil(try JSONDecoder().decode(PlanItem.self, from: JSONSerialization.data(withJSONObject: json)).persona)
+        json.removeValue(forKey: "personas")
+        XCTAssertTrue(try JSONDecoder().decode(PlanItem.self, from: JSONSerialization.data(withJSONObject: json)).personas.isEmpty)
+        // Version 6 kept one persona under its own key.
+        json["persona"] = "family"
+        XCTAssertEqual(try JSONDecoder().decode(PlanItem.self, from: JSONSerialization.data(withJSONObject: json)).personas, [.family])
         json["persona"] = "hobbies"
-        let unknown = try JSONDecoder().decode(PlanItem.self, from: JSONSerialization.data(withJSONObject: json))
-        XCTAssertNil(unknown.persona)
-        XCTAssertEqual(unknown.id, saved.id)
+        XCTAssertTrue(try JSONDecoder().decode(PlanItem.self, from: JSONSerialization.data(withJSONObject: json)).personas.isEmpty)
+        json.removeValue(forKey: "persona")
+        json["personas"] = ["hobbies", "work"]
+        let mixed = try JSONDecoder().decode(PlanItem.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertEqual(mixed.personas, [.work])
+        XCTAssertEqual(mixed.id, saved.id)
+    }
+    func testItemInSeveralPersonasIsListedInEach() {
+        var run = item("Run with Sam", 20, persona: nil)
+        run.personas = [.health, .friends]
+        for persona in [Persona.health, .friends] {
+            XCTAssertEqual(Planner.history(of: persona, in: [run], now: date(25), calendar: calendar).flatMap(\.items).map(\.id), [run.id])
+        }
+        XCTAssertTrue(Planner.history(of: .work, in: [run], now: date(25), calendar: calendar).isEmpty)
     }
     func testHistoryGroupsByDayNewestFirstInDayOrder() {
         let late = item("Gym", 20, persona: .health, minute: 18 * 60)
@@ -60,18 +76,18 @@ final class PersonaTests: XCTestCase {
     func testRepeatingItemsShareTheirPersonaAndOnlyListOccurrencesSoFar() {
         var template = PlanItem(title: "Walk", day: day(20), minute: 8 * 60, movesToNextDay: false)
         template.repeatRule = .daily
-        template.persona = .health
+        template.personas = [.health]
         var items: [PlanItem] = []
         var series: [RepeatingPlan] = []
         Planner.saveRepeating(template, items: &items, series: &series, calendar: calendar)
         Planner.materialize(series, in: &items, from: day(20), through: day(30), calendar: calendar)
-        XCTAssertTrue(items.allSatisfy { $0.persona == .health })
+        XCTAssertTrue(items.allSatisfy { $0.personas == [.health] })
         XCTAssertEqual(Planner.history(of: .health, in: items, now: date(23), calendar: calendar).map(\.day), [day(23), day(22), day(21), day(20)])
-        // Changing the persona on one occurrence changes the whole series.
+        // Changing the personas on one occurrence changes the whole series.
         var edited = items[2]
-        edited.persona = .personal
+        edited.personas = [.health, .personal]
         Planner.saveRepeating(edited, items: &items, series: &series, calendar: calendar)
-        XCTAssertTrue(items.allSatisfy { $0.persona == .personal })
-        XCTAssertEqual(series.map(\.template.persona), [.personal])
+        XCTAssertTrue(items.allSatisfy { $0.personas == [.health, .personal] })
+        XCTAssertEqual(series.map(\.template.personas), [[.health, .personal]])
     }
 }

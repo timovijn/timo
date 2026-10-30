@@ -908,7 +908,7 @@ struct DayView: View {
     private func add() {
         // From a persona's history, a new item starts today in that persona.
         var item = PlanItem(title: "", day: persona == nil ? day : Day(now))
-        item.persona = persona
+        item.personas = persona.map { [$0] } ?? []
         editing = item
     }
     private func move(_ delta: Int) {

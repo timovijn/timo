@@ -47,15 +47,15 @@ struct ItemEditor: View {
                         }
                 }
                 Section {
-                    PersonaChips(selection: $item.persona)
+                    PersonaChips(selection: $item.personas)
                         .padding(.vertical, 2)
-                        .sensoryFeedback(.selection, trigger: item.persona)
+                        .sensoryFeedback(.selection, trigger: item.personas)
                 } header: {
                     InfoHeader("Persona", isExpanded: infoBinding("persona"))
                 } footer: {
                     InfoFooter(isExpanded: openInfo.contains("persona")) {
-                        Text("Personas gather items by focus, such as health or work. Tap the orb at the top left of your day to see everything in one persona, past and present."
-                             + (item.repeatRule != .never || item.seriesID != nil ? " Every occurrence of this repeating item shares its persona." : ""))
+                        Text("Personas gather items by focus, such as health or work. An item can be in several, or none: tap a persona to add it and again to remove it. Choose one at the top left of your day to see everything in it, past and present."
+                             + (item.repeatRule != .never || item.seriesID != nil ? " Every occurrence of this repeating item shares its personas." : ""))
                     }
                 }
                 Section {
@@ -625,39 +625,39 @@ private struct ScheduleChips<Value: Hashable>: View {
     }
 }
 
-/// An optional persona: None, or one of the personas with its orb. The chosen one is filled.
+/// The personas an item belongs to. Tap one to add it and again to remove it; an item can be in
+/// several, or none.
 private struct PersonaChips: View {
-    @Binding var selection: Persona?
+    @Binding var selection: [Persona]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .body) private var orbSize: CGFloat = 14
 
     var body: some View {
         FlowLayout(spacing: 8) {
-            chip(nil)
             ForEach(Persona.allCases) { chip($0) }
         }
     }
-    private func chip(_ persona: Persona?) -> some View {
-        let isSelected = persona == selection
+    private func chip(_ persona: Persona) -> some View {
+        let isSelected = selection.contains(persona)
         return Button {
-            withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) { selection = persona }
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.2)) {
+                selection = Persona.ordered(isSelected ? selection.filter { $0 != persona } : selection + [persona])
+            }
         } label: {
             HStack(spacing: 6) {
-                if let persona { PersonaOrb(persona: persona, size: orbSize, glows: false) }
-                Text(persona?.title ?? "None").fixedSize()
+                PersonaOrb(persona: persona, size: orbSize, glows: false)
+                Text(persona.title).fixedSize()
             }
-            .padding(.leading, persona == nil ? 12 : 8).padding(.trailing, 12).frame(minHeight: 34)
-            // Chosen, it reads like a reminder pill in the persona's colour; None chosen
-            // takes a darker grey. The others stay quiet.
-            .foregroundStyle(!isSelected ? AnyShapeStyle(.secondary)
-                             : persona.map { AnyShapeStyle($0.color) } ?? AnyShapeStyle(.primary))
-            .background(!isSelected ? AnyShapeStyle(.fill.tertiary)
-                        : persona.map { AnyShapeStyle($0.color.opacity(0.14)) } ?? AnyShapeStyle(.fill.secondary), in: .capsule)
+            .padding(.leading, 8).padding(.trailing, 12).frame(minHeight: 34)
+            // Chosen, it reads like a reminder pill in the persona's colour; the rest stay quiet.
+            .foregroundStyle(isSelected ? AnyShapeStyle(persona.color) : AnyShapeStyle(.secondary))
+            .background(isSelected ? AnyShapeStyle(persona.color.opacity(0.14)) : AnyShapeStyle(.fill.tertiary), in: .capsule)
             .contentShape(.capsule)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(persona?.title ?? "No persona")
+        .accessibilityLabel(persona.title)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityHint(isSelected ? "Removes this persona" : "Adds this persona")
     }
 }
 

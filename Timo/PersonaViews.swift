@@ -16,6 +16,7 @@ extension Persona {
 extension Persona {
     /// The persona's deeper colour, for text and tints.
     var color: Color { colors[1] }
+
 }
 
 /// A small glowing sphere in a persona's gradient. With no persona, it blends all of them.

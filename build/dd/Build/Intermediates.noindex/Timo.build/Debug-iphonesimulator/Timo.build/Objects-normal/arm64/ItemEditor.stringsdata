@@ -444,6 +444,22 @@
       },
       {
         "comment": "",
+        "key": "Removes this persona",
+        "location": {
+          "startingColumn": 41,
+          "startingLine": 660
+        }
+      },
+      {
+        "comment": "",
+        "key": "Adds this persona",
+        "location": {
+          "startingColumn": 66,
+          "startingLine": 660
+        }
+      },
+      {
+        "comment": "",
         "key": "Location",
         "location": {
           "startingColumn": 56,

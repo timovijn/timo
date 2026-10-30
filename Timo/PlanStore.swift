@@ -13,7 +13,7 @@ import UserNotifications
     private var reminderWorker: Task<Void, Never>?
     private let notificationCenter = UNUserNotificationCenter.current()
     private struct Document: Codable {
-        var version = 6
+        var version = 7
         var items: [PlanItem]
         var series: [RepeatingPlan]
         private enum CodingKeys: String, CodingKey { case version, items, series }
@@ -30,7 +30,7 @@ import UserNotifications
         do {
             if FileManager.default.fileExists(atPath: url.path) {
                 let document = try JSONDecoder().decode(Document.self, from: Data(contentsOf: url))
-                guard (1...6).contains(document.version) else { throw CocoaError(.fileReadCorruptFile) }
+                guard (1...7).contains(document.version) else { throw CocoaError(.fileReadCorruptFile) }
                 items = document.items
                 series = document.series
             }
@@ -168,7 +168,7 @@ import UserNotifications
         guard items.isEmpty else { return }
         let calendar = Calendar.current; let today = Day(Date())
         func date(_ hour: Int, _ minute: Int = 0) -> Date { calendar.date(bySettingHour: hour, minute: minute, second: 0, of: today.date())! }
-        func persona(_ persona: Persona, _ item: PlanItem) -> PlanItem { var item = item; item.persona = persona; return item }
+        func persona(_ persona: Persona, _ item: PlanItem) -> PlanItem { var item = item; item.personas = [persona]; return item }
         let cooking = persona(.family, PlanItem(title: "Cook dinner", day: today, minute: 19 * 60, end: date(19, 45), movesToNextDay: false))
         let samples = [
             PlanItem(title: "Shave", day: today, minute: 8 * 60),
