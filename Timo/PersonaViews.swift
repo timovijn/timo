@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 extension Persona {
     /// Each persona's own gradient, light to deep, so its orb can be told apart at a glance.
@@ -181,7 +182,7 @@ struct PersonaHistoryView: View {
                             .padding(.horizontal, 16)
                     }
                 }
-                Text("timo").font(.system(.footnote, design: .rounded).weight(.medium)).foregroundStyle(.tertiary)
+                SettingsLink()
                     .frame(maxWidth: .infinity).padding(.vertical, 28)
             }
             .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: items.map(\.id))
@@ -235,8 +236,9 @@ struct PersonaHistoryView: View {
                     .font(.caption).foregroundStyle(.secondary)
                     .layoutPriority(1)
                 }
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .padding(.vertical, 2).contentShape(Rectangle())
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                .contentShape(Rectangle())
             }
             .buttonStyle(ItemCardPressStyle())
             .accessibilityElement(children: .ignore)
@@ -253,29 +255,40 @@ struct PersonaHistoryView: View {
                 withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.setCancelled(item, !item.isCancelled, on: day) }
             }
         }
-        .modifier(ItemCard())
+        .modifier(ItemCard(outlined: item.isSettled))
         .itemMenuOnHold(item, day: day, showsMenu: showsMenu) { AnyView(row(item, day: day, showsMenu: false)) }
     }
 }
 
-/// Each item sits on its own faint, slightly rounded card with a small gap to the next, quiet
-/// enough to leave the title in charge. Increase Contrast makes the card a little firmer.
+/// Open items have a faint fill; completed, cancelled and moved entries have an outline
+/// over the page's background colour. Increase Contrast makes both styles a little firmer.
 /// Pressing the item (its title, not its circle) settles the card in a touch, springing back on
 /// release, without shading it: holding hands over to the system's own lift. Reduce Motion
 /// keeps it still.
 struct ItemCard: ViewModifier {
+    var outlined = false
     /// Space between the card's trailing edge and the time; the day view's shared time label
     /// is placed outside the row, so it uses the same inset.
     static let trailingInset: CGFloat = 12
     static let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Set inside the lifted card, which draws one card around the row and its dates.
     @Environment(\.itemCardPlain) private var plain
     @State private var pressed = false
 
-    static func tint(_ contrast: ColorSchemeContrast) -> Color {
-        Color.primary.opacity(contrast == .increased ? 0.07 : 0.022)
+    static func tint(_ contrast: ColorSchemeContrast, colorScheme: ColorScheme) -> Color {
+        // The faint light-mode tint disappears against black. Give dark cards enough
+        // lift to read as separate surfaces, including in the context-menu preview.
+        let opacity: Double = colorScheme == .dark
+            ? (contrast == .increased ? 0.14 : 0.08)
+            : (contrast == .increased ? 0.07 : 0.022)
+        return Color.primary.opacity(opacity)
+    }
+
+    static func outline(_ contrast: ColorSchemeContrast, colorScheme: ColorScheme) -> Color {
+        Color.primary.opacity(contrast == .increased ? 0.22 : colorScheme == .dark ? 0.12 : 0.07)
     }
 
     func body(content: Content) -> some View {
@@ -283,10 +296,15 @@ struct ItemCard: ViewModifier {
             .padding(.trailing, Self.trailingInset)
             .padding(.vertical, 2)
             .environment(\.itemCardPressed, $pressed)
-            .background(plain ? .clear : Self.tint(contrast), in: Self.shape)
-            // Opaque underneath, so the native lift shows the card itself rather than the
-            // dimmed screen through it.
+            .background(plain || outlined ? .clear : Self.tint(contrast, colorScheme: colorScheme), in: Self.shape)
+            // Keep an opaque base for the system's initial lift snapshot before
+            // the expanded preview appears.
             .background(plain ? .clear : Color(.systemBackground), in: Self.shape)
+            .overlay {
+                Self.shape.strokeBorder(Self.outline(contrast, colorScheme: colorScheme), lineWidth: 1)
+                    .opacity(!plain && outlined ? 1 : 0)
+                    .allowsHitTesting(false)
+            }
             .scaleEffect(pressed && !reduceMotion ? 0.98 : 1)
             // A quick press in, then a soft spring back so letting go feels physical.
             .animation(reduceMotion ? nil : pressed ? .easeOut(duration: 0.1) : .spring(duration: 0.35, bounce: 0.3),
@@ -334,10 +352,12 @@ private struct ItemMenuOnHold<Preview: View>: ViewModifier {
     let isEnabled: () -> Bool
     /// Off for the lifted copy of the row itself.
     let showsMenu: Bool
+    let isMoved: Bool
     @ViewBuilder let preview: () -> Preview
     @EnvironmentObject private var store: PlanStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.undoManager) private var undoManager
     @State private var width: CGFloat = 0
 
@@ -349,27 +369,32 @@ private struct ItemMenuOnHold<Preview: View>: ViewModifier {
                 .contextMenu {
                     menuItems
                 } preview: {
-                    // One card: the row's own card is left plain, and this draws it around the
-                    // row and its history together.
-                    VStack(alignment: .leading, spacing: 0) {
-                        preview()
-                            .environment(\.itemCardPlain, true)
-                        Text(item.history)
-                            .font(.caption).foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            // In line with the title, past the completion circle.
-                            .padding(.leading, 52).padding(.trailing, ItemCard.trailingInset)
-                            .padding(.bottom, 12)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(width: width)
-                    .background(ItemCard.tint(contrast))
-                    .background(Color(.systemBackground))
+                    liftedPreview
                 }
                 // The gap between cards stays outside what is lifted.
                 .padding(.vertical, 3)
         } else {
             content
+        }
+    }
+    private var liftedPreview: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            preview()
+                .environment(\.itemCardPlain, true)
+            Text(item.history)
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.leading, 52).padding(.trailing, ItemCard.trailingInset)
+                .padding(.bottom, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(width: width)
+        .background(ItemCard.tint(contrast, colorScheme: colorScheme), in: ItemCard.shape)
+        .background(Color(.systemBackground), in: ItemCard.shape)
+        .overlay {
+            ItemCard.shape.strokeBorder(ItemCard.outline(contrast, colorScheme: colorScheme), lineWidth: 1)
+                .opacity(item.isSettled || isMoved ? 1 : 0)
+                .allowsHitTesting(false)
         }
     }
     @ViewBuilder private var menuItems: some View {
@@ -420,8 +445,8 @@ extension Image {
 
 extension View {
     func itemMenuOnHold<Preview: View>(_ item: PlanItem, day: Day, isEnabled: @escaping () -> Bool = { true },
-                                       showsMenu: Bool = true, @ViewBuilder preview: @escaping () -> Preview) -> some View {
-        modifier(ItemMenuOnHold(item: item, day: day, isEnabled: isEnabled, showsMenu: showsMenu, preview: preview))
+                                       showsMenu: Bool = true, isMoved: Bool = false, @ViewBuilder preview: @escaping () -> Preview) -> some View {
+        modifier(ItemMenuOnHold(item: item, day: day, isEnabled: isEnabled, showsMenu: showsMenu, isMoved: isMoved, preview: preview))
     }
 }
 

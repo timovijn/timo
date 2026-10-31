@@ -40,7 +40,7 @@ struct ItemEditor: View {
         NavigationStack {
             // The reader lets a place or person row scroll well clear of the keyboard.
             ScrollViewReader { form in Form {
-                seriesSection
+                itemStatusSection
                 Section {
                     TextField("What’s on your day?", text: $item.title, axis: .vertical)
                         .font(.title3.weight(.medium)).focused($titleFocused)
@@ -107,10 +107,6 @@ struct ItemEditor: View {
                     .padding(.vertical, 2)
                     .id(PickerRow.schedule)
                     .sensoryFeedback(.selection, trigger: "\(item.day) \(item.minute != nil) \(item.end != nil)")
-                    if existing && item.isCarried(now: Date()) {
-                        Text("Not done yet, so it is shown on today")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
                 } header: {
                     if existing && item.isCarried(now: Date()) {
                         InfoHeader("Schedule", isExpanded: infoBinding("schedule"))
@@ -476,28 +472,39 @@ struct ItemEditor: View {
             }
         }
     }
-    /// At the top of a repeating item's editor, in the words used everywhere and with the same
-    /// icon: "Original item, linked to N items", or "Linked item, linked to" its original, whose
-    /// name and date are a link that goes there.
-    @ViewBuilder private var seriesSection: some View {
-        if let stored = store.item(item.id), stored.seriesID != nil, let start = store.originalDay(of: stored) {
-            Section {
-                if store.isOriginal(stored) {
-                    Label(originalText(stored), systemImage: "repeat")
-                        .foregroundStyle(.secondary)
-                } else {
-                    Label {
-                        Text(linkedToText(stored, start: start))
+    /// Keep carried and linked status together above the editable fields. Use the saved
+    /// item so changing its draft schedule doesn't rewrite what happened to it.
+    @ViewBuilder private var itemStatusSection: some View {
+        if let stored = store.item(item.id) {
+            let now = Date()
+            let carried = stored.isCarried(now: now)
+            let original = stored.seriesID == nil ? nil : store.originalDay(of: stored)
+            if carried || original != nil {
+                Section {
+                    if carried {
+                        let destination = stored.liveDay(now: now)
+                        let destinationText = destination == Day(now) ? "today" : dayText(destination)
+                        Label("Moved from \(dayText(stored.day)) to \(destinationText)", systemImage: "arrow.right.circle")
                             .foregroundStyle(.secondary)
-                            .tint(.blue)
-                            // The link goes to the original item instead of opening a URL.
-                            .environment(\.openURL, OpenURLAction { _ in
-                                goToOriginal(of: stored)
-                                return .handled
-                            })
-                            .accessibilityHint(openItem == nil ? "" : "Goes to the original item")
-                    } icon: {
-                        Image(systemName: "repeat").foregroundStyle(.secondary)
+                    }
+                    if let start = original {
+                        if store.isOriginal(stored) {
+                            Label(originalText(stored), systemImage: "repeat")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Label {
+                                Text(linkedToText(stored, start: start))
+                                    .foregroundStyle(.secondary)
+                                    .tint(.blue)
+                                    .environment(\.openURL, OpenURLAction { _ in
+                                        goToOriginal(of: stored)
+                                        return .handled
+                                    })
+                                    .accessibilityHint(openItem == nil ? "" : "Goes to the original item")
+                            } icon: {
+                                Image(systemName: "repeat").foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
             }

@@ -258,7 +258,7 @@ struct DayView: View {
     /// stall the opening frames. It's laid out at its own width whatever the glass's size,
     /// so the morph never makes it lay out again.
     private var calendarCard: some View {
-        DayCalendar(selection: date) { picked in
+        DayCalendar(selection: date, today: now) { picked in
             navigate(to: picked)
             // Leave the new selection visible for a moment before folding away.
             Task { @MainActor in
@@ -593,7 +593,7 @@ struct DayView: View {
                     .padding(.top, visible.isEmpty ? 0 : 16)
                     .modifier(FilterCollapse(collapsed: filter != .all))
                 }
-                Text("timo").font(.system(.footnote, design: .rounded).weight(.medium)).foregroundStyle(.tertiary)
+                SettingsLink()
                     .frame(maxWidth: .infinity).padding(.vertical, 28)
             }
             // One SwiftUI scroll surface resizes continuously with the rows.
@@ -677,7 +677,7 @@ struct DayView: View {
             }
             ForEach(items) { item in
                 ForEach([false, true], id: \.self) { timedVariant in
-                    row(item, filter: filter, day: day, feedbackEnabled: false, sharedSchedule: true)
+                    row(item, filter: filter, day: day, feedbackEnabled: false, sharedSchedule: true, timeBelowTitle: timedVariant)
                         .modifier(FilterCollapse(collapsed: !shown.contains(item.id)))
                         .layoutValue(key: TimelineCollapsedKey.self, value: !shown.contains(item.id))
                         .modifier(ModeRowVariant(isTimed: timedVariant, isComplete: item.isComplete,
@@ -692,11 +692,8 @@ struct DayView: View {
                     // when a filter opens a panel below the row.
                     scheduleLabel(item, start: start, day: day)
                         .multilineTextAlignment(.trailing)
-                        .frame(width: scheduleColumnWidth, alignment: .trailing)
+                        .modifier(ModeScheduleColumn(width: scheduleColumnWidth))
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.trailing, CGFloat((filter != .review && needsReview(item) ? 14 : 0)
-                                                    + (filter != .reminders && hasOpenReminder(item) ? 14 : 0)))
-                        .overlay(alignment: .trailing) { rowMarkers(item, filter: filter) }
                         .modifier(SharedLabelVisibility(shown: shown.contains(item.id)))
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
@@ -753,7 +750,7 @@ struct DayView: View {
         .layoutValue(key: TimelineMarkerKey.self, value: true)
     }
     private func row(_ item: PlanItem, filter: DayFilter, day: Day, feedbackEnabled: Bool = true, sharedSchedule: Bool = false,
-                     showsMenu: Bool = true) -> some View {
+                     showsMenu: Bool = true, timeBelowTitle: Bool = false) -> some View {
         let reviewing = filter == .review
         let showingReminders = filter == .reminders
         return VStack(alignment: .leading, spacing: 0) {
@@ -787,6 +784,15 @@ struct DayView: View {
                         VStack(alignment: .leading, spacing: 3) {
                             itemTitle(item)
                                 .fixedSize(horizontal: false, vertical: true)
+                            if timeBelowTitle, let start = item.start(), !item.isCarried(now: now) {
+                                scheduleLabel(item, start: start, day: day)
+                                    .frame(width: scheduleColumnWidth, alignment: .leading)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .modifier(SharedScheduleVisibility(shared: sharedSchedule))
+                                    .accessibilityHidden(sharedSchedule)
+                                    .alignmentGuide(.scheduleLeading) { $0[.leading] }
+                                    .alignmentGuide(.scheduleTop) { $0[.top] }
+                            }
                             if !item.people.isEmpty || !item.locations.isEmpty {
                                 itemDetailsLine(item)
                             }
@@ -796,7 +802,7 @@ struct DayView: View {
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        if let start = item.start(), !item.isCarried(now: now) {
+                        if !timeBelowTitle, let start = item.start(), !item.isCarried(now: now) {
                             scheduleLabel(item, start: start, day: day)
                                 .multilineTextAlignment(.trailing)
                                 // The shared label's column, also in the lifted copy, so lifting
@@ -805,19 +811,20 @@ struct DayView: View {
                                 .fixedSize(horizontal: false, vertical: true)
                                 .modifier(SharedScheduleVisibility(shared: sharedSchedule))
                                 .accessibilityHidden(sharedSchedule)
+                                .alignmentGuide(.scheduleLeading) { $0[.leading] }
+                                .alignmentGuide(.scheduleTop) { $0[.top] }
                                 .layoutPriority(1)
                         }
                     }
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    .padding(.vertical, 2).contentShape(Rectangle())
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                    .contentShape(Rectangle())
                 }.buttonStyle(ItemCardPressStyle())
                     .accessibilityValue([sharedSchedule ? item.start().map { timeLabel(item, start: $0, day: day) } : nil,
                                          timeNote(item, day: day, width: .wide), item.isCancelled ? "Cancelled" : nil].compactMap { $0 }.joined(separator: ", "))
                     .accessibilityHint((needsReview(item) ? "Needs review. " : "") + (hasOpenReminder(item) ? "Reminder set. " : "") + "Open details and edit")
                     .accessibilityAction(named: item.isCancelled ? "Uncancel" : "Cancel") { setCancelled(item, !item.isCancelled, on: day) }
             }
-            // The shared time label sits on this line, not the middle of the row and its panel.
-            .alignmentGuide(.rowLine) { $0[VerticalAlignment.center] }
             // Always present, collapsed outside a filter, so it opens and moves with its row in
             // the filter's one animation. A panel inserted only when filtering started had no
             // earlier position: the timeline layout put it straight at its final spot, ahead of
@@ -832,13 +839,11 @@ struct DayView: View {
         }
         .padding(.trailing, (!reviewing && needsReview(item) ? 14.0 : 0) + (!showingReminders && hasOpenReminder(item) ? 14.0 : 0))
         .overlay(alignment: .trailing) {
-            // Shared schedules draw the dots beside the shared time label, so
-            // they cannot drift apart while the row variants slide.
-            rowMarkers(item, filter: filter).modifier(SharedScheduleVisibility(shared: sharedSchedule))
+            rowMarkers(item, filter: filter)
         }
-        .modifier(ItemCard())
+        .modifier(ItemCard(outlined: item.isSettled))
         .itemMenuOnHold(item, day: day, isEnabled: { daySwipeInteraction.allowsItemActions }, showsMenu: showsMenu) {
-            AnyView(row(item, filter: filter, day: day, feedbackEnabled: false, showsMenu: false))
+            AnyView(row(item, filter: filter, day: day, feedbackEnabled: false, showsMenu: false, timeBelowTitle: timeBelowTitle))
         }
         .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 20))
         .listRowSeparatorTint(Color.primary.opacity(0.07))
@@ -854,8 +859,12 @@ struct DayView: View {
                 guard daySwipeInteraction.allowsItemActions else { return }
                 withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.toggle(item, on: day) }
             } label: {
-                Image(systemName: item.stateSymbol)
-                    .resizable().scaledToFit().frame(width: 22, height: 22)
+                ZStack {
+                    Circle().strokeBorder(lineWidth: 1.6)
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                    .frame(width: 22, height: 22)
                     .foregroundStyle(.tertiary)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
@@ -871,11 +880,12 @@ struct DayView: View {
                         .foregroundStyle(.secondary)
                         .strikethrough(item.isSettled, pattern: .solid, color: Color.secondary.opacity(0.45))
                         .fixedSize(horizontal: false, vertical: true)
-                    Label("Carried to \(destination)", systemImage: "arrow.turn.down.right")
+                    Text("Carried to \(destination)")
                         .font(.caption).foregroundStyle(.tertiary)
                 }
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .padding(.vertical, 2).contentShape(Rectangle())
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                .contentShape(Rectangle())
             }.buttonStyle(ItemCardPressStyle())
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(item.title)
@@ -883,8 +893,8 @@ struct DayView: View {
                 .accessibilityHint("Open details and edit")
                 .accessibilityAction(named: item.isCancelled ? "Uncancel" : "Cancel") { setCancelled(item, !item.isCancelled, on: day) }
         }
-        .modifier(ItemCard())
-        .itemMenuOnHold(item, day: day, isEnabled: { daySwipeInteraction.allowsItemActions }, showsMenu: showsMenu) {
+        .modifier(ItemCard(outlined: true))
+        .itemMenuOnHold(item, day: day, isEnabled: { daySwipeInteraction.allowsItemActions }, showsMenu: showsMenu, isMoved: true) {
             AnyView(movedRow(item, day: day, showsMenu: false))
         }
     }
@@ -1289,12 +1299,12 @@ private struct ScrollsToNowInTimeView: ViewModifier {
     }
 }
 
-/// The calendar card's month view. UIKit's calendar rather than a graphical DatePicker, which
-/// doesn't report a tap on the day already selected, so that tap couldn't close the card.
-/// Single-date selection ignores that tap too; multi-date selection reports it as a deselection,
-/// so it's used with exactly one day selected.
+/// Keep UIKit's month layout and intrinsic sizing inside the dock's animated glass.
+/// Multi-date selection reports taps on a highlighted day too, allowing that tap to
+/// close the calendar. Today stays circled alongside the viewed date.
 private struct DayCalendar: UIViewRepresentable {
     let selection: Date
+    let today: Date
     let onPick: (Date) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(onPick: onPick) }
@@ -1303,20 +1313,24 @@ private struct DayCalendar: UIViewRepresentable {
         view.calendar = .current
         view.locale = .current
         view.tintColor = .label
+        context.coordinator.today = Day(today)
+        view.wantsDateDecorations = false
         let selection = UICalendarSelectionMultiDate(delegate: context.coordinator)
         view.selectionBehavior = selection
         context.coordinator.selection = selection
-        // Takes the width it's given instead of insisting on its own.
         view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         return view
     }
     func updateUIView(_ view: UICalendarView, context: Context) {
         context.coordinator.onPick = onPick
+        let currentDay = Day(today)
+        let todayChanged = context.coordinator.today != currentDay
+        context.coordinator.today = currentDay
         let day = Day(selection)
-        guard context.coordinator.day != day else { return }
+        guard context.coordinator.day != day || todayChanged else { return }
         context.coordinator.day = day
         let components = Coordinator.components(of: selection)
-        context.coordinator.selection?.setSelectedDates([components], animated: false)
+        context.coordinator.selection?.setSelectedDates(context.coordinator.highlightedDates(for: selection), animated: false)
         view.setVisibleDateComponents(components, animated: false)
     }
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UICalendarView, context: Context) -> CGSize? {
@@ -1331,24 +1345,27 @@ private struct DayCalendar: UIViewRepresentable {
         var onPick: (Date) -> Void
         weak var selection: UICalendarSelectionMultiDate?
         var day: Day?
-
+        var today: Day?
         init(onPick: @escaping (Date) -> Void) { self.onPick = onPick }
 
         static func components(of date: Date) -> DateComponents {
             Calendar.current.dateComponents([.calendar, .era, .year, .month, .day], from: date)
         }
+        func highlightedDates(for date: Date) -> [DateComponents] {
+            var dates = [Self.components(of: date)]
+            if let today, today != Day(date) { dates.append(Self.components(of: today.date())) }
+            return dates
+        }
         func multiDateSelection(_ selection: UICalendarSelectionMultiDate, didSelectDate dateComponents: DateComponents) {
             guard let date = Calendar.current.date(from: dateComponents) else { return }
-            // Only the new day stays selected. Recorded here so the update that follows doesn't
-            // set the selection and visible month again while the card folds.
-            selection.setSelectedDates([Self.components(of: date)], animated: false)
+            selection.setSelectedDates(highlightedDates(for: date), animated: false)
             day = Day(date)
             onPick(date)
         }
         func multiDateSelection(_ selection: UICalendarSelectionMultiDate, didDeselectDate dateComponents: DateComponents) {
-            // The selected day was tapped again: keep it selected and treat it as chosen.
             guard let date = Calendar.current.date(from: dateComponents) else { return }
-            selection.setSelectedDates([Self.components(of: date)], animated: false)
+            selection.setSelectedDates(highlightedDates(for: date), animated: false)
+            day = Day(date)
             onPick(date)
         }
     }
@@ -1595,13 +1612,27 @@ private struct TimelineMarkerKey: LayoutValueKey {
     static let defaultValue = false
 }
 
-/// The middle of a row's first line, where its shared time label sits.
-private enum RowLineCenter: AlignmentID {
-    static func defaultValue(in context: ViewDimensions) -> CGFloat { context[VerticalAlignment.center] }
+// The reserved schedule label supplies its exact position through the nested row stacks.
+private enum ScheduleLeading: AlignmentID {
+    static func defaultValue(in context: ViewDimensions) -> CGFloat { context[.leading] }
+}
+private enum ScheduleTop: AlignmentID {
+    static func defaultValue(in context: ViewDimensions) -> CGFloat { context[.top] }
+}
+private extension HorizontalAlignment {
+    static let scheduleLeading = HorizontalAlignment(ScheduleLeading.self)
+}
+private extension VerticalAlignment {
+    static let scheduleTop = VerticalAlignment(ScheduleTop.self)
 }
 
-private extension VerticalAlignment {
-    static let rowLine = VerticalAlignment(RowLineCenter.self)
+/// Only the small shared label reads the mode; the day and its endpoint rows stay mounted.
+private struct ModeScheduleColumn: ViewModifier {
+    let width: CGFloat
+    @Environment(ViewMode.self) private var mode
+    func body(content: Content) -> some View {
+        content.frame(width: width, alignment: mode.showingTime ? .leading : .trailing)
+    }
 }
 
 private struct TimelineCollapsedKey: LayoutValueKey {
@@ -1632,8 +1663,7 @@ private struct TimelineConnectorLaneKey: LayoutValueKey {
 }
 
 // Everything that can change a row's measured size or compact order.
-/// A row's own time label and dots, which give way to the shared ones only while List and Time
-/// view switch, so at rest the time behaves exactly like the title beside it.
+/// The row's time label gives way to the shared label only while List and Time switch.
 private struct SharedScheduleVisibility: ViewModifier {
     let shared: Bool
     @Environment(ViewMode.self) private var mode: ViewMode?
@@ -1643,7 +1673,7 @@ private struct SharedScheduleVisibility: ViewModifier {
     }
 }
 
-/// The shared time label and dots, shown only while List and Time view switch.
+/// The shared time label, shown only while List and Time view switch.
 private struct SharedLabelVisibility: ViewModifier {
     let shown: Bool
     @Environment(ViewMode.self) private var mode: ViewMode?
@@ -1720,17 +1750,19 @@ private struct DayTimelineLayout: Layout {
                 cache.proposals.append(ProposedViewSize(width: frame.width, height: frame.height))
                 continue
             }
-            if let trailingInset = subview[TimelineSharedTimeInsetKey.self] {
-                let first = cache.compact[index - 1], second = cache.timed[index - 1]
+            if subview[TimelineSharedTimeInsetKey.self] != nil {
+                let first = cache.compact[index - 2], second = cache.timed[index - 1]
                 let size = subview.sizeThatFits(.unspecified)
-                // Centred on the row's first line, so a status panel opening below doesn't move it.
-                func labelFrame(in row: CGRect) -> CGRect {
-                    let line = subviews[index - 1].dimensions(in: ProposedViewSize(row.size))[.rowLine]
-                    return CGRect(x: row.maxX - trailingInset - size.width, y: row.minY + line - size.height / 2,
+                // Follow the reserved label in each endpoint: beside the title in List,
+                // beneath it in Time. Status panels don't affect either anchor.
+                func labelFrame(in row: CGRect, variant: Int) -> CGRect {
+                    let dimensions = subviews[variant].dimensions(in: ProposedViewSize(row.size))
+                    return CGRect(x: row.minX + dimensions[HorizontalAlignment.scheduleLeading],
+                                  y: row.minY + dimensions[VerticalAlignment.scheduleTop],
                                   width: size.width, height: size.height)
                 }
-                cache.compact.append(labelFrame(in: first))
-                cache.timed.append(labelFrame(in: second))
+                cache.compact.append(labelFrame(in: first, variant: index - 2))
+                cache.timed.append(labelFrame(in: second, variant: index - 1))
                 cache.proposals.append(ProposedViewSize(width: size.width, height: size.height))
                 continue
             }
@@ -2074,6 +2106,7 @@ private struct DayPager: UIViewControllerRepresentable {
         var host: PageHost
         private var animator: UIViewPropertyAnimator?
         private var settlingDirection: Int?
+        private var settlingDay: Day?
         private var notifyOnSettle = false
         private var warmTask: Task<Void, Never>?
         private var size: CGSize = .zero
@@ -2220,10 +2253,13 @@ private struct DayPager: UIViewControllerRepresentable {
             let direction: Int? = commit ? ((abs(travel) >= minimumTravel ? travel : projection) < 0 ? 1 : -1) : nil
             settle(direction: direction, notify: true)
         }
-        private func settle(direction: Int?, notify: Bool) {
+        private func settle(direction: Int?, notify: Bool, destination: Day? = nil) {
             warmTask?.cancel()
             warmTask = nil
             settlingDirection = direction
+            settlingDay = destination ?? direction.flatMap {
+                Calendar.current.date(byAdding: .day, value: $0, to: day.date()).map { Day($0) }
+            }
             notifyOnSettle = notify
             interaction.isPaging = true
             let target = direction.map { -CGFloat($0) * size.width } ?? 0
@@ -2251,17 +2287,19 @@ private struct DayPager: UIViewControllerRepresentable {
         private func completeSettle() {
             animator = nil
             let direction = settlingDirection
+            let destination = settlingDay
             let notify = notifyOnSettle
             settlingDirection = nil
+            settlingDay = nil
             notifyOnSettle = false
-            if let direction { promote(direction: direction, preserving: 0) }
+            if let direction { promote(direction: direction, destination: destination, preserving: 0) }
             else { offset = 0; setTranslation(0) }
             interaction.isPaging = false
             for scrollView in pageScrollViews() { scrollView.showsVerticalScrollIndicator = true }
             if let direction, notify { onSwipe(direction) }
             refreshIfIdle()
         }
-        private func promote(direction: Int, preserving translation: CGFloat) {
+        private func promote(direction: Int, destination: Day? = nil, preserving translation: CGFloat) {
             guard let next = previews.removeValue(forKey: direction),
                   let date = Calendar.current.date(byAdding: .day, value: direction, to: day.date()) else { return }
             if let distant = previews.removeValue(forKey: -direction) { remove(distant) }
@@ -2274,7 +2312,7 @@ private struct DayPager: UIViewControllerRepresentable {
             host.policy.isForeground = true
             host.view.isUserInteractionEnabled = true
             host.view.accessibilityElementsHidden = false
-            day = Day(date)
+            day = destination ?? Day(date)
             displayedRevision = nil
             // The promoted page still carries the preview mode and the demoted
             // page the live one; both get their proper content when idle.
@@ -2288,11 +2326,13 @@ private struct DayPager: UIViewControllerRepresentable {
             animator.stopAnimation(true)
             self.animator = nil
             let direction = settlingDirection
+            let destination = settlingDay
             let shouldNotify = notify && notifyOnSettle
             settlingDirection = nil
+            settlingDay = nil
             notifyOnSettle = false
             if let direction {
-                promote(direction: direction, preserving: visibleOffset + CGFloat(direction) * size.width)
+                promote(direction: direction, destination: destination, preserving: visibleOffset + CGFloat(direction) * size.width)
                 if shouldNotify { onSwipe(direction) }
             } else {
                 offset = visibleOffset
@@ -2303,9 +2343,7 @@ private struct DayPager: UIViewControllerRepresentable {
         func navigate(to selected: Day) {
             // Repeated SwiftUI updates must not interrupt an animation already
             // settling towards the requested date.
-            if let direction = settlingDirection,
-               let target = Calendar.current.date(byAdding: .day, value: direction, to: day.date()),
-               Day(target) == selected { return }
+            if animator != nil, settlingDay == selected { return }
             haltMotion(notify: false)
             dragging = false
             guard selected != day else { refreshIfIdle(); return }
@@ -2316,6 +2354,22 @@ private struct DayPager: UIViewControllerRepresentable {
                 // The source page is kept intact and the cached neighbour is
                 // used directly, including its existing scroll/text layout.
                 settle(direction: delta, notify: false)
+            } else if !reduceMotion, size.width > 0, let container {
+                // A distant jump (including holding the date to return to today) moves
+                // one screen in chronological direction, using the actual destination.
+                warmTask?.cancel()
+                warmTask = nil
+                for preview in previews.values { remove(preview) }
+                previews.removeAll()
+                let direction = delta > 0 ? 1 : -1
+                let destination = Self.makeHost(latestContent, isForeground: false)
+                install(destination, in: container)
+                destination.view.isUserInteractionEnabled = false
+                destination.view.accessibilityElementsHidden = true
+                previews[direction] = destination
+                positionPages()
+                destination.view.layoutIfNeeded()
+                settle(direction: direction, notify: false, destination: selected)
             } else {
                 let replace = {
                     for preview in self.previews.values { self.remove(preview) }
