@@ -118,6 +118,8 @@ public struct PlanItem: Identifiable, Codable, Equatable {
     public var end: Date?
     /// Moments to be reminded; an item can have several.
     public var reminders: [Date]
+    /// When the item has to be done by. Only marked, not notified.
+    public var deadline: Date?
     public var completedAt: Date?
     /// When the item was called off. A cancelled item is never complete, doesn't carry on,
     /// isn't reviewed or reminded about, and stays visible in a quiet style until restored.
@@ -143,7 +145,7 @@ public struct PlanItem: Identifiable, Codable, Equatable {
     }
     // Read the original task/event format without changing IDs or scheduling choices.
     private enum CodingKeys: String, CodingKey {
-        case id, title, notes, locations, people, day, minute, end, reminders, completedAt, cancelledAt, parentID, originalDay, carriedFrom, suggestionDismissed, createdAt, movesToNextDay, repeatRule, repeatWeekdays, seriesID, occurrenceDay, personas
+        case id, title, notes, locations, people, day, minute, end, reminders, deadline, completedAt, cancelledAt, parentID, originalDay, carriedFrom, suggestionDismissed, createdAt, movesToNextDay, repeatRule, repeatWeekdays, seriesID, occurrenceDay, personas
     }
     private enum LegacyKeys: String, CodingKey { case kind, reminderAt, persona }
     public init(from decoder: Decoder) throws {
@@ -174,6 +176,7 @@ public struct PlanItem: Identifiable, Codable, Equatable {
             let legacy = try decoder.container(keyedBy: LegacyKeys.self)
             reminders = try legacy.decodeIfPresent(Date.self, forKey: .reminderAt).map { [$0] } ?? []
         }
+        deadline = try c.decodeIfPresent(Date.self, forKey: .deadline)
         completedAt = try c.decodeIfPresent(Date.self, forKey: .completedAt)
         cancelledAt = try c.decodeIfPresent(Date.self, forKey: .cancelledAt)
         parentID = try c.decodeIfPresent(UUID.self, forKey: .parentID)
@@ -192,6 +195,8 @@ public struct PlanItem: Identifiable, Codable, Equatable {
             movesToNextDay = kind == "task"
         }
     }
+    /// Unfinished with a deadline set, passed or not; marked with a red dot.
+    public var hasOpenDeadline: Bool { !isSettled && deadline != nil }
     /// The reminder to show for this item: the next one still to come, otherwise the latest.
     public func displayedReminder(now: Date) -> Date? {
         reminders.filter { $0 > now }.min() ?? reminders.max()
@@ -293,6 +298,9 @@ public enum Planner {
                     occurrence.occurrenceDay = cursor
                     updateStart(&occurrence, day: cursor, minute: occurrence.minute, calendar: calendar)
                     occurrence.originalDay = cursor
+                    // Each occurrence is due the same number of days after its own day.
+                    let offset = calendar.dateComponents([.day], from: plan.template.day.date(calendar: calendar), to: cursor.date(calendar: calendar)).day ?? 0
+                    occurrence.deadline = plan.template.deadline.flatMap { calendar.date(byAdding: .day, value: offset, to: $0) }
                     occurrence.completedAt = nil
                     occurrence.cancelledAt = nil
                     occurrence.parentID = nil
@@ -603,20 +611,40 @@ public enum Planner {
     public static func movedItems(from day: Day, in items: [PlanItem], now: Date, calendar: Calendar = .current) -> [PlanItem] {
         items.filter { $0.movedAway(from: day, now: now, calendar: calendar) }.sorted { $0.createdAt < $1.createdAt }
     }
-    /// Every item in `persona` (among any others it has), grouped by its live day, newest day first. A carried item is
-    /// listed once, where it is shown as itself. Repeating items only list occurrences up to
-    /// today, since future ones are generated ahead and would bury the history.
+    /// Every item in `persona` (among any others it has), grouped by day, newest day first. Each
+    /// day lists what that day's list shows of the persona, in the same order: an item on its own
+    /// (live) day, a "Carried to" entry on every day it was carried on from, and today for anything
+    /// today's list shows, such as a range that is still running. Every generated linked item of a
+    /// repeating item is listed, including those ahead of today.
     public static func history(of persona: Persona, in items: [PlanItem], now: Date, calendar: Calendar = .current) -> [PersonaDay] {
         let today = Day(now, calendar: calendar)
-        let matching = items.filter { $0.personas.contains(persona) && ($0.seriesID == nil || $0.day <= today) }
-        return Dictionary(grouping: matching, by: { $0.liveDay(now: now, calendar: calendar) })
-            .map { day, items in
-                PersonaDay(day: day, items: items.sorted {
-                    if $0.minute != $1.minute { return ($0.minute ?? -1) < ($1.minute ?? -1) }
-                    return $0.createdAt < $1.createdAt
-                })
+        let matching = items.filter { $0.personas.contains(persona) }
+        var days = Set<Day>()
+        for item in matching {
+            let live = item.liveDay(now: now, calendar: calendar)
+            days.insert(live)
+            var carriedFrom = item.day
+            while carriedFrom < live, let next = calendar.date(byAdding: .day, value: 1, to: carriedFrom.date(calendar: calendar)) {
+                days.insert(carriedFrom)
+                carriedFrom = Day(next, calendar: calendar)
             }
-            .sorted { $0.day > $1.day }
+        }
+        if matching.contains(where: { $0.shows(on: today, now: now, calendar: calendar) }) { days.insert(today) }
+        return days.sorted(by: >).map { day in
+            let listed = matching.filter {
+                $0.shows(on: day, now: now, calendar: calendar) || $0.movedAway(from: day, now: now, calendar: calendar)
+            }
+            // Like the day list: Anytime items first, then Scheduled ones. A carried item keeps
+            // its time only on its scheduled day.
+            let timed = { (item: PlanItem) in
+                item.minute != nil && (!item.isCarried(now: now, calendar: calendar) || item.day == day)
+            }
+            return PersonaDay(day: day, items: listed.sorted {
+                if timed($0) != timed($1) { return !timed($0) }
+                if $0.minute != $1.minute { return ($0.minute ?? -1) < ($1.minute ?? -1) }
+                return $0.createdAt < $1.createdAt
+            })
+        }
     }
     /// The nearest future reminders of unfinished, uncancelled items, one entry per reminder.
     public static func upcomingReminders(in items: [PlanItem], now: Date, limit: Int = 64) -> [ScheduledReminder] {

@@ -1,0 +1,376 @@
+{
+  "source": "/Users/timovijn/Timo/GitHub/timo/Timo/DayView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Add %@ item",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 234
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add item",
+        "location": {
+          "startingColumn": 71,
+          "startingLine": 234
+        }
+      },
+      {
+        "comment": "",
+        "key": "Next day",
+        "location": {
+          "startingColumn": 37,
+          "startingLine": 420
+        }
+      },
+      {
+        "comment": "",
+        "key": "Previous day",
+        "location": {
+          "startingColumn": 37,
+          "startingLine": 421
+        }
+      },
+      {
+        "comment": "",
+        "key": "Previous day",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 335
+        }
+      },
+      {
+        "comment": "",
+        "key": "Choose a day",
+        "location": {
+          "startingColumn": 37,
+          "startingLine": 362
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tap or swipe up for the calendar, or hold for today",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 364
+        }
+      },
+      {
+        "comment": "",
+        "key": "Go to today",
+        "location": {
+          "startingColumn": 45,
+          "startingLine": 366
+        }
+      },
+      {
+        "comment": "",
+        "key": "Next day",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 385
+        }
+      },
+      {
+        "comment": "",
+        "key": "Show full day",
+        "location": {
+          "startingColumn": 56,
+          "startingLine": 502
+        }
+      },
+      {
+        "comment": "",
+        "key": "Show %lld items with deadlines",
+        "location": {
+          "startingColumn": 74,
+          "startingLine": 502
+        }
+      },
+      {
+        "comment": "",
+        "key": "Deadline filter on",
+        "location": {
+          "startingColumn": 56,
+          "startingLine": 503
+        }
+      },
+      {
+        "comment": "",
+        "key": "Deadline filter off",
+        "location": {
+          "startingColumn": 79,
+          "startingLine": 503
+        }
+      },
+      {
+        "comment": "",
+        "key": "Toggles unfinished items with a deadline for this day",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 505
+        }
+      },
+      {
+        "comment": "",
+        "key": "Show full day",
+        "location": {
+          "startingColumn": 56,
+          "startingLine": 516
+        }
+      },
+      {
+        "comment": "",
+        "key": "Show %lld items with reminders",
+        "location": {
+          "startingColumn": 74,
+          "startingLine": 516
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reminder filter on",
+        "location": {
+          "startingColumn": 56,
+          "startingLine": 517
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reminder filter off",
+        "location": {
+          "startingColumn": 79,
+          "startingLine": 517
+        }
+      },
+      {
+        "comment": "",
+        "key": "Toggles unfinished items with a reminder set for this day",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 519
+        }
+      },
+      {
+        "comment": "",
+        "key": "Show full day",
+        "location": {
+          "startingColumn": 49,
+          "startingLine": 530
+        }
+      },
+      {
+        "comment": "",
+        "key": "Review %lld items",
+        "location": {
+          "startingColumn": 67,
+          "startingLine": 530
+        }
+      },
+      {
+        "comment": "",
+        "key": "Review filter on",
+        "location": {
+          "startingColumn": 49,
+          "startingLine": 531
+        }
+      },
+      {
+        "comment": "",
+        "key": "Review filter off",
+        "location": {
+          "startingColumn": 70,
+          "startingLine": 531
+        }
+      },
+      {
+        "comment": "",
+        "key": "Toggles items needing review for this day",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 533
+        }
+      },
+      {
+        "comment": "",
+        "key": "99+",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 553
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 553
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nothing planned",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 608
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld to review",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 594
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld with reminders",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 596
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld with deadlines",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 598
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld/%lld complete",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 601
+        }
+      },
+      {
+        "comment": "",
+        "key": "Uncancel",
+        "location": {
+          "startingColumn": 68,
+          "startingLine": 905
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 81,
+          "startingLine": 905
+        }
+      },
+      {
+        "comment": "",
+        "key": "Carried to %@",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 864
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@: %@",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 1218
+        }
+      },
+      {
+        "comment": "",
+        "key": "Switch to list view",
+        "location": {
+          "startingColumn": 48,
+          "startingLine": 1281
+        }
+      },
+      {
+        "comment": "",
+        "key": "Switch to time view",
+        "location": {
+          "startingColumn": 72,
+          "startingLine": 1281
+        }
+      },
+      {
+        "comment": "",
+        "key": "Time view",
+        "location": {
+          "startingColumn": 48,
+          "startingLine": 1282
+        }
+      },
+      {
+        "comment": "",
+        "key": "List view",
+        "location": {
+          "startingColumn": 62,
+          "startingLine": 1282
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reminder time",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1519
+        }
+      },
+      {
+        "comment": "",
+        "key": "Check this reminder",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 1524
+        }
+      },
+      {
+        "comment": "",
+        "key": "Remind me at",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 1510
+        }
+      },
+      {
+        "comment": "",
+        "key": "This updates the reminder time for the original item and all its linked items.",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1515
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 70,
+          "startingLine": 1521
+        }
+      },
+      {
+        "comment": "",
+        "key": "Save",
+        "location": {
+          "startingColumn": 70,
+          "startingLine": 1522
+        }
+      },
+      {
+        "comment": "",
+        "key": "OK",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 1525
+        }
+      }
+    ]
+  },
+  "version": 1
+}

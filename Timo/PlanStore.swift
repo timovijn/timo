@@ -1,9 +1,11 @@
 import Foundation
+import Observation
 import Combine
 import UserNotifications
 
 @MainActor final class PlanStore: ObservableObject {
     @Published private(set) var items: [PlanItem] = []
+    let completionPresentation = CompletionPresentation()
     private var series: [RepeatingPlan] = []
     private var displayedDay = Day(Date())
     @Published var errorMessage: String?
@@ -274,4 +276,11 @@ private final class ReminderNotificationDelegate: NSObject, UNUserNotificationCe
                                 willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         [.banner, .sound]
     }
+}
+
+/// Transient feedback stays separate from saved completion, so drawing a tick or
+/// striking a title cannot reorder or remove the item before the animation finishes.
+@Observable @MainActor final class CompletionPresentation {
+    var pending: Set<UUID> = []
+    var striking: Set<UUID> = []
 }

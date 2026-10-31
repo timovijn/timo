@@ -7,7 +7,7 @@
         "key": "Persona",
         "location": {
           "startingColumn": 29,
-          "startingLine": 111
+          "startingLine": 112
         }
       },
       {
@@ -15,7 +15,7 @@
         "key": "Opens the list of personas",
         "location": {
           "startingColumn": 28,
-          "startingLine": 113
+          "startingLine": 114
         }
       },
       {
@@ -23,15 +23,7 @@
         "key": "Persona",
         "location": {
           "startingColumn": 20,
-          "startingLine": 73
-        }
-      },
-      {
-        "comment": "",
-        "key": "timo",
-        "location": {
-          "startingColumn": 22,
-          "startingLine": 184
+          "startingLine": 74
         }
       },
       {
@@ -39,7 +31,7 @@
         "key": "%lld/%lld complete",
         "location": {
           "startingColumn": 30,
-          "startingLine": 158
+          "startingLine": 160
         }
       },
       {
@@ -47,7 +39,7 @@
         "key": "Nothing in %@ yet",
         "location": {
           "startingColumn": 31,
-          "startingLine": 165
+          "startingLine": 167
         }
       },
       {
@@ -55,7 +47,7 @@
         "key": "Give an item the %@ persona and it will be gathered here, with everything before and after it.",
         "location": {
           "startingColumn": 30,
-          "startingLine": 167
+          "startingLine": 169
         }
       },
       {
@@ -63,39 +55,7 @@
         "key": "Add an item",
         "location": {
           "startingColumn": 32,
-          "startingLine": 169
-        }
-      },
-      {
-        "comment": "",
-        "key": "Open details and edit",
-        "location": {
-          "startingColumn": 32,
-          "startingLine": 251
-        }
-      },
-      {
-        "comment": "",
-        "key": "Uncancel",
-        "location": {
-          "startingColumn": 60,
-          "startingLine": 252
-        }
-      },
-      {
-        "comment": "",
-        "key": "Cancel",
-        "location": {
-          "startingColumn": 73,
-          "startingLine": 252
-        }
-      },
-      {
-        "comment": "",
-        "key": "Carried from %@",
-        "location": {
-          "startingColumn": 34,
-          "startingLine": 222
+          "startingLine": 171
         }
       },
       {
@@ -103,7 +63,7 @@
         "key": "Uncancel",
         "location": {
           "startingColumn": 23,
-          "startingLine": 381
+          "startingLine": 541
         }
       },
       {
@@ -111,7 +71,7 @@
         "key": "Cancel",
         "location": {
           "startingColumn": 23,
-          "startingLine": 383
+          "startingLine": 543
         }
       },
       {
@@ -119,7 +79,7 @@
         "key": "Delete",
         "location": {
           "startingColumn": 30,
-          "startingLine": 391
+          "startingLine": 551
         }
       },
       {
@@ -127,7 +87,7 @@
         "key": "Delete",
         "location": {
           "startingColumn": 30,
-          "startingLine": 403
+          "startingLine": 563
         }
       },
       {
@@ -135,7 +95,7 @@
         "key": "Original item only",
         "location": {
           "startingColumn": 20,
-          "startingLine": 454
+          "startingLine": 614
         }
       },
       {
@@ -143,7 +103,7 @@
         "key": "This linked item only",
         "location": {
           "startingColumn": 20,
-          "startingLine": 456
+          "startingLine": 616
         }
       },
       {
@@ -151,7 +111,7 @@
         "key": "This and following linked items",
         "location": {
           "startingColumn": 20,
-          "startingLine": 457
+          "startingLine": 617
         }
       },
       {
@@ -159,7 +119,7 @@
         "key": "Original and all linked items",
         "location": {
           "startingColumn": 16,
-          "startingLine": 459
+          "startingLine": 619
         }
       },
       {
@@ -167,7 +127,7 @@
         "key": "Deleted “%@”",
         "location": {
           "startingColumn": 22,
-          "startingLine": 474
+          "startingLine": 634
         }
       },
       {
@@ -175,7 +135,7 @@
         "key": "Undo",
         "location": {
           "startingColumn": 24,
-          "startingLine": 477
+          "startingLine": 637
         }
       },
       {
@@ -183,7 +143,7 @@
         "key": "Puts back what was deleted",
         "location": {
           "startingColumn": 36,
-          "startingLine": 481
+          "startingLine": 641
         }
       }
     ]

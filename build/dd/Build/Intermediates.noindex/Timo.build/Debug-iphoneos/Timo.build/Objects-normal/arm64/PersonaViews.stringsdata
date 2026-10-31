@@ -1,0 +1,152 @@
+{
+  "source": "/Users/timovijn/Timo/GitHub/timo/Timo/PersonaViews.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Persona",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 112
+        }
+      },
+      {
+        "comment": "",
+        "key": "Opens the list of personas",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 114
+        }
+      },
+      {
+        "comment": "",
+        "key": "Persona",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 74
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld/%lld complete",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 160
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nothing in %@ yet",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 167
+        }
+      },
+      {
+        "comment": "",
+        "key": "Give an item the %@ persona and it will be gathered here, with everything before and after it.",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 169
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add an item",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 171
+        }
+      },
+      {
+        "comment": "",
+        "key": "Uncancel",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 542
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 544
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 552
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 564
+        }
+      },
+      {
+        "comment": "",
+        "key": "Original item only",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 615
+        }
+      },
+      {
+        "comment": "",
+        "key": "This linked item only",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 617
+        }
+      },
+      {
+        "comment": "",
+        "key": "This and following linked items",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 618
+        }
+      },
+      {
+        "comment": "",
+        "key": "Original and all linked items",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 620
+        }
+      },
+      {
+        "comment": "",
+        "key": "Deleted “%@”",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 635
+        }
+      },
+      {
+        "comment": "",
+        "key": "Undo",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 638
+        }
+      },
+      {
+        "comment": "",
+        "key": "Puts back what was deleted",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 642
+        }
+      }
+    ]
+  },
+  "version": 1
+}

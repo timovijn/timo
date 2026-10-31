@@ -63,17 +63,34 @@ final class PersonaTests: XCTestCase {
         XCTAssertEqual(history[1].items.map(\.title), ["Drink water", "Stretch", "Gym"])
         XCTAssertTrue(Planner.history(of: .friends, in: [late, other], now: date(25), calendar: calendar).isEmpty)
     }
-    func testCarriedItemIsListedOnceOnItsCurrentDay() {
+    func testCarriedItemIsListedOnItsCurrentDayWithEntriesOnTheDaysBefore() {
         var physio = item("Book physio", 20, persona: .health)
         physio.completedAt = nil
+        // As in the day list: itself today, and a "Carried to" entry on each day it was carried on from.
         let history = Planner.history(of: .health, in: [physio], now: date(23), calendar: calendar)
-        XCTAssertEqual(history.map(\.day), [day(23)])
-        XCTAssertEqual(history[0].items.count, 1)
-        // Done on the 21st, it is listed there instead.
+        XCTAssertEqual(history.map(\.day), [day(23), day(22), day(21), day(20)])
+        XCTAssertTrue(history.allSatisfy { $0.items.map(\.id) == [physio.id] })
+        XCTAssertFalse(physio.movedAway(from: day(23), now: date(23), calendar: calendar))
+        // Done on the 21st, it is listed there, with an entry on the 20th.
         physio.completedAt = date(21)
-        XCTAssertEqual(Planner.history(of: .health, in: [physio], now: date(23), calendar: calendar).map(\.day), [day(21)])
+        XCTAssertEqual(Planner.history(of: .health, in: [physio], now: date(23), calendar: calendar).map(\.day), [day(21), day(20)])
     }
-    func testRepeatingItemsShareTheirPersonaAndOnlyListOccurrencesSoFar() {
+    func testRunningRangeIsListedOnItsOwnDayAndOnTodayLikeTheDayList() {
+        // From the 20th at 9:00 to the 27th: today's list shows it while it runs.
+        var project = PlanItem(title: "Project", day: day(20), minute: 9 * 60, movesToNextDay: false)
+        project.personas = [.work]
+        project.end = date(27)
+        var carried = PlanItem(title: "Report", day: day(21), minute: 10 * 60, movesToNextDay: true)
+        carried.personas = [.work]
+        let history = Planner.history(of: .work, in: [project, carried], now: date(23), calendar: calendar)
+        XCTAssertEqual(history.map(\.day), [day(23), day(22), day(21), day(20)])
+        // A carried item comes first, untimed, as in the day list.
+        XCTAssertEqual(history[0].items.map(\.title), ["Report", "Project"])
+        // On its scheduled day its entry keeps its time, after the range that is also running then.
+        XCTAssertEqual(history[2].items.map(\.title), ["Project", "Report"])
+        XCTAssertEqual(history[3].items.map(\.title), ["Project"])
+    }
+    func testRepeatingItemsShareTheirPersonaAndListEveryLinkedItem() {
         var template = PlanItem(title: "Walk", day: day(20), minute: 8 * 60, movesToNextDay: false)
         template.repeatRule = .daily
         template.personas = [.health]
@@ -82,7 +99,8 @@ final class PersonaTests: XCTestCase {
         Planner.saveRepeating(template, items: &items, series: &series, calendar: calendar)
         Planner.materialize(series, in: &items, from: day(20), through: day(30), calendar: calendar)
         XCTAssertTrue(items.allSatisfy { $0.personas == [.health] })
-        XCTAssertEqual(Planner.history(of: .health, in: items, now: date(23), calendar: calendar).map(\.day), [day(23), day(22), day(21), day(20)])
+        // Linked items ahead of today are listed too.
+        XCTAssertEqual(Planner.history(of: .health, in: items, now: date(23), calendar: calendar).map(\.day), (20...30).reversed().map(day))
         // Changing the personas on one occurrence changes the whole series.
         var edited = items[2]
         edited.personas = [.health, .personal]

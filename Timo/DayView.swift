@@ -29,8 +29,9 @@ struct DayView: View {
     @State private var previewMode = ViewMode(persisted: false)
     @State private var showingRelativeDate = true
     @GestureState private var pressingDate = false
-    private enum DayFilter: Int { case all, review, reminders }
+    private enum DayFilter: Int { case all, review, reminders, deadlines }
     @State private var filter: DayFilter = .all
+    @State private var filterTransition = 0
     /// Which filter the rows' status panels show. It outlasts the filter, so a panel keeps its
     /// content while it collapses back into its row.
     @State private var panelFilter: DayFilter = .review
@@ -38,7 +39,9 @@ struct DayView: View {
     @State private var persona: Persona?
     private var reviewing: Bool { filter == .review }
     private var showingReminders: Bool { filter == .reminders }
-    private var reminderItems: [PlanItem] { visible.filter(hasOpenReminder) }
+    private var showingDeadlines: Bool { filter == .deadlines }
+    private var reminderItems: [PlanItem] { (visible + moved).filter { matches($0, .reminders, on: day) } }
+    private var deadlineItems: [PlanItem] { (visible + moved).filter { matches($0, .deadlines, on: day) } }
     @State private var now = Date()
     @State private var lastToday = Day(Date())
     private let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
@@ -49,8 +52,31 @@ struct DayView: View {
             return $0.createdAt < $1.createdAt
         }
     }
+    /// How many rows the active filter keeps; nil in the full day.
+    private var activeFilterCount: Int? {
+        switch filter {
+        case .all: nil
+        case .review: reviewItems.count
+        case .reminders: reminderItems.count
+        case .deadlines: deadlineItems.count
+        }
+    }
+    /// Items carried on from the viewed day, shown there as "Carried to" entries.
+    private var moved: [PlanItem] { Planner.movedItems(from: day, in: store.items, now: now) }
     private var reviewItems: [PlanItem] {
-        visible.filter(needsReview)
+        (visible + moved).filter { matches($0, .review, on: day) }
+    }
+    /// Whether the row for `item` on `day` has the filter's dot, and so is in that filter. A
+    /// "Carried to" entry keeps its orange dot until the item is done or left open; it gets no
+    /// reminder dot, as reminders are about its live day.
+    private func matches(_ item: PlanItem, _ filter: DayFilter, on day: Day) -> Bool {
+        let carried = item.movedAway(from: day, now: now)
+        switch filter {
+        case .all: return true
+        case .review: return carried ? !item.isSettled && !item.suggestionDismissed : needsReview(item)
+        case .reminders: return !carried && hasOpenReminder(item)
+        case .deadlines: return item.hasOpenDeadline
+        }
     }
     private func hasOpenReminder(_ item: PlanItem) -> Bool {
         !item.isSettled && item.reminders.contains { $0 > now }
@@ -93,7 +119,7 @@ struct DayView: View {
                 .accessibilityHidden(persona != nil)
                 .overlay {
                     ZStack(alignment: .bottomTrailing) {
-                        PersonaPages(persona: persona, now: now, open: { editing = $0 }, add: add)
+                        PersonaPages(persona: persona, now: now, add: add) { AnyView(row($0, filter: .all, day: $1)) }
                             .contentMargins(.bottom, 94, for: .scrollContent)
                         if persona != nil {
                             // Sits where the day dock's add button does, and stays put as pages slide.
@@ -127,7 +153,8 @@ struct DayView: View {
                 }.sharedBackgroundVisibility(.hidden)
             }
             .sheet(item: $editing) { item in
-                ItemEditor(item: item, openItem: openOnItsDay).environmentObject(store)
+                ItemEditor(item: item, viewingDay: persona == nil ? day : item.liveDay(now: now), openItem: openOnItsDay)
+                    .environmentObject(store)
             }
             .sheet(item: $changingReminder) { item in
                 ReminderTimeEditor(item: item).environmentObject(store)
@@ -147,6 +174,10 @@ struct DayView: View {
                 } catch { /* A new day restarts the label's display time. */ }
             }
             .onChange(of: date) { _, _ in filter = .all; store.showDay(day) }
+            // Resolving the last item in a filter returns to the full day rather than an empty list.
+            .onChange(of: activeFilterCount) { _, count in
+                if count == 0 { setFilter(.all) }
+            }
             .onAppear { store.showDay(day) }
             .onReceive(timer) { refresh($0) }
             .onChange(of: scenePhase) { _, phase in
@@ -159,6 +190,9 @@ struct DayView: View {
         AnyView(dayList(for: date, filter: filter)
             .contentMargins(.top, insets.top, for: .scrollContent)
             .contentMargins(.bottom, insets.bottom + 94, for: .scrollContent)
+            // The indicator runs only between the top controls and the dock, never under the glass.
+            .contentMargins(.top, insets.top, for: .scrollIndicators)
+            .contentMargins(.bottom, insets.bottom + 94, for: .scrollIndicators)
             .environment(mode)
             .environmentObject(store).tint(.primary))
     }
@@ -450,12 +484,32 @@ struct DayView: View {
     private var filterButtons: some View {
         let reminderCount = reminderItems.count
         let reviewCount = reviewItems.count
+        let deadlineCount = deadlineItems.count
         let showReminders = showingReminders || reminderCount > 0
         let showReview = reviewing || reviewCount > 0
+        let showDeadlines = showingDeadlines || deadlineCount > 0
         let transition: AnyTransition = reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.92, anchor: .trailing))
         return HStack(spacing: 10) {
+            if showDeadlines {
+                Button {
+                    // A button fading out after a day change still takes taps; state is read live.
+                    guard showingDeadlines || !deadlineItems.isEmpty else { return }
+                    setFilter(showingDeadlines ? .all : .deadlines)
+                } label: {
+                    filterIcon("flag.fill", tint: .red, count: deadlineCount, isActive: showingDeadlines)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(showingDeadlines ? "Show full day" : "Show \(deadlineCount) items with deadlines")
+                .accessibilityValue(showingDeadlines ? "Deadline filter on" : "Deadline filter off")
+                .accessibilityAddTraits(showingDeadlines ? .isSelected : [])
+                .accessibilityHint("Toggles unfinished items with a deadline for this day")
+                .transition(transition)
+            }
             if showReminders {
-                Button { setFilter(showingReminders ? .all : .reminders) } label: {
+                Button {
+                    guard showingReminders || !reminderItems.isEmpty else { return }
+                    setFilter(showingReminders ? .all : .reminders)
+                } label: {
                     filterIcon("alarm.fill", tint: .blue, count: reminderCount, isActive: showingReminders)
                 }
                 .buttonStyle(.plain)
@@ -466,7 +520,10 @@ struct DayView: View {
                 .transition(transition)
             }
             if showReview {
-                Button { setReviewing(!reviewing) } label: {
+                Button {
+                    guard reviewing || !reviewItems.isEmpty else { return }
+                    setReviewing(!reviewing)
+                } label: {
                     filterIcon("exclamationmark.triangle.fill", tint: reviewTint, count: reviewCount, isActive: reviewing)
                 }
                 .buttonStyle(.plain)
@@ -479,11 +536,12 @@ struct DayView: View {
         }
         // A stable toolbar host lets SwiftUI finish both sides of the transition
         // instead of UIKit immediately inserting/removing separate toolbar items.
-        .frame(width: 98, height: 44, alignment: .trailing)
+        .frame(width: 152, height: 44, alignment: .trailing)
+        .animation(reduceMotion ? .easeInOut(duration: 0.2) : .smooth(duration: 0.32), value: showDeadlines)
         .animation(reduceMotion ? .easeInOut(duration: 0.2) : .smooth(duration: 0.32), value: showReminders)
         .animation(reduceMotion ? .easeInOut(duration: 0.2) : .smooth(duration: 0.32), value: showReview)
         .accessibilityElement(children: .contain)
-        .accessibilityHidden(!showReminders && !showReview)
+        .accessibilityHidden(!showReminders && !showReview && !showDeadlines)
     }
     private func filterIcon(_ symbol: String, tint: Color, count: Int, isActive: Bool) -> some View {
         Image(systemName: symbol)
@@ -512,33 +570,32 @@ struct DayView: View {
         }
         let reviewing = filter == .review
         let showingReminders = filter == .reminders
-        let reviewItems = visible.filter(needsReview)
-        let reminderItems = visible.filter(hasOpenReminder)
-        let filtered = visible.filter { item in
-            switch filter {
-            case .all: true
-            case .review: needsReview(item)
-            case .reminders: hasOpenReminder(item)
-            }
-        }
+        // Items carried on from this day stay in their place as quiet entries. They count
+        // towards completion on their live day, but a filter takes each row that has its dot.
+        let moved = Planner.movedItems(from: day, in: store.items, now: now)
+        let filtered = (visible + moved).filter { matches($0, filter, on: day) }
         // Every row stays mounted and the filter only collapses the others. A row inserted when
         // a filter cleared had no earlier position, so it appeared at its final spot while the
         // rows around it were still sliding back, overlapping them.
         let shown = Set(filtered.map(\.id))
-        // A carried item keeps its old time on its scheduled day; here it is untimed.
-        let anyTimeItems = visible.filter { $0.minute == nil || $0.isCarried(now: now) }
-        let timedItems = visible.filter { $0.minute != nil && !$0.isCarried(now: now) }
-        // Items carried on from this day stay as quiet entries, outside the
-        // counts and filters: they are counted and reviewed on their live day.
-        let moved = Planner.movedItems(from: day, in: store.items, now: now)
+        // A carried item keeps its old time on its scheduled day; elsewhere it is untimed.
+        let keepsTime = { (item: PlanItem) in item.minute != nil && (!item.isCarried(now: now) || item.day == day) }
+        let order = { (a: PlanItem, b: PlanItem) in
+            if a.minute != b.minute { return (a.minute ?? -1) < (b.minute ?? -1) }
+            return a.createdAt < b.createdAt
+        }
+        let anyTimeItems = (visible + moved).filter { !keepsTime($0) }.sorted(by: order)
+        let timedItems = (visible + moved).filter(keepsTime).sorted(by: order)
         return ScrollViewReader { proxy in ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 16) {
                     Spacer(minLength: 0)
                     if reviewing {
-                        Text("\(reviewItems.count) to review").font(.caption).foregroundStyle(reviewTint)
+                        Text("\(filtered.count) to review").font(.caption).foregroundStyle(reviewTint)
                     } else if showingReminders {
-                        Text("\(reminderItems.count) with reminders").font(.caption).foregroundStyle(.blue)
+                        Text("\(filtered.count) with reminders").font(.caption).foregroundStyle(.blue)
+                    } else if filter == .deadlines {
+                        Text("\(filtered.count) with deadlines").font(.caption).foregroundStyle(.red)
                     } else if !visible.isEmpty {
                         // Cancelled items are left out of the total: nothing is asked of them.
                         Text("\(visible.filter(\.isComplete).count)/\(visible.filter { !$0.isCancelled }.count) complete")
@@ -546,54 +603,31 @@ struct DayView: View {
                     }
                 }
                 .padding(.horizontal, 20).padding(.vertical, 6)
-                if filter != .all && filtered.isEmpty {
-                    ContentUnavailableView {
-                        Label("All clear", systemImage: "checkmark.circle")
-                    } description: {
-                        Text(showingReminders
-                             ? "There are no unfinished items with reminders for this day. Your other items are still in the full day view."
-                             : "There’s nothing left to review for this day. Your other items are still in the full day view.")
-                    } actions: {
-                        Button("Show full day") { setFilter(.all) }.buttonStyle(.bordered)
-                    }.frame(minHeight: 280)
-                }
                 if filter == .all && visible.isEmpty && moved.isEmpty {
-                    ContentUnavailableView {
-                        Label("Room for your day", systemImage: "sun.horizon")
-                    } description: {
-                        Text("Something to do. A little time set aside. Start with what matters today.")
-                    } actions: {
-                        Button("Add an item", systemImage: "plus") { add() }.buttonStyle(.borderedProminent)
-                        if store.items.isEmpty { Button("Try a sample day") { store.addSampleDay(); goToToday() } }
-                    }.frame(minHeight: 280)
+                    // Just a quiet line: the add button below already starts the day.
+                    Text("Nothing planned")
+                        .font(.body).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 200)
+                    // Once the last section has gone, rather than on top of it.
+                    .transition(.opacity.animation(.easeOut(duration: 0.25).delay(0.15)))
                 }
                 if !anyTimeItems.isEmpty {
                     sectionHeading("Anytime")
                         .modifier(FilterCollapse(collapsed: !anyTimeItems.contains { shown.contains($0.id) }))
-                    ForEach(anyTimeItems) { item in
-                        row(item, filter: filter, day: day)
-                            .padding(.horizontal, 16)
-                            .modifier(FilterCollapse(collapsed: !shown.contains(item.id)))
-                    }
+                        .transition(sectionRemoval)
+                    anytimeItems(items: anyTimeItems, shown: shown, day: day, filter: filter)
+                        .padding(.horizontal, 16)
+                        .transition(sectionRemoval)
                 }
                 if !timedItems.isEmpty {
                     sectionHeading("Scheduled")
                         .modifier(FilterCollapse(collapsed: !timedItems.contains { shown.contains($0.id) }))
+                        .transition(sectionRemoval)
                     scheduledItems(items: timedItems, shown: shown, day: day, filter: filter)
                         .padding(.horizontal, 16)
+                        .transition(sectionRemoval)
                 }
-                if !moved.isEmpty {
-                    // No heading: each entry's "Carried to" line says what it is.
-                    VStack(alignment: .leading, spacing: 0) {
-                        ForEach(moved) { item in
-                            movedRow(item, day: day)
-                                .padding(.horizontal, 16)
-                        }
-                    }
-                    .padding(.top, visible.isEmpty ? 0 : 16)
-                    .modifier(FilterCollapse(collapsed: filter != .all))
-                }
-                SettingsLink()
+                SettingsLink(isEnabled: { daySwipeInteraction.allowsItemActions })
                     .frame(maxWidth: .infinity).padding(.vertical, 28)
             }
             // One SwiftUI scroll surface resizes continuously with the rows.
@@ -609,11 +643,43 @@ struct DayView: View {
         .modifier(ScrollsToNowInTimeView(proxy: proxy))
         }
     }
+    /// A section whose last item was deleted leaves quickly: with the list's half-second
+    /// animation it lingered under the empty day that took its place.
+    private var sectionRemoval: AnyTransition {
+        .asymmetric(insertion: .opacity, removal: .opacity.animation(.easeOut(duration: 0.15)))
+    }
     private func sectionHeading(_ title: String) -> some View {
         Text(title).font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 8)
     }
+    /// Use the same measured-row layout as Scheduled, without the clock-axis placement.
+    private func anytimeItems(items: [PlanItem], shown: Set<UUID>, day: Day, filter: DayFilter) -> some View {
+        let contentKey = TimelineContentKey(items: items, day: day, order: items.map(\.id),
+                                            markers: items.map { item in [DayFilter.review, .reminders, .deadlines].map { matches(item, $0, on: day) } },
+                                            filter: filter.rawValue, showNow: false, timeNotes: [], typeSize: dynamicTypeSize)
+        return DayTimelineLayout(startMinute: 0, laneCount: 1, contentKey: contentKey, compactOnly: true, progress: 0) {
+            // The same rows as Scheduled, with the same pair of List and Time view copies and
+            // modifiers; as plain rows they made each filter animation drop frames on a phone.
+            ForEach(items) { item in
+                ForEach([false, true], id: \.self) { timedVariant in
+                    row(item, filter: filter, day: day, sharedSchedule: true, timeBelowTitle: timedVariant)
+                        .modifier(FilterCollapse(collapsed: !shown.contains(item.id)))
+                        .layoutValue(key: TimelineCollapsedKey.self, value: !shown.contains(item.id))
+                        .modifier(ModeRowVariant(isTimed: timedVariant, compactSortPriority: 0))
+                        .layoutValue(key: TimelineTimedVariantKey.self, value: timedVariant)
+                }
+            }
+        }
+        // Blend the row copies with each other before compositing over the page.
+        .compositingGroup()
+        // An empty asynchronous canvas, like the scale and connectors behind Scheduled, has
+        // SwiftUI render the group off the main thread. Without it every filter animation here
+        // dropped a frame several times a second on a phone, while Scheduled stayed smooth.
+        .background { Canvas(rendersAsynchronously: true) { _, _ in }.allowsHitTesting(false).accessibilityHidden(true) }
+        .accessibilityElement(children: .contain)
+    }
+
     /// All of the day's timed items; those not in `shown` are collapsed by the filter.
     private func scheduledItems(items: [PlanItem], shown: Set<UUID>, day: Day, filter: DayFilter) -> some View {
         let calendar = Calendar.current
@@ -627,7 +693,9 @@ struct DayView: View {
                 let parts = calendar.dateComponents([.hour, .minute], from: date)
                 return Double((parts.hour ?? 0) * 60 + (parts.minute ?? 0))
             }
-            return TimelineEntry(id: item.id, minute: minute(start), endMinute: item.end.map(minute), complete: item.isSettled)
+            // A carried entry is drawn as quietly as a finished item.
+            return TimelineEntry(id: item.id, minute: minute(start), endMinute: item.end.map(minute),
+                                 complete: item.isSettled || item.movedAway(from: day, now: now))
         }.sorted { $0.minute < $1.minute }
         let currentMinute: Double? = day == Day(now) ? Double(calendar.component(.hour, from: now) * 60 + calendar.component(.minute, from: now)) : nil
         let firstMinute = min(entries.map(\.minute).min() ?? 360, currentMinute ?? 360)
@@ -648,8 +716,8 @@ struct DayView: View {
         let activeTop = active.first.flatMap { compactOrder[$0.id] }.map { $0 - 1 } ?? 0
         // Keep both text layouts at fixed endpoint widths. Only their positions
         // and opacity animate, so wrapping never changes in the middle of a frame.
-        let contentKey = TimelineContentKey(items: items, order: compactItems.map(\.id),
-                                            markers: items.map { [needsReview($0), hasOpenReminder($0)] },
+        let contentKey = TimelineContentKey(items: items, day: day, order: compactItems.map(\.id),
+                                            markers: items.map { item in [DayFilter.review, .reminders, .deadlines].map { matches(item, $0, on: day) } },
                                             filter: filter.rawValue, showNow: showNow,
                                             timeNotes: items.map { timeNote($0, day: day) != nil },
                                             typeSize: dynamicTypeSize)
@@ -677,10 +745,10 @@ struct DayView: View {
             }
             ForEach(items) { item in
                 ForEach([false, true], id: \.self) { timedVariant in
-                    row(item, filter: filter, day: day, feedbackEnabled: false, sharedSchedule: true, timeBelowTitle: timedVariant)
+                    row(item, filter: filter, day: day, sharedSchedule: true, timeBelowTitle: timedVariant)
                         .modifier(FilterCollapse(collapsed: !shown.contains(item.id)))
                         .layoutValue(key: TimelineCollapsedKey.self, value: !shown.contains(item.id))
-                        .modifier(ModeRowVariant(isTimed: timedVariant, isComplete: item.isComplete,
+                        .modifier(ModeRowVariant(isTimed: timedVariant,
                                                  compactSortPriority: showNow ? -Double(compactOrder[item.id] ?? 0) : 0))
                         .layoutValue(key: TimelineCompactOrderKey.self, value: compactOrder[item.id] ?? 0)
                         .layoutValue(key: TimelineTimedVariantKey.self, value: timedVariant)
@@ -749,42 +817,54 @@ struct DayView: View {
         .allowsHitTesting(false)
         .layoutValue(key: TimelineMarkerKey.self, value: true)
     }
-    private func row(_ item: PlanItem, filter: DayFilter, day: Day, feedbackEnabled: Bool = true, sharedSchedule: Bool = false,
+    private func row(_ item: PlanItem, filter: DayFilter, day: Day, sharedSchedule: Bool = false,
                      showsMenu: Bool = true, timeBelowTitle: Bool = false) -> some View {
         let reviewing = filter == .review
         let showingReminders = filter == .reminders
+        // On the days an item was carried on from, it stays in its place as a quiet entry pointing
+        // to where it went. It is the same item as on its live day, so completing or opening it
+        // here acts on that copy; it isn't counted, reviewed or reminded about here, but keeps an
+        // orange dot while unfinished so the earlier day still shows it was left open.
+        let carried = carriedDestination(item, from: day)
+        let review = matches(item, .review, on: day)
+        let reminder = matches(item, .reminders, on: day)
+        let deadline = matches(item, .deadlines, on: day)
+        // A carried entry keeps its time on its scheduled day; elsewhere a carried item is untimed.
+        let showsTime = carried != nil ? day == item.day : !item.isCarried(now: now)
         return VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 8) {
-                Button {
-                    guard daySwipeInteraction.allowsItemActions else { return }
-                    withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.toggle(item, on: day) }
-                } label: {
+                CompletionButton(item: item, day: day, isEnabled: { daySwipeInteraction.allowsItemActions },
+                                 keepsCarriedArrow: carried != nil) {
                     Group {
-                        if let progress = timeProgress(item) {
+                        if carried != nil {
+                            OutlinedCompletionCircle(glyph: .chevron)
+                                .foregroundStyle(.tertiary)
+                        } else if let progress = timeProgress(item) {
                             ProgressCircle(progress: progress)
                         } else {
-                            Image(systemName: item.stateSymbol)
-                                .resizable().scaledToFit()
-                                .foregroundStyle(item.isCancelled ? .tertiary : item.isComplete ? .secondary : .primary)
+                            // A completed item's tick is drawn by the button over this.
+                            OutlinedCompletionCircle(glyph: item.isCancelled ? .cross : .none)
+                                .foregroundStyle(item.isCancelled ? .tertiary : .primary)
                         }
                     }
-                    .frame(width: 22, height: 22)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-                }.buttonStyle(ItemPressStyle())
-                    .accessibilityLabel(item.completionActionLabel)
-                    .accessibilityValue([item.isCancelled ? "Cancelled" : nil, timeProgress(item).flatMap { $0 >= 1 ? "Time passed" : $0 > 0 ? "\(Int($0 * 100))% of the time passed" : nil },
-                                         needsReview(item) ? "Needs review" : nil, hasOpenReminder(item) ? "Reminder set" : nil].compactMap { $0 }.joined(separator: ", "))
-                    .sensoryFeedback(.success, trigger: item.isComplete) { _, _ in feedbackEnabled }
+                }
+                .accessibilityValue([carried.map { "Carried to \($0)" }, item.isCancelled ? "Cancelled" : nil,
+                                     carried == nil ? timeProgress(item).flatMap { $0 >= 1 ? "Time passed" : $0 > 0 ? "\(Int($0 * 100))% of the time passed" : nil } : nil,
+                                     review ? "Needs review" : nil, reminder ? "Reminder set" : nil,
+                                     deadline ? item.deadline.map { "Due \($0.formatted(date: .abbreviated, time: .shortened))" } : nil].compactMap { $0 }.joined(separator: ", "))
                 Button {
                     guard daySwipeInteraction.allowsItemActions else { return }
                     editing = item
                 } label: {
                     HStack(alignment: .center, spacing: 12) {
                         VStack(alignment: .leading, spacing: 3) {
-                            itemTitle(item)
+                            itemTitle(item, isCarriedEntry: carried != nil)
                                 .fixedSize(horizontal: false, vertical: true)
-                            if timeBelowTitle, let start = item.start(), !item.isCarried(now: now) {
+                            if let carried {
+                                Text("Carried to \(carried)")
+                                    .font(.caption).foregroundStyle(.tertiary)
+                            }
+                            if timeBelowTitle, let start = item.start(), showsTime {
                                 scheduleLabel(item, start: start, day: day)
                                     .frame(width: scheduleColumnWidth, alignment: .leading)
                                     .fixedSize(horizontal: false, vertical: true)
@@ -796,13 +876,9 @@ struct DayView: View {
                             if !item.people.isEmpty || !item.locations.isEmpty {
                                 itemDetailsLine(item)
                             }
-                            if item.isCarried(now: now) {
-                                Text("Carried from \(item.day.date().formatted(.dateTime.day().month(.abbreviated)))")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        if !timeBelowTitle, let start = item.start(), !item.isCarried(now: now) {
+                        if !timeBelowTitle, let start = item.start(), showsTime {
                             scheduleLabel(item, start: start, day: day)
                                 .multilineTextAlignment(.trailing)
                                 // The shared label's column, also in the lifted copy, so lifting
@@ -820,91 +896,60 @@ struct DayView: View {
                     .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
                     .contentShape(Rectangle())
                 }.buttonStyle(ItemCardPressStyle())
-                    .accessibilityValue([sharedSchedule ? item.start().map { timeLabel(item, start: $0, day: day) } : nil,
-                                         timeNote(item, day: day, width: .wide), item.isCancelled ? "Cancelled" : nil].compactMap { $0 }.joined(separator: ", "))
-                    .accessibilityHint((needsReview(item) ? "Needs review. " : "") + (hasOpenReminder(item) ? "Reminder set. " : "") + "Open details and edit")
+                    .accessibilityValue([carried.map { "Carried to \($0)" },
+                                         sharedSchedule && showsTime ? item.start().map { timeLabel(item, start: $0, day: day) } : nil,
+                                         timeNote(item, day: day, width: .wide),
+                                         // A carried entry's circle doesn't show a tick, so say it here.
+                                         item.isCancelled ? "Cancelled" : carried != nil && item.isComplete ? "Completed" : nil].compactMap { $0 }.joined(separator: ", "))
+                    .accessibilityHint((review ? "Needs review. " : "") + (reminder ? "Reminder set. " : "") + "Open details and edit")
                     .accessibilityAction(named: item.isCancelled ? "Uncancel" : "Cancel") { setCancelled(item, !item.isCancelled, on: day) }
             }
             // Always present, collapsed outside a filter, so it opens and moves with its row in
             // the filter's one animation. A panel inserted only when filtering started had no
             // earlier position: the timeline layout put it straight at its final spot, ahead of
             // its moving row, so it used to wait for the rows to settle before fading in.
+            let showsPanel = filter != .all && matches(item, filter, on: day)
             itemStatusPanel(item, filter: panelFilter, day: day)
                 .padding(.leading, 52).padding(.bottom, 12)
-                .frame(height: filter == .all ? 0 : nil, alignment: .top)
+                // The panel expands by revealing its full-size contents, not by squeezing
+                // and remeasuring its action buttons on each frame of the height animation.
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(height: showsPanel ? nil : 0, alignment: .top)
                 .clipped()
-                .opacity(filter == .all ? 0 : 1)
-                .allowsHitTesting(filter != .all)
-                .accessibilityHidden(filter == .all)
+                .opacity(showsPanel ? 1 : 0)
+                .allowsHitTesting(showsPanel)
+                .accessibilityHidden(!showsPanel)
         }
-        .padding(.trailing, (!reviewing && needsReview(item) ? 14.0 : 0) + (!showingReminders && hasOpenReminder(item) ? 14.0 : 0))
+        // Dots show only in the full day; a filtered row's panel already says why it is there.
+        .padding(.trailing, filter != .all ? 0 : (review ? 14.0 : 0) + (reminder ? 14.0 : 0) + (deadline ? 14.0 : 0))
         .overlay(alignment: .trailing) {
-            rowMarkers(item, filter: filter)
+            rowMarkers(item, filter: filter, day: day)
         }
-        .modifier(ItemCard(outlined: item.isSettled))
+        // Every item has the same faint fill: open, ticked, cancelled or carried.
+        .modifier(ItemCard())
         .itemMenuOnHold(item, day: day, isEnabled: { daySwipeInteraction.allowsItemActions }, showsMenu: showsMenu) {
-            AnyView(row(item, filter: filter, day: day, feedbackEnabled: false, showsMenu: false, timeBelowTitle: timeBelowTitle))
+            AnyView(row(item, filter: filter, day: day, showsMenu: false, timeBelowTitle: timeBelowTitle))
         }
         .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 20))
         .listRowSeparatorTint(Color.primary.opacity(0.07))
     }
-    // An item carried on from an earlier day. It is the same item as on its live
-    // day, so completing or opening it here acts on that copy.
-    private func movedRow(_ item: PlanItem, day: Day, showsMenu: Bool = true) -> some View {
+    /// Where an item went, if `day` is one it was carried on from.
+    private func carriedDestination(_ item: PlanItem, from day: Day) -> String? {
+        guard item.movedAway(from: day, now: now) else { return nil }
         let live = item.liveDay(now: now)
-        let destination = live == Day(now) ? "today"
-            : live.date().formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
-        return HStack(alignment: .center, spacing: 8) {
-            Button {
-                guard daySwipeInteraction.allowsItemActions else { return }
-                withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.toggle(item, on: day) }
-            } label: {
-                ZStack {
-                    Circle().strokeBorder(lineWidth: 1.6)
-                    Image(systemName: "arrow.right")
-                        .font(.system(size: 10, weight: .semibold))
-                }
-                    .frame(width: 22, height: 22)
-                    .foregroundStyle(.tertiary)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }.buttonStyle(ItemPressStyle())
-                .accessibilityLabel(item.completionActionLabel)
-                .accessibilityValue("Carried to \(destination)")
-            Button {
-                guard daySwipeInteraction.allowsItemActions else { return }
-                editing = item
-            } label: {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(item.title).font(.body)
-                        .foregroundStyle(.secondary)
-                        .strikethrough(item.isSettled, pattern: .solid, color: Color.secondary.opacity(0.45))
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text("Carried to \(destination)")
-                        .font(.caption).foregroundStyle(.tertiary)
-                }
-                .padding(.vertical, 8)
-                .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
-                .contentShape(Rectangle())
-            }.buttonStyle(ItemCardPressStyle())
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(item.title)
-                .accessibilityValue("Carried to \(destination)" + (item.isComplete ? ", completed" : item.isCancelled ? ", cancelled" : ""))
-                .accessibilityHint("Open details and edit")
-                .accessibilityAction(named: item.isCancelled ? "Uncancel" : "Cancel") { setCancelled(item, !item.isCancelled, on: day) }
-        }
-        .modifier(ItemCard(outlined: true))
-        .itemMenuOnHold(item, day: day, isEnabled: { daySwipeInteraction.allowsItemActions }, showsMenu: showsMenu, isMoved: true) {
-            AnyView(movedRow(item, day: day, showsMenu: false))
-        }
+        return live == Day(now) ? "today" : live.date().formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
     }
-    private func rowMarkers(_ item: PlanItem, filter: DayFilter) -> some View {
+    /// The dots of every filter the row is in, in the full day only.
+    private func rowMarkers(_ item: PlanItem, filter: DayFilter, day: Day) -> some View {
         HStack(spacing: 8) {
-            if filter != .review && needsReview(item) {
+            if filter == .all && matches(item, .review, on: day) {
                 Circle().fill(reviewTint).frame(width: 6, height: 6)
             }
-            if filter != .reminders && hasOpenReminder(item) {
+            if filter == .all && matches(item, .reminders, on: day) {
                 Circle().fill(.blue).frame(width: 6, height: 6)
+            }
+            if filter == .all && matches(item, .deadlines, on: day) {
+                Circle().fill(.red).frame(width: 6, height: 6)
             }
         }
         .accessibilityHidden(true)
@@ -966,24 +1011,49 @@ struct DayView: View {
         setFilter(value ? .review : .all)
     }
     private func setFilter(_ value: DayFilter) {
-        withAnimation(reviewAnimation) {
+        guard value != filter else { return }
+        filterTransition &+= 1
+        let transition = filterTransition
+        daySwipeInteraction.isFiltering = true
+        if !reduceMotion { FrameRateBoost.shared.request(for: .milliseconds(700)) }
+        withAnimation(reviewAnimation, completionCriteria: .removed) {
             filter = value
             if value != .all { panelFilter = value }
+        } completion: {
+            // A second tap owns the pause until its own transition is finished.
+            guard transition == filterTransition else { return }
+            daySwipeInteraction.isFiltering = false
         }
     }
     private func itemStatusPanel(_ item: PlanItem, filter: DayFilter, day: Day) -> some View {
         let reminder = filter == .reminders
+        let deadline = filter == .deadlines
         let message: String
         if reminder, let time = item.displayedReminder(now: now) {
             message = time.formatted(date: Day(time) == day ? .omitted : .abbreviated, time: .shortened)
                 + (item.reminders.count > 1 ? " · \(item.reminders.count) reminders" : "")
+        } else if deadline, let due = item.deadline {
+            // The reminder panel's format: a custom pattern is built on first use, which stalled the
+            // filter's opening animation the first time.
+            let when = due.formatted(date: Day(due) == day ? .omitted : .abbreviated, time: .shortened)
+            message = due <= now ? "Was due \(when)" : "Due \(when)"
+        } else if let carried = carriedDestination(item, from: day) {
+            message = "Unfinished, carried to \(carried)"
         } else {
             message = item.end != nil ? "This time has ended" : "The scheduled time has passed"
         }
         var actions = [FilteredItemAction(title: "Complete", symbol: "checkmark") {
             withAnimation(self.reviewAnimation) { self.store.toggle(item, on: day) }
         }]
-        if reminder {
+        if deadline {
+            actions.append(FilteredItemAction(title: "Change", symbol: "calendar") { self.editing = item })
+            actions.append(FilteredItemAction(title: "Remove", symbol: "flag.slash") {
+                guard var updated = self.store.item(item.id) else { return }
+                updated.deadline = nil
+                do { try withAnimation(self.reviewAnimation) { try self.store.save(updated) } }
+                catch { self.store.errorMessage = error.localizedDescription }
+            })
+        } else if reminder {
             actions.append(FilteredItemAction(title: "Change time", symbol: "clock.arrow.circlepath") {
                 self.changingReminder = item
             })
@@ -1000,8 +1070,8 @@ struct DayView: View {
             })
             actions.append(FilteredItemAction(title: "Reschedule", symbol: "calendar") { self.editing = item })
         }
-        return FilteredItemPanel(symbol: reminder ? "alarm" : "exclamationmark.triangle",
-                                 message: message, tint: reminder ? .blue : reviewTint,
+        return FilteredItemPanel(symbol: deadline ? "flag" : reminder ? "alarm" : "exclamationmark.triangle",
+                                 message: message, tint: deadline ? .red : reminder ? .blue : reviewTint,
                                  itemTitle: item.title, actions: actions.map { action in
             FilteredItemAction(title: action.title, symbol: action.symbol) {
                 guard daySwipeInteraction.allowsItemActions else { return }
@@ -1009,15 +1079,16 @@ struct DayView: View {
             }
         })
     }
-    private func itemTitle(_ item: PlanItem) -> some View {
+    private func itemTitle(_ item: PlanItem, isCarriedEntry: Bool = false) -> some View {
         Text(item.title).font(.body.weight(.medium))
-            .settledTitleStyle(item)
+            .settledTitleStyle(item, isCarriedEntry: isCarriedEntry)
     }
     private func scheduleLabel(_ item: PlanItem, start: Date, day: Day) -> some View {
         VStack(alignment: .trailing, spacing: 2) {
+            // The same light grey as the row's other small text (people, places, carried, time left).
             Text(timeLabel(item, start: start, day: day))
                 .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.tertiary)
             if let note = timeNote(item, day: day) {
                 Text(note)
                     .font(.caption2.monospacedDigit())
@@ -1261,7 +1332,6 @@ private struct ModeTimelineLayout<Content: View>: View {
 
 private struct ModeRowVariant: ViewModifier {
     let isTimed: Bool
-    let isComplete: Bool
     let compactSortPriority: Double
     @Environment(ViewMode.self) private var mode
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -1269,12 +1339,13 @@ private struct ModeRowVariant: ViewModifier {
     func body(content: Content) -> some View {
         let active = mode.showingTime == isTimed
         content
-            .sensoryFeedback(.success, trigger: isComplete) { _, _ in active }
             .opacity(active ? 1 : 0)
             // Both variants share a position, so additive blending keeps
             // identical pixels fully opaque instead of dipping to 75%
-            // halfway through a normal crossfade.
-            .blendMode(.plusLighter)
+            // halfway through a normal crossfade. Only while switching: a row
+            // blended this way that moved in from off screen (a filter
+            // closing up the list above) stayed undrawn until the move ended.
+            .blendMode(mode.switching ? .plusLighter : .normal)
             .animation(ViewMode.animation(reduceMotion: reduceMotion), value: mode.showingTime)
             .allowsHitTesting(active)
             .accessibilityHidden(!active)
@@ -1301,7 +1372,8 @@ private struct ScrollsToNowInTimeView: ViewModifier {
 
 /// Keep UIKit's month layout and intrinsic sizing inside the dock's animated glass.
 /// Multi-date selection reports taps on a highlighted day too, allowing that tap to
-/// close the calendar. Today stays circled alongside the viewed date.
+/// close the calendar. The viewed date is a blue circle; today is UIKit's own blue number.
+/// (Adding today to the selection drew both as the same circle.)
 private struct DayCalendar: UIViewRepresentable {
     let selection: Date
     let today: Date
@@ -1312,7 +1384,9 @@ private struct DayCalendar: UIViewRepresentable {
         let view = UICalendarView()
         view.calendar = .current
         view.locale = .current
-        view.tintColor = .label
+        // A colour tint is what lets UIKit set today apart: with the label colour, today's
+        // number looked like every other day.
+        view.tintColor = .systemBlue
         context.coordinator.today = Day(today)
         view.wantsDateDecorations = false
         let selection = UICalendarSelectionMultiDate(delegate: context.coordinator)
@@ -1324,13 +1398,16 @@ private struct DayCalendar: UIViewRepresentable {
     func updateUIView(_ view: UICalendarView, context: Context) {
         context.coordinator.onPick = onPick
         let currentDay = Day(today)
-        let todayChanged = context.coordinator.today != currentDay
-        context.coordinator.today = currentDay
+        if context.coordinator.today != currentDay {
+            // The calendar stays built while hidden, so redraw its days when the date changes.
+            context.coordinator.today = currentDay
+            view.calendar = .current
+        }
         let day = Day(selection)
-        guard context.coordinator.day != day || todayChanged else { return }
+        guard context.coordinator.day != day else { return }
         context.coordinator.day = day
         let components = Coordinator.components(of: selection)
-        context.coordinator.selection?.setSelectedDates(context.coordinator.highlightedDates(for: selection), animated: false)
+        context.coordinator.selection?.setSelectedDates([components], animated: false)
         view.setVisibleDateComponents(components, animated: false)
     }
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UICalendarView, context: Context) -> CGSize? {
@@ -1351,20 +1428,15 @@ private struct DayCalendar: UIViewRepresentable {
         static func components(of date: Date) -> DateComponents {
             Calendar.current.dateComponents([.calendar, .era, .year, .month, .day], from: date)
         }
-        func highlightedDates(for date: Date) -> [DateComponents] {
-            var dates = [Self.components(of: date)]
-            if let today, today != Day(date) { dates.append(Self.components(of: today.date())) }
-            return dates
-        }
         func multiDateSelection(_ selection: UICalendarSelectionMultiDate, didSelectDate dateComponents: DateComponents) {
             guard let date = Calendar.current.date(from: dateComponents) else { return }
-            selection.setSelectedDates(highlightedDates(for: date), animated: false)
+            selection.setSelectedDates([Self.components(of: date)], animated: false)
             day = Day(date)
             onPick(date)
         }
         func multiDateSelection(_ selection: UICalendarSelectionMultiDate, didDeselectDate dateComponents: DateComponents) {
             guard let date = Calendar.current.date(from: dateComponents) else { return }
-            selection.setSelectedDates(highlightedDates(for: date), animated: false)
+            selection.setSelectedDates([Self.components(of: date)], animated: false)
             day = Day(date)
             onPick(date)
         }
@@ -1406,7 +1478,7 @@ private struct ModeSectionHeaderFade: ViewModifier {
 private struct ProgressCircle: View {
     let progress: Double
     @Environment(\.colorSchemeContrast) private var contrast
-    private static let lineWidth: CGFloat = 1.6
+    private static let lineWidth = CompletionCircle.lineWidth
 
     var body: some View {
         ZStack {
@@ -1417,17 +1489,6 @@ private struct ProgressCircle: View {
                 .rotationEffect(.degrees(-90))
         }
         .padding(Self.lineWidth / 2)
-    }
-}
-
-private struct ItemPressStyle: ButtonStyle {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .opacity(configuration.isPressed ? 0.6 : 1)
-            .animation(reduceMotion ? nil : .easeOut(duration: configuration.isPressed ? 0.06 : 0.16),
-                       value: configuration.isPressed)
     }
 }
 
@@ -1510,8 +1571,8 @@ private struct GlowRing: UIViewRepresentable {
     func updateUIView(_ view: GlowRingView, context: Context) {}
 }
 
-// A conic gradient beneath a fixed mask of the three blurred capsule strokes.
-// The mask is drawn once per size, so the halo costs no frames once shown.
+// Cache the composed gradient and mask as one rasterized layer. Even a still
+// masked gradient otherwise adds compositing work behind the live glass backdrop.
 private final class GlowRingView: UIView {
     private static let spill: CGFloat = 40
     private static let imageContext = CIContext()
@@ -1523,6 +1584,7 @@ private final class GlowRingView: UIView {
     private let ringMask = CALayer()
     private var maskSize: CGSize?
     private var maskScale: CGFloat?
+    private var renderedStyle: UIUserInterfaceStyle?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -1532,6 +1594,7 @@ private final class GlowRingView: UIView {
         gradient.endPoint = CGPoint(x: 1, y: 0.5)
         container.addSublayer(gradient)
         container.mask = ringMask
+        container.shouldRasterize = true
         layer.addSublayer(container)
         registerForTraitChanges([UITraitUserInterfaceStyle.self, UITraitDisplayScale.self]) { (view: GlowRingView, _) in
             view.setNeedsLayout()
@@ -1542,16 +1605,22 @@ private final class GlowRingView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         guard bounds.width > 0, bounds.height > 0 else { return }
+        let scale = traitCollection.displayScale
+        let style = traitCollection.userInterfaceStyle
+        // Filter/layout updates can visit this view without changing the glow. Reassigning
+        // gradient properties would invalidate the raster cache during those animations.
+        guard maskSize != bounds.size || maskScale != scale || renderedStyle != style else { return }
+        renderedStyle = style
         let frame = bounds.insetBy(dx: -Self.spill, dy: -Self.spill)
         let side = hypot(frame.width, frame.height)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         container.frame = frame
+        container.rasterizationScale = scale
         ringMask.frame = container.bounds
         gradient.bounds = CGRect(x: 0, y: 0, width: side, height: side)
         gradient.position = CGPoint(x: frame.width / 2, y: frame.height / 2)
         gradient.colors = Self.colors.map { UIColor($0).resolvedColor(with: traitCollection).cgColor }
-        let scale = traitCollection.displayScale
         if maskSize != bounds.size || maskScale != scale {
             ringMask.contents = Self.ringImage(size: bounds.size, scale: scale)
             ringMask.contentsScale = scale
@@ -1646,6 +1715,9 @@ private struct FilterCollapse: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            // Keep the contents at their natural height while the outer frame closes.
+            // Otherwise shrinking Anytime rows repeatedly compress their buttons/text.
+            .fixedSize(horizontal: false, vertical: true)
             .frame(height: collapsed ? 0 : nil, alignment: .top)
             .clipped()
             .opacity(collapsed ? 0 : 1)
@@ -1685,6 +1757,7 @@ private struct SharedLabelVisibility: ViewModifier {
 
 private struct TimelineContentKey: Equatable {
     let items: [PlanItem]
+    let day: Day
     let order: [UUID]
     let markers: [[Bool]]
     let filter: Int
@@ -1699,6 +1772,7 @@ private struct DayTimelineLayout: Layout {
     let startMinute: Double
     let laneCount: Int
     let contentKey: TimelineContentKey
+    var compactOnly = false
     var progress: Double
     var animatableData: Double {
         get { progress }
@@ -1736,6 +1810,31 @@ private struct DayTimelineLayout: Layout {
         cache.compact = []
         cache.timed = []
         cache.proposals = []
+        if compactOnly {
+            // Anytime shares Scheduled's cache and fixed endpoint proposals. The filter
+            // moves/reveals measured rows, never compressing and remeasuring their text.
+            for subview in subviews {
+                // A row's Time view copy lies on its List view copy, as in Scheduled.
+                if subview[TimelineTimedVariantKey.self], let last = cache.compact.last {
+                    cache.compact.append(last)
+                    cache.timed.append(last)
+                    cache.proposals.append(ProposedViewSize(last.size))
+                    continue
+                }
+                let height = subview.sizeThatFits(ProposedViewSize(width: width, height: nil)).height
+                let frame = CGRect(x: 0, y: compactBottom, width: width, height: height)
+                cache.compact.append(frame)
+                cache.timed.append(frame)
+                cache.proposals.append(ProposedViewSize(width: width, height: height))
+                compactBottom += height
+            }
+            cache.compactHeight = compactBottom
+            cache.timedHeight = compactBottom
+            cache.width = width
+            cache.start = startMinute
+            cache.gutter = gutter
+            return
+        }
         for index in subviews.indices {
             let subview = subviews[index]
             if let lane = subview[TimelineConnectorLaneKey.self] {
@@ -1943,6 +2042,10 @@ private final class DaySwipeInteraction: ObservableObject {
     var holdsPageWork = false {
         didSet { if oldValue && !holdsPageWork { pageWorkResumed?() } }
     }
+    /// Filtering still updates the visible page, but neighbour layout can wait.
+    var isFiltering = false {
+        didSet { if oldValue && !isFiltering { pageWorkResumed?() } }
+    }
     var pageWorkResumed: (() -> Void)?
     var externalDragChanged: ((CGFloat) -> Void)?
     var externalDragEnded: ((CGFloat, CGFloat, Bool) -> Void)?
@@ -1994,6 +2097,13 @@ private struct DayPageRevision: Equatable {
     let typeSize: DynamicTypeSize
     let insets: EdgeInsets
     let reduceMotion: Bool
+
+    func hasSameUnfilteredContent(as other: Self) -> Bool {
+        // The two neighbouring pages always show All. Filter and status-panel changes
+        // belong to the visible page and must not invalidate those neighbours.
+        items == other.items && minute == other.minute && typeSize == other.typeSize
+            && insets == other.insets && reduceMotion == other.reduceMotion
+    }
 }
 
 // Retain the current page and its neighbours. A swipe only moves existing
@@ -2039,7 +2149,7 @@ private struct DayPager: UIViewControllerRepresentable {
         coordinator.reduceMotion = reduceMotion
         coordinator.requestedDay = day
         coordinator.latestContent = content
-        if revision != coordinator.latestRevision { coordinator.previewsDirty = true }
+        if !revision.hasSameUnfilteredContent(as: coordinator.latestRevision) { coordinator.previewsDirty = true }
         coordinator.latestRevision = revision
         if day != coordinator.day {
             coordinator.navigate(to: day)
@@ -2158,13 +2268,14 @@ private struct DayPager: UIViewControllerRepresentable {
             scheduleWarm()
         }
         private func scheduleWarm() {
-            guard warmTask == nil, !dragging, animator == nil, requestedDay == day, size.width > 0 else { return }
+            guard warmTask == nil, !dragging, animator == nil, requestedDay == day, size.width > 0,
+                  !interaction.isFiltering else { return }
             warmTask = Task { [weak self] in
                 await Task.yield()
                 guard !Task.isCancelled, let self else { return }
                 self.warmTask = nil
                 guard !self.dragging, self.animator == nil, self.requestedDay == self.day,
-                      !self.interaction.holdsPageWork else { return }
+                      !self.interaction.holdsPageWork, !self.interaction.isFiltering else { return }
                 self.preparePreviews()
             }
         }
@@ -2219,8 +2330,8 @@ private struct DayPager: UIViewControllerRepresentable {
                 // arrives before the first idle turn or immediately reverses.
                 preparePreviews()
                 for scrollView in pageScrollViews() {
-                    // The same touch may have started scrolling the page: stop it, and keep its
-                    // indicator from sliding across the middle of the screen with the page.
+                    // The same touch may have started scrolling the page: stop it, and hide its
+                    // indicator at once so it doesn't slide across the screen with the page.
                     scrollView.showsVerticalScrollIndicator = false
                     scrollView.panGestureRecognizer.isEnabled = false
                     scrollView.panGestureRecognizer.isEnabled = true

@@ -27,6 +27,13 @@ final class RepeatingTests: XCTestCase {
         XCTAssertEqual(items, saved)
         XCTAssertFalse(items[1].isComplete)
     }
+    func testOccurrencesAreDueAsLongAfterTheirOwnDay() {
+        var item = template(.daily)
+        item.deadline = date(27, hour: 12)
+        var items: [PlanItem] = []
+        Planner.materialize([RepeatingPlan(template: item)], in: &items, from: day(26), through: day(28), calendar: calendar)
+        XCTAssertEqual(items.map(\.deadline), [date(27, hour: 12), date(28, hour: 12), date(29, hour: 12)])
+    }
     func testWeeklyCustomAndDailyPatterns() {
         for (rule, weekdays, expected) in [
             (RepeatRule.daily, [], [26, 27, 28, 29, 30, 31]),

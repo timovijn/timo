@@ -199,6 +199,15 @@ final class PlannerTests: XCTestCase {
         let migrated = try JSONDecoder().decode(PlanItem.self, from: JSONSerialization.data(withJSONObject: older))
         XCTAssertEqual(migrated.reminders, [date(29, 20)])
     }
+    func testDeadlinePersistsAndOnlyMarksUnfinishedItems() throws {
+        var item = task(29)
+        XCTAssertFalse(item.hasOpenDeadline)
+        item.deadline = date(31, 17)
+        XCTAssertEqual(try JSONDecoder().decode(PlanItem.self, from: JSONEncoder().encode(item)).deadline, date(31, 17))
+        XCTAssertTrue(item.hasOpenDeadline)
+        item.completedAt = date(30)
+        XCTAssertFalse(item.hasOpenDeadline)
+    }
     func testUpcomingReminderQueueExcludesPastAndCompletedAndKeepsNearest() {
         let day = Day(date(29), calendar: calendar)
         let first = PlanItem(title: "First", day: day, reminders: [date(29, 16), date(29, 13)])

@@ -1,0 +1,616 @@
+{
+  "source": "/Users/timovijn/Timo/GitHub/timo/Timo/ItemEditor.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Your item",
+        "location": {
+          "startingColumn": 41,
+          "startingLine": 261
+        }
+      },
+      {
+        "comment": "",
+        "key": "New item",
+        "location": {
+          "startingColumn": 55,
+          "startingLine": 261
+        }
+      },
+      {
+        "comment": "",
+        "key": "Check this item",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 272
+        }
+      },
+      {
+        "comment": "",
+        "key": "Unlink this item?",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 281
+        }
+      },
+      {
+        "comment": "",
+        "key": "Locations",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 209
+        }
+      },
+      {
+        "comment": "",
+        "key": "People",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 213
+        }
+      },
+      {
+        "comment": "",
+        "key": "Notes",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 217
+        }
+      },
+      {
+        "comment": "",
+        "key": "What’s on your day?",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 51
+        }
+      },
+      {
+        "comment": "",
+        "key": "Persona",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 66
+        }
+      },
+      {
+        "comment": "",
+        "key": "Day",
+        "location": {
+          "startingColumn": 44,
+          "startingLine": 76
+        }
+      },
+      {
+        "comment": "",
+        "key": "Time",
+        "location": {
+          "startingColumn": 44,
+          "startingLine": 85
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add time",
+        "location": {
+          "startingColumn": 62,
+          "startingLine": 85
+        }
+      },
+      {
+        "comment": "",
+        "key": "Remove time",
+        "location": {
+          "startingColumn": 87,
+          "startingLine": 85
+        }
+      },
+      {
+        "comment": "",
+        "key": "End time",
+        "location": {
+          "startingColumn": 48,
+          "startingLine": 97
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add end time",
+        "location": {
+          "startingColumn": 70,
+          "startingLine": 97
+        }
+      },
+      {
+        "comment": "",
+        "key": "End",
+        "location": {
+          "startingColumn": 96,
+          "startingLine": 97
+        }
+      },
+      {
+        "comment": "",
+        "key": "Remove end time",
+        "location": {
+          "startingColumn": 116,
+          "startingLine": 97
+        }
+      },
+      {
+        "comment": "",
+        "key": "Day",
+        "location": {
+          "startingColumn": 44,
+          "startingLine": 81
+        }
+      },
+      {
+        "comment": "",
+        "key": "Time",
+        "location": {
+          "startingColumn": 44,
+          "startingLine": 90
+        }
+      },
+      {
+        "comment": "",
+        "key": "Ends",
+        "location": {
+          "startingColumn": 48,
+          "startingLine": 106
+        }
+      },
+      {
+        "comment": "",
+        "key": "Schedule",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 120
+        }
+      },
+      {
+        "comment": "",
+        "key": "Schedule",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 118
+        }
+      },
+      {
+        "comment": "",
+        "key": "The schedule stays as planned. Until it is done, the item is also shown on today. Tick it off on the day it actually happened to keep it there.",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 124
+        }
+      },
+      {
+        "comment": "",
+        "key": "Move to next day if unfinished",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 129
+        }
+      },
+      {
+        "comment": "",
+        "key": "Carry over",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 137
+        }
+      },
+      {
+        "comment": "",
+        "key": "Unfinished items move to today. A time range keeps its time and duration; a single time becomes any time.",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 141
+        }
+      },
+      {
+        "comment": "",
+        "key": "This item stays on its scheduled day, even if unfinished.",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 142
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reminder",
+        "location": {
+          "startingColumn": 44,
+          "startingLine": 158
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add reminder",
+        "location": {
+          "startingColumn": 66,
+          "startingLine": 158
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reminder",
+        "location": {
+          "startingColumn": 92,
+          "startingLine": 158
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reminder",
+        "location": {
+          "startingColumn": 48,
+          "startingLine": 150
+        }
+      },
+      {
+        "comment": "",
+        "key": "Remove reminder",
+        "location": {
+          "startingColumn": 73,
+          "startingLine": 150
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reminders",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 177
+        }
+      },
+      {
+        "comment": "",
+        "key": "Deadline",
+        "location": {
+          "startingColumn": 48,
+          "startingLine": 195
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add deadline",
+        "location": {
+          "startingColumn": 70,
+          "startingLine": 195
+        }
+      },
+      {
+        "comment": "",
+        "key": "Deadline",
+        "location": {
+          "startingColumn": 96,
+          "startingLine": 195
+        }
+      },
+      {
+        "comment": "",
+        "key": "Deadline",
+        "location": {
+          "startingColumn": 48,
+          "startingLine": 187
+        }
+      },
+      {
+        "comment": "",
+        "key": "Remove deadline",
+        "location": {
+          "startingColumn": 73,
+          "startingLine": 187
+        }
+      },
+      {
+        "comment": "",
+        "key": "Due by",
+        "location": {
+          "startingColumn": 44,
+          "startingLine": 191
+        }
+      },
+      {
+        "comment": "",
+        "key": "Deadline",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 203
+        }
+      },
+      {
+        "comment": "",
+        "key": "A red dot marks the item until it is done. A deadline doesn’t notify you; add a reminder for that.",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 206
+        }
+      },
+      {
+        "comment": "",
+        "key": "Anything to remember",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 217
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete item",
+        "location": {
+          "startingColumn": 39,
+          "startingLine": 225
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete item",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 234
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 70,
+          "startingLine": 268
+        }
+      },
+      {
+        "comment": "",
+        "key": "Save",
+        "location": {
+          "startingColumn": 70,
+          "startingLine": 269
+        }
+      },
+      {
+        "comment": "",
+        "key": "Open Settings",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 274
+        }
+      },
+      {
+        "comment": "",
+        "key": "OK",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 279
+        }
+      },
+      {
+        "comment": "",
+        "key": "Unlink and Save",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 284
+        }
+      },
+      {
+        "comment": "",
+        "key": "Edit Original Item",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 286
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 288
+        }
+      },
+      {
+        "comment": "",
+        "key": "Remind me at",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 451
+        }
+      },
+      {
+        "comment": "",
+        "key": "Repeat",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 493
+        }
+      },
+      {
+        "comment": "",
+        "key": "Repeat",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 513
+        }
+      },
+      {
+        "comment": "",
+        "key": "Starts on the first matching day on or after the selected date. Changes to the original item, including how it repeats, apply to all its linked items. Changing how a linked item repeats unlinks it and makes it a new original item. Completion is separate for each item. The Carry over setting controls whether unfinished items move to the next day.",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 517
+        }
+      },
+      {
+        "comment": "",
+        "key": "Repeat this item every day, every weekday, every week or on days you choose. Each occurrence is completed separately. The Carry over setting controls whether unfinished items move to the next day.",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 518
+        }
+      },
+      {
+        "comment": "",
+        "key": "Original item, carried to %@ so far",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 542
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 66,
+          "startingLine": 552
+        }
+      },
+      {
+        "comment": "",
+        "key": "Goes to the item on its original scheduled day",
+        "location": {
+          "startingColumn": 71,
+          "startingLine": 552
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 70,
+          "startingLine": 566
+        }
+      },
+      {
+        "comment": "",
+        "key": "Goes to the original item",
+        "location": {
+          "startingColumn": 75,
+          "startingLine": 566
+        }
+      },
+      {
+        "comment": "",
+        "key": "About %@",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 670
+        }
+      },
+      {
+        "comment": "",
+        "key": "Shown",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 671
+        }
+      },
+      {
+        "comment": "",
+        "key": "Hidden",
+        "location": {
+          "startingColumn": 56,
+          "startingLine": 671
+        }
+      },
+      {
+        "comment": "",
+        "key": "Shows or hides an explanation below this section",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 672
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 40,
+          "startingLine": 698
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 700
+        }
+      },
+      {
+        "comment": "",
+        "key": "Removes this persona",
+        "location": {
+          "startingColumn": 41,
+          "startingLine": 845
+        }
+      },
+      {
+        "comment": "",
+        "key": "Adds this persona",
+        "location": {
+          "startingColumn": 66,
+          "startingLine": 845
+        }
+      },
+      {
+        "comment": "",
+        "key": "Location",
+        "location": {
+          "startingColumn": 56,
+          "startingLine": 884
+        }
+      },
+      {
+        "comment": "",
+        "key": "Person",
+        "location": {
+          "startingColumn": 69,
+          "startingLine": 884
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add location",
+        "location": {
+          "startingColumn": 60,
+          "startingLine": 885
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add person",
+        "location": {
+          "startingColumn": 77,
+          "startingLine": 885
+        }
+      },
+      {
+        "comment": "",
+        "key": "Remove location",
+        "location": {
+          "startingColumn": 63,
+          "startingLine": 886
+        }
+      },
+      {
+        "comment": "",
+        "key": "Remove person",
+        "location": {
+          "startingColumn": 83,
+          "startingLine": 886
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@: %@",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 918
+        }
+      }
+    ]
+  },
+  "version": 1
+}

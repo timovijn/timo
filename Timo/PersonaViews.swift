@@ -123,13 +123,14 @@ struct PersonaSwitcher: View {
 struct PersonaPages: View {
     let persona: Persona?
     let now: Date
-    let open: (PlanItem) -> Void
     let add: () -> Void
+    /// The day list's own row, so a persona page shows each item exactly as the day view does.
+    let row: (PlanItem, Day) -> AnyView
 
     var body: some View {
         ZStack {
             if let persona {
-                PersonaHistoryView(persona: persona, now: now, open: open, add: add)
+                PersonaHistoryView(persona: persona, now: now, add: add, row: row)
                     .id(persona)
                     .transition(.opacity)
             }
@@ -141,14 +142,14 @@ struct PersonaPages: View {
 struct PersonaHistoryView: View {
     let persona: Persona
     let now: Date
-    let open: (PlanItem) -> Void
     let add: () -> Void
+    let row: (PlanItem, Day) -> AnyView
     @EnvironmentObject private var store: PlanStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let days = Planner.history(of: persona, in: store.items, now: now)
-        let items = days.flatMap(\.items)
+        let items = Self.unique(days.flatMap(\.items))
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 // The persona itself is named by the glowing button above; like the day view,
@@ -178,7 +179,7 @@ struct PersonaHistoryView: View {
                         .padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 8)
                         .accessibilityAddTraits(.isHeader)
                     ForEach(entry.items) { item in
-                        row(item, day: entry.day)
+                        row(item, entry.day)
                             .padding(.horizontal, 16)
                     }
                 }
@@ -188,6 +189,11 @@ struct PersonaHistoryView: View {
             .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: items.map(\.id))
         }
         .scrollEdgeEffectHidden(true, for: .vertical)
+    }
+    /// A running range is listed on its own day and on today, but counted once.
+    private static func unique(_ items: [PlanItem]) -> [PlanItem] {
+        var seen = Set<UUID>()
+        return items.filter { seen.insert($0.id).inserted }
     }
     private func heading(_ day: Day) -> String {
         let calendar = Calendar.current
@@ -199,69 +205,200 @@ struct PersonaHistoryView: View {
         return sameYear ? date.formatted(.dateTime.weekday(.wide).day().month(.wide))
             : date.formatted(.dateTime.weekday(.wide).day().month(.wide).year())
     }
-    private func row(_ item: PlanItem, day: Day, showsMenu: Bool = true) -> some View {
-        HStack(alignment: .center, spacing: 8) {
-            Button {
-                withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.toggle(item, on: day) }
-            } label: {
-                Image(systemName: item.stateSymbol)
-                    .resizable().scaledToFit().frame(width: 22, height: 22)
-                    .foregroundStyle(item.isCancelled ? .tertiary : item.isComplete ? .secondary : .primary)
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
+}
+
+/// Commit completion only after the circle has filled and the title's strikethrough has
+/// finished. Tapping again at any point, during that sequence or after, unticks the item.
+struct CompletionButton<Icon: View>: View {
+    let item: PlanItem
+    let day: Day
+    var isEnabled: () -> Bool = { true }
+    var keepsCarriedArrow = false
+    @ViewBuilder let icon: () -> Icon
+    @EnvironmentObject private var store: PlanStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Identifies the running tick-off, so callbacks of one that was undone do nothing.
+    @State private var completion: UUID?
+
+    private var completing: Bool { completion != nil }
+    private var showsCheck: Bool { completing || (item.isComplete && !keepsCarriedArrow) }
+
+    var body: some View {
+        Button(action: toggle) {
+            ZStack {
+                icon().opacity(showsCheck ? 0 : 1)
+                CheckedCompletionCircle(filled: showsCheck)
+                    .allowsHitTesting(false)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(item.completionActionLabel)
-            .sensoryFeedback(.success, trigger: item.isComplete)
-            Button { open(item) } label: {
-                HStack(alignment: .center, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(item.title)
-                            .settledTitleStyle(item)
-                            .fixedSize(horizontal: false, vertical: true)
-                        if item.isCarried(now: now) {
-                            Text("Carried from \(item.day.date().formatted(.dateTime.day().month(.abbreviated)))")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    HStack(spacing: 6) {
-                        if item.seriesID != nil {
-                            Image(systemName: "repeat").accessibilityHidden(true)
-                        }
-                        if let start = item.start() {
-                            Text(start, format: .dateTime.hour().minute())
-                        }
-                    }
-                    .font(.caption).foregroundStyle(.secondary)
-                    .layoutPriority(1)
+            .frame(width: CompletionCircle.diameter, height: CompletionCircle.diameter)
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(item.completionActionLabel)
+        // The store publishes the completed item a moment after the presentation flags change.
+        // Clearing them before the row has it showed the title unstruck for a frame, so the
+        // strike ran back and forth at the end.
+        .onChange(of: item.isSettled) { _, settled in
+            if settled, let completion { finishCompleting(completion) }
+        }
+        .onDisappear {
+            // An intentional tap still completes if navigation takes its row off screen.
+            guard let completion else { return }
+            if let latest = store.item(item.id), !latest.isSettled { store.toggle(latest, on: day) }
+            finishCompleting(completion)
+        }
+    }
+
+    private func toggle() {
+        guard isEnabled(), let current = store.item(item.id) else { return }
+        let animation: Animation? = reduceMotion ? nil : .smooth(duration: 0.25)
+        if current.isSettled {
+            withAnimation(animation) {
+                clearPresentation()
+                store.toggle(current, on: day)
+            }
+            return
+        }
+        // A second tap before the tick-off was committed takes it back.
+        guard !completing else {
+            withAnimation(animation) { clearPresentation() }
+            return
+        }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred(intensity: 0.65)
+        guard !reduceMotion else { store.toggle(current, on: day); return }
+        let id = UUID()
+        store.completionPresentation.pending.insert(item.id)
+        withAnimation(.smooth(duration: 0.3)) {
+            completion = id
+        } completion: {
+            strikeTitle(id)
+        }
+    }
+
+    private func strikeTitle(_ id: UUID) {
+        guard completion == id else { return }
+        withAnimation(.easeInOut(duration: 0.2), completionCriteria: .removed) {
+            _ = store.completionPresentation.striking.insert(item.id)
+        } completion: {
+            Task { @MainActor in
+                // Let the filled circle and full strikethrough register before moving.
+                try? await Task.sleep(for: .milliseconds(60))
+                guard completion == id else { return }
+                withAnimation(.smooth(duration: 0.25)) {
+                    if let latest = store.item(item.id), !latest.isSettled { store.toggle(latest, on: day) }
                 }
-                .padding(.vertical, 8)
-                .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(ItemCardPressStyle())
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(item.title)
-            .accessibilityValue([
-                item.start().map { $0.formatted(date: .omitted, time: .shortened) },
-                item.seriesID != nil ? "Repeating" : nil,
-                item.isCarried(now: now) ? "Carried from \(item.day.date().formatted(date: .abbreviated, time: .omitted))" : nil,
-                item.isComplete ? "Completed" : nil,
-                item.isCancelled ? "Cancelled" : nil
-            ].compactMap { $0 }.joined(separator: ", "))
-            .accessibilityHint("Open details and edit")
-            .accessibilityAction(named: item.isCancelled ? "Uncancel" : "Cancel") {
-                withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.setCancelled(item, !item.isCancelled, on: day) }
+                // A fallback in case the row never hears of it (the change normally arrives at once).
+                try? await Task.sleep(for: .seconds(1))
+                finishCompleting(id)
             }
         }
-        .modifier(ItemCard(outlined: item.isSettled))
-        .itemMenuOnHold(item, day: day, showsMenu: showsMenu) { AnyView(row(item, day: day, showsMenu: false)) }
+    }
+
+    private func finishCompleting(_ id: UUID) {
+        guard completion == id else { return }
+        clearPresentation()
+    }
+
+    private func clearPresentation() {
+        store.completionPresentation.striking.remove(item.id)
+        store.completionPresentation.pending.remove(item.id)
+        completion = nil
     }
 }
 
-/// Open items have a faint fill; completed, cancelled and moved entries have an outline
-/// over the page's background colour. Increase Contrast makes both styles a little firmer.
+/// Every completion circle shares one diameter and stroke, so open, traced, ticked, cancelled
+/// and carried circles never differ in size. They're drawn rather than SF Symbols: a symbol's
+/// circle sits inside padding of its own and came out about 18 points across in a 22-point
+/// frame, beside a drawn 22-point open circle.
+enum CompletionCircle {
+    static let diameter: CGFloat = 22
+    static let lineWidth: CGFloat = 1.6
+}
+
+/// An outlined completion circle, empty, with a cancelled ✘ or with a carried chevron.
+struct OutlinedCompletionCircle: View {
+    enum Glyph { case none, cross, chevron }
+    var glyph: Glyph = .none
+
+    var body: some View {
+        ZStack {
+            Circle().strokeBorder(lineWidth: CompletionCircle.lineWidth)
+            switch glyph {
+            case .none:
+                EmptyView()
+            case .cross:
+                CrossMark()
+                    .stroke(style: StrokeStyle(lineWidth: CompletionCircle.lineWidth, lineCap: .round))
+                    .padding(CompletionCircle.diameter * 0.32)
+            case .chevron:
+                // Drawn with the same stroke as the circle and the ✘, rather than a symbol.
+                ChevronMark()
+                    .stroke(style: StrokeStyle(lineWidth: CompletionCircle.lineWidth, lineCap: .round, lineJoin: .round))
+                    .frame(width: CompletionCircle.diameter * 0.18, height: CompletionCircle.diameter * 0.36)
+                    .offset(x: CompletionCircle.diameter * 0.03)
+            }
+        }
+        .frame(width: CompletionCircle.diameter, height: CompletionCircle.diameter)
+    }
+}
+
+/// The ticked circle: a filled disc with the tick cut out, so the card shows through as it did
+/// with the system symbol. Filling grows the disc and draws the tick in one animation.
+private struct CheckedCompletionCircle: View {
+    let filled: Bool
+
+    var body: some View {
+        ZStack {
+            // The same light grey as a done item's title.
+            Circle()
+                .fill(Color(.tertiaryLabel))
+                .scaleEffect(filled ? 1 : 0.6)
+                .opacity(filled ? 1 : 0)
+            TickMark()
+                .trim(from: 0, to: filled ? 1 : 0)
+                .stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                .blendMode(.destinationOut)
+        }
+        .compositingGroup()
+        .frame(width: CompletionCircle.diameter, height: CompletionCircle.diameter)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct TickMark: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { path in
+            path.move(to: CGPoint(x: rect.minX + rect.width * 0.29, y: rect.minY + rect.height * 0.52))
+            path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.44, y: rect.minY + rect.height * 0.67))
+            path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.72, y: rect.minY + rect.height * 0.36))
+        }
+    }
+}
+
+private struct ChevronMark: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { path in
+            path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        }
+    }
+}
+
+private struct CrossMark: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { path in
+            path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+            path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        }
+    }
+}
+
+/// Every item has a faint fill, whether open, completed, cancelled or carried. The outlined style
+/// (over the page's background colour) is kept but currently unused. Increase Contrast makes both styles a little firmer.
 /// Pressing the item (its title, not its circle) settles the card in a touch, springing back on
 /// release, without shading it: holding hands over to the system's own lift. Reduce Motion
 /// keeps it still.
@@ -296,7 +433,9 @@ struct ItemCard: ViewModifier {
             .padding(.trailing, Self.trailingInset)
             .padding(.vertical, 2)
             .environment(\.itemCardPressed, $pressed)
-            .background(plain || outlined ? .clear : Self.tint(contrast, colorScheme: colorScheme), in: Self.shape)
+            // Fade between the fill and the outline; the list reconfigures a completed row
+            // without the caller's transaction, which used to swap them in a single frame.
+            .background(Self.tint(contrast, colorScheme: colorScheme).opacity(plain || outlined ? 0 : 1), in: Self.shape)
             // Keep an opaque base for the system's initial lift snapshot before
             // the expanded preview appears.
             .background(plain ? .clear : Color(.systemBackground), in: Self.shape)
@@ -305,6 +444,7 @@ struct ItemCard: ViewModifier {
                     .opacity(!plain && outlined ? 1 : 0)
                     .allowsHitTesting(false)
             }
+            .animation(reduceMotion ? nil : .smooth(duration: 0.35), value: outlined)
             .scaleEffect(pressed && !reduceMotion ? 0.98 : 1)
             // A quick press in, then a soft spring back so letting go feels physical.
             .animation(reduceMotion ? nil : pressed ? .easeOut(duration: 0.1) : .spring(duration: 0.35, bounce: 0.3),
@@ -352,7 +492,6 @@ private struct ItemMenuOnHold<Preview: View>: ViewModifier {
     let isEnabled: () -> Bool
     /// Off for the lifted copy of the row itself.
     let showsMenu: Bool
-    let isMoved: Bool
     @ViewBuilder let preview: () -> Preview
     @EnvironmentObject private var store: PlanStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -391,11 +530,8 @@ private struct ItemMenuOnHold<Preview: View>: ViewModifier {
         .frame(width: width)
         .background(ItemCard.tint(contrast, colorScheme: colorScheme), in: ItemCard.shape)
         .background(Color(.systemBackground), in: ItemCard.shape)
-        .overlay {
-            ItemCard.shape.strokeBorder(ItemCard.outline(contrast, colorScheme: colorScheme), lineWidth: 1)
-                .opacity(item.isSettled || isMoved ? 1 : 0)
-                .allowsHitTesting(false)
-        }
+        // The preview is hosted apart from the row and doesn't inherit its environment objects.
+        .environmentObject(store)
     }
     @ViewBuilder private var menuItems: some View {
         Button {
@@ -445,8 +581,8 @@ extension Image {
 
 extension View {
     func itemMenuOnHold<Preview: View>(_ item: PlanItem, day: Day, isEnabled: @escaping () -> Bool = { true },
-                                       showsMenu: Bool = true, isMoved: Bool = false, @ViewBuilder preview: @escaping () -> Preview) -> some View {
-        modifier(ItemMenuOnHold(item: item, day: day, isEnabled: isEnabled, showsMenu: showsMenu, isMoved: isMoved, preview: preview))
+                                       showsMenu: Bool = true, @ViewBuilder preview: @escaping () -> Preview) -> some View {
+        modifier(ItemMenuOnHold(item: item, day: day, isEnabled: isEnabled, showsMenu: showsMenu, preview: preview))
     }
 }
 
@@ -522,17 +658,41 @@ struct UndoDeletionBar: View {
 }
 
 extension View {
-    /// Completed titles are struck through and dimmed; cancelled ones fade further, so they
-    /// read as called off rather than done.
-    func settledTitleStyle(_ item: PlanItem) -> some View {
-        foregroundStyle(item.isCancelled ? .tertiary : item.isComplete ? .secondary : .primary)
-            .strikethrough(item.isSettled, pattern: .solid, color: Color.secondary.opacity(0.45))
+    func settledTitleStyle(_ item: PlanItem, isCarriedEntry: Bool = false) -> some View {
+        modifier(SettledTitleStyle(item: item, isCarriedEntry: isCarriedEntry))
+    }
+}
+
+private struct SettledTitleStyle: ViewModifier {
+    let item: PlanItem
+    let isCarriedEntry: Bool
+    @EnvironmentObject private var store: PlanStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        let striking = store.completionPresentation.striking.contains(item.id)
+        let struck = item.isSettled || striking
+        content
+            // Concrete colours rather than hierarchical styles, so the title greys in step with
+            // the strike instead of snapping at the end and hiding the line behind dark glyphs.
+            // Done and cancelled share one light grey, the same as the row's small text. A carried
+            // entry keeps the normal colour while the item is still open.
+            .foregroundStyle(item.isSettled || striking ? Color(.tertiaryLabel) : Color(.label))
+            .overlay {
+                // Let Text position the strike through each wrapped line, then reveal it
+                // gradually. The clear glyphs leave only the native strikethrough visible.
+                content
+                    .foregroundStyle(Color.clear)
+                    .strikethrough(true, pattern: .solid, color: Color.secondary.opacity(0.45))
+                    .mask(Rectangle().scaleEffect(x: struck ? 1 : 0, anchor: .leading))
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: struck)
     }
 }
 
 extension PlanItem {
-    /// The completion circle: ticked when done, a quiet ✘ when cancelled, otherwise open.
-    var stateSymbol: String { isComplete ? "checkmark.circle.fill" : isCancelled ? "xmark.circle" : "circle" }
     /// What tapping the circle does, for VoiceOver. A cancelled item's circle restores it.
     var completionActionLabel: String {
         isCancelled ? "Uncancel \(title)" : isComplete ? "Mark \(title) incomplete" : "Complete \(title)"

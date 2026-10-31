@@ -45,9 +45,14 @@ enum AppAppearance: String, CaseIterable, Identifiable {
 
 /// A quiet entry point beneath each day's and persona's items.
 struct SettingsLink: View {
+    /// False while a horizontal day swipe is under way, so a swipe that starts here doesn't open Settings.
+    var isEnabled: () -> Bool = { true }
     @State private var showingSettings = false
     var body: some View {
-        Button { showingSettings = true } label: {
+        Button {
+            guard isEnabled() else { return }
+            showingSettings = true
+        } label: {
             VStack(spacing: 5) {
                 Text("timo")
                     .font(.system(.footnote, design: .rounded).weight(.medium))

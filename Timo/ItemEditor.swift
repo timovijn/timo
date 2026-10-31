@@ -3,8 +3,11 @@ import SwiftUI
 struct ItemEditor: View {
     @EnvironmentObject private var store: PlanStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
     @State var item: PlanItem
+    /// The entry's displayed day distinguishes the original from later carried entries.
+    let viewingDay: Day
     @State private var locations: [ItemTextEntry]
     @State private var people: [ItemTextEntry]
     @State private var issue: String?
@@ -28,8 +31,11 @@ struct ItemEditor: View {
     @FocusState private var titleFocused: Bool
     /// Sections whose explanation is open. Explanations start closed, behind a small (i).
     @State private var openInfo: Set<String> = []
-    private var existing: Bool { store.item(item.id) != nil }
-    init(item: PlanItem, openItem: ((PlanItem) -> Void)? = nil) {
+    /// Set on deleting, so the closing sheet doesn't turn into "New item" without its Delete row.
+    @State private var deleted = false
+    private var existing: Bool { deleted || store.item(item.id) != nil }
+    init(item: PlanItem, viewingDay: Day, openItem: ((PlanItem) -> Void)? = nil) {
+        self.viewingDay = viewingDay
         self.openItem = openItem
         _item = State(initialValue: item)
         _locations = State(initialValue: item.locations.map { ItemTextEntry(text: $0) })
@@ -124,6 +130,9 @@ struct ItemEditor: View {
                         item.movesToNextDay = $0
                         carryChosen = true
                     }))
+                    // The native thumb stays white, so a white track in Dark appearance
+                    // hides the enabled state. Keep this switch neutral with a grey track.
+                    .tint(colorScheme == .dark ? Color(.systemGray) : .primary)
                 } header: {
                     InfoHeader("Carry over", isExpanded: infoBinding("carryOver"))
                 } footer: {
@@ -172,6 +181,31 @@ struct ItemEditor: View {
                              + (item.reminders.contains(where: { $0 <= Date() }) ? " Grey reminders have passed and won’t notify you." : ""))
                     }
                 }
+                Section {
+                    FlowLayout(spacing: 8) {
+                        if let deadline = item.deadline {
+                            SchedulePill(name: "Deadline", removeTitle: "Remove deadline", value: deadlineText(deadline),
+                                         accessibilityValue: deadline.formatted(date: .abbreviated, time: .shortened),
+                                         symbol: "flag", tint: .red, isEditing: editing(.deadline),
+                                         onRemove: { animate { editingField = nil; item.deadline = nil } }) {
+                                DatePicker("Due by", selection: Binding(get: { item.deadline ?? deadline }, set: { item.deadline = $0 }))
+                            }
+                            .transition(.scale(scale: 0.8).combined(with: .opacity))
+                        } else {
+                            SchedulePill(name: "Deadline", addTitle: "Add deadline", addLabel: "Deadline", value: nil,
+                                         isEditing: .constant(false), onAdd: addDeadline) { EmptyView() }
+                        }
+                    }
+                    .padding(.vertical, 2)
+                    .id(PickerRow.deadline)
+                    .sensoryFeedback(.selection, trigger: item.deadline != nil)
+                } header: {
+                    InfoHeader("Deadline", isExpanded: infoBinding("deadline"))
+                } footer: {
+                    InfoFooter(isExpanded: openInfo.contains("deadline")) {
+                        Text("A red dot marks the item until it is done. A deadline doesn’t notify you; add a reminder for that.")
+                    }
+                }
                 Section("Locations") {
                     TextPills(kind: .location, entries: $locations) { reveal("locations", in: form) }
                         .id("locations")
@@ -186,7 +220,7 @@ struct ItemEditor: View {
                         if item.seriesID == nil {
                             // No confirmation: the Undo that follows a deletion covers a mistaken tap.
                             Button(role: .destructive) {
-                                store.delete(item, children: false, undoManager: undoManager); dismiss()
+                                deleted = true; store.delete(item, children: false, undoManager: undoManager); dismiss()
                             } label: {
                                 Label("Delete item", systemImage: "trash").foregroundStyle(.red)
                             }
@@ -194,7 +228,7 @@ struct ItemEditor: View {
                             // The same choices as the long-press menu, opening from the button.
                             Menu {
                                 RepeatDeletionButtons(item: item) { scope in
-                                    store.delete(item, children: false, scope: scope, undoManager: undoManager); dismiss()
+                                    deleted = true; store.delete(item, children: false, scope: scope, undoManager: undoManager); dismiss()
                                 }
                             } label: {
                                 Label { Text("Delete item") } icon: { Image(systemName: "trash") }
@@ -212,7 +246,11 @@ struct ItemEditor: View {
                 guard let field else { return }
                 // Pickers open below their button; lift the row first so a tall calendar
                 // is never cut off by the bottom of the screen.
-                let row: PickerRow = if case .reminder = field { .reminders } else { .schedule }
+                let row: PickerRow = switch field {
+                case .reminder: .reminders
+                case .deadline: .deadline
+                default: .schedule
+                }
                 withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { form.scrollTo(row, anchor: .top) }
                 Task { @MainActor in
                     try? await Task.sleep(for: .milliseconds(reduceMotion ? 50 : 280))
@@ -374,6 +412,20 @@ struct ItemEditor: View {
             } catch { issue = "Reminders could not be enabled. \(error.localizedDescription)" }
         }
     }
+    /// Due at the end of the item's time, otherwise at 17:00 on its day; the picker opens to adjust it.
+    private func addDeadline() {
+        animate { item.deadline = item.end ?? item.day.date().addingTimeInterval(17 * 3600) }
+        Task { @MainActor in
+            // Let the new button appear before anchoring its popover to it.
+            try? await Task.sleep(for: .milliseconds(300))
+            pendingField = .deadline
+        }
+    }
+    /// The time, with the day when it isn't the item's own.
+    private func deadlineText(_ date: Date) -> String {
+        let time = date.formatted(date: .omitted, time: .shortened)
+        return Day(date) == item.day ? time : "\(dayName(Day(date))), \(time)"
+    }
     /// Sorts reminders and their identities together, so each button slides to its new place.
     private func sortReminders() {
         guard editingField == nil, item.reminders.count == reminderIDs.count else { return }
@@ -477,33 +529,41 @@ struct ItemEditor: View {
     @ViewBuilder private var itemStatusSection: some View {
         if let stored = store.item(item.id) {
             let now = Date()
-            let carried = stored.isCarried(now: now)
+            let wasCarried = stored.isCarried(now: now)
+            let carried = wasCarried && viewingDay > stored.day
+            let carriedOriginal = wasCarried && viewingDay == stored.day
             let original = stored.seriesID == nil ? nil : store.originalDay(of: stored)
-            if carried || original != nil {
+            if carried || carriedOriginal || original != nil {
                 Section {
-                    if carried {
-                        let destination = stored.liveDay(now: now)
-                        let destinationText = destination == Day(now) ? "today" : dayText(destination)
-                        Label("Moved from \(dayText(stored.day)) to \(destinationText)", systemImage: "arrow.right.circle")
+                    if carriedOriginal {
+                        let count = Calendar.current.dateComponents([.day], from: stored.day.date(),
+                                                                    to: stored.liveDay(now: now).date()).day ?? 0
+                        let days = count == 1 ? "1 day" : "\(count) days"
+                        Text("Original item, carried to \(days) so far")
                             .foregroundStyle(.secondary)
+                    } else if carried {
+                        Text(carriedFromText(stored))
+                            .foregroundStyle(.secondary)
+                            .tint(.blue)
+                            .environment(\.openURL, OpenURLAction { _ in
+                                openItem?(stored)
+                                return .handled
+                            })
+                            .accessibilityHint(openItem == nil ? "" : "Goes to the item on its original scheduled day")
                     }
                     if let start = original {
                         if store.isOriginal(stored) {
-                            Label(originalText(stored), systemImage: "repeat")
+                            Text(originalText(stored))
                                 .foregroundStyle(.secondary)
                         } else {
-                            Label {
-                                Text(linkedToText(stored, start: start))
-                                    .foregroundStyle(.secondary)
-                                    .tint(.blue)
-                                    .environment(\.openURL, OpenURLAction { _ in
-                                        goToOriginal(of: stored)
-                                        return .handled
-                                    })
-                                    .accessibilityHint(openItem == nil ? "" : "Goes to the original item")
-                            } icon: {
-                                Image(systemName: "repeat").foregroundStyle(.secondary)
-                            }
+                            Text(linkedToText(stored, start: start))
+                                .foregroundStyle(.secondary)
+                                .tint(.blue)
+                                .environment(\.openURL, OpenURLAction { _ in
+                                    goToOriginal(of: stored)
+                                    return .handled
+                                })
+                                .accessibilityHint(openItem == nil ? "" : "Goes to the original item")
                         }
                     }
                 }
@@ -515,6 +575,12 @@ struct ItemEditor: View {
         let items = linked.count == 1 ? "1 item" : "\(linked.count) items"
         if linked.isTotal { return "Original item, linked to \(items)" }
         return linked.count == 0 ? "Original item, no linked items yet" : "Original item, linked to \(items) so far"
+    }
+    private func carriedFromText(_ stored: PlanItem) -> AttributedString {
+        let text = AttributedString("Carried item, carried from ")
+        var original = AttributedString("\(stored.title), \(dayText(stored.day))")
+        if openItem != nil { original.link = URL(string: "timo-carried-origin:") }
+        return text + original
     }
     private func linkedToText(_ stored: PlanItem, start: Day) -> AttributedString {
         let text = AttributedString("Linked item, linked to ")
@@ -621,9 +687,9 @@ private struct InfoFooter<Info: View>: View {
     }
 }
 
-private enum PickerRow: Hashable { case schedule, reminders }
+private enum PickerRow: Hashable { case schedule, reminders, deadline }
 
-private enum ScheduleField: Equatable { case day, time, end, reminder(Int) }
+private enum ScheduleField: Equatable { case day, time, end, reminder(Int), deadline }
 
 /// A capsule showing a schedule value, or an add button while it is unset. Tapping it opens
 /// its picker in a popover; a set value that can be cleared carries its own remove button.
