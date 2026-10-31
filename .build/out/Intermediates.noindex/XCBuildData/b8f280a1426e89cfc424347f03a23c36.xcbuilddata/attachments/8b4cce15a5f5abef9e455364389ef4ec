@@ -1,0 +1,4 @@
+module TimoCore {
+header "TimoCore-Swift.h"
+export *
+}

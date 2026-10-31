@@ -155,7 +155,7 @@ struct PersonaHistoryView: View {
                 HStack {
                     Spacer(minLength: 0)
                     if !items.isEmpty {
-                        Text("\(items.filter(\.isComplete).count)/\(items.count) complete")
+                        Text("\(items.filter(\.isComplete).count)/\(items.filter { !$0.isCancelled }.count) complete")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
@@ -178,7 +178,7 @@ struct PersonaHistoryView: View {
                         .accessibilityAddTraits(.isHeader)
                     ForEach(entry.items) { item in
                         row(item, day: entry.day)
-                            .padding(.leading, 12).padding(.trailing, 20)
+                            .padding(.horizontal, 16)
                     }
                 }
                 Text("timo").font(.system(.footnote, design: .rounded).weight(.medium)).foregroundStyle(.tertiary)
@@ -198,26 +198,25 @@ struct PersonaHistoryView: View {
         return sameYear ? date.formatted(.dateTime.weekday(.wide).day().month(.wide))
             : date.formatted(.dateTime.weekday(.wide).day().month(.wide).year())
     }
-    private func row(_ item: PlanItem, day: Day) -> some View {
+    private func row(_ item: PlanItem, day: Day, showsMenu: Bool = true) -> some View {
         HStack(alignment: .center, spacing: 8) {
             Button {
                 withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.toggle(item, on: day) }
             } label: {
-                Image(systemName: item.isComplete ? "checkmark.circle.fill" : "circle")
+                Image(systemName: item.stateSymbol)
                     .resizable().scaledToFit().frame(width: 22, height: 22)
-                    .foregroundStyle(item.isComplete ? .secondary : .primary)
+                    .foregroundStyle(item.isCancelled ? .tertiary : item.isComplete ? .secondary : .primary)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(item.isComplete ? "Mark \(item.title) incomplete" : "Complete \(item.title)")
+            .accessibilityLabel(item.completionActionLabel)
             .sensoryFeedback(.success, trigger: item.isComplete)
             Button { open(item) } label: {
                 HStack(alignment: .center, spacing: 12) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(item.title)
-                            .foregroundStyle(item.isComplete ? .secondary : .primary)
-                            .strikethrough(item.isComplete, pattern: .solid, color: Color.secondary.opacity(0.45))
+                            .settledTitleStyle(item)
                             .fixedSize(horizontal: false, vertical: true)
                         if item.isCarried(now: now) {
                             Text("Carried from \(item.day.date().formatted(.dateTime.day().month(.abbreviated)))")
@@ -239,86 +238,278 @@ struct PersonaHistoryView: View {
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 .padding(.vertical, 2).contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(ItemCardPressStyle())
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(item.title)
             .accessibilityValue([
                 item.start().map { $0.formatted(date: .omitted, time: .shortened) },
                 item.seriesID != nil ? "Repeating" : nil,
                 item.isCarried(now: now) ? "Carried from \(item.day.date().formatted(date: .abbreviated, time: .omitted))" : nil,
-                item.isComplete ? "Completed" : nil
+                item.isComplete ? "Completed" : nil,
+                item.isCancelled ? "Cancelled" : nil
             ].compactMap { $0 }.joined(separator: ", "))
             .accessibilityHint("Open details and edit")
-        }
-        .deletableOnHold(item)
-    }
-}
-
-/// A tidy card of an item, shown above its menu while the item is held.
-struct ItemPreview: View {
-    let item: PlanItem
-    @ScaledMetric(relativeTo: .body) private var width: CGFloat = 300
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Image(systemName: item.isComplete ? "checkmark.circle.fill" : "circle")
-                .font(.title3).foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(item.title)
-                    .font(.body.weight(.medium)).foregroundStyle(.primary)
-                    .strikethrough(item.isComplete, color: .secondary)
-                    .lineLimit(3)
-                Text(when).font(.caption).foregroundStyle(.secondary)
+            .accessibilityAction(named: item.isCancelled ? "Uncancel" : "Cancel") {
+                withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.setCancelled(item, !item.isCancelled, on: day) }
             }
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 18).padding(.vertical, 14)
-        .frame(width: min(width, 360), alignment: .leading)
-        .background(Color(.systemBackground))
-    }
-    private var when: String {
-        let day = item.day.date()
-        let calendar = Calendar.current
-        let dayText = calendar.isDateInToday(day) ? "Today" : calendar.isDateInTomorrow(day) ? "Tomorrow"
-            : calendar.isDateInYesterday(day) ? "Yesterday" : day.formatted(.dateTime.weekday(.wide).day().month(.abbreviated))
-        guard let start = item.start() else { return dayText }
-        return dayText + " · " + start.formatted(date: .omitted, time: .shortened)
+        .modifier(ItemCard())
+        .itemMenuOnHold(item, day: day, showsMenu: showsMenu) { AnyView(row(item, day: day, showsMenu: false)) }
     }
 }
 
-/// Holding an item shows its card with a Delete option. A single item is deleted straight
-/// away; a repeating one asks first, beside the item, since every occurrence goes with it.
-private struct DeletableOnHold: ViewModifier {
-    let item: PlanItem
-    let isEnabled: () -> Bool
-    @EnvironmentObject private var store: PlanStore
+/// Each item sits on its own faint, slightly rounded card with a small gap to the next, quiet
+/// enough to leave the title in charge. Increase Contrast makes the card a little firmer.
+/// Pressing the item (its title, not its circle) settles the card in a touch, springing back on
+/// release, without shading it: holding hands over to the system's own lift. Reduce Motion
+/// keeps it still.
+struct ItemCard: ViewModifier {
+    /// Space between the card's trailing edge and the time; the day view's shared time label
+    /// is placed outside the row, so it uses the same inset.
+    static let trailingInset: CGFloat = 12
+    static let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+    @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var confirmingSeries = false
+    /// Set inside the lifted card, which draws one card around the row and its dates.
+    @Environment(\.itemCardPlain) private var plain
+    @State private var pressed = false
+
+    static func tint(_ contrast: ColorSchemeContrast) -> Color {
+        Color.primary.opacity(contrast == .increased ? 0.07 : 0.022)
+    }
 
     func body(content: Content) -> some View {
         content
-            .contextMenu {
-                Button(role: .destructive) {
-                    guard isEnabled() else { return }
-                    if item.seriesID == nil { delete() } else { confirmingSeries = true }
-                } label: {
-                    Label(item.seriesID == nil ? "Delete" : "Delete repeating item", systemImage: "trash")
-                }
-                .tint(.red)
-            } preview: {
-                ItemPreview(item: item)
-            }
-            .confirmationDialog("Delete all occurrences of this repeating item?", isPresented: $confirmingSeries, titleVisibility: .visible) {
-                Button("Delete all occurrences", role: .destructive, action: delete)
+            .padding(.trailing, Self.trailingInset)
+            .padding(.vertical, 2)
+            .environment(\.itemCardPressed, $pressed)
+            .background(plain ? .clear : Self.tint(contrast), in: Self.shape)
+            // Opaque underneath, so the native lift shows the card itself rather than the
+            // dimmed screen through it.
+            .background(plain ? .clear : Color(.systemBackground), in: Self.shape)
+            .scaleEffect(pressed && !reduceMotion ? 0.98 : 1)
+            // A quick press in, then a soft spring back so letting go feels physical.
+            .animation(reduceMotion ? nil : pressed ? .easeOut(duration: 0.1) : .spring(duration: 0.35, bounce: 0.3),
+                       value: pressed)
+    }
+}
+
+extension EnvironmentValues {
+    /// The press state of the enclosing item card, set by `ItemCardPressStyle`.
+    @Entry var itemCardPressed: Binding<Bool>? = nil
+    /// Set by `ItemMenuOnHold` for the copy of the row inside the lifted card.
+    @Entry var itemCardPlain = false
+}
+
+/// For the button that opens an item: its press is shown by the whole card rather than by
+/// dimming the title, so the item reads as one thing being pressed.
+struct ItemCardPressStyle: ButtonStyle {
+    @Environment(\.itemCardPressed) private var cardPressed
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .onChange(of: configuration.isPressed) { _, isPressed in cardPressed?.wrappedValue = isPressed }
+            // A hold lifts the item into its menu while the button stays pressed; the card
+            // behind lets go by then rather than staying pressed in under the dimmed screen.
+            .task(id: configuration.isPressed) {
+                guard configuration.isPressed else { return }
+                try? await Task.sleep(for: .seconds(0.35))
+                guard !Task.isCancelled else { return }
+                cardPressed?.wrappedValue = false
             }
     }
-    private func delete() {
-        withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) { store.delete(item, children: false) }
+}
+
+/// Holding an item lifts it, the native way: the rest of the screen dims, so it's clear which
+/// item is held, and the item rises as its own card grown to show its history (created, and
+/// completed or cancelled) under its details, with Cancel (or Uncancel) and Delete in the Liquid
+/// Glass menu beneath. The lifted card is a copy of the row drawn by `preview` at the row's
+/// width, with the history added. Cancelling acts on this item only, or this one occurrence of a repeating
+/// item, on the day it is viewed from. Delete is the same for every item: a single item goes
+/// straight away, and for a repeating one Delete opens, within the same menu, which occurrences
+/// to delete. Either way an Undo button follows.
+private struct ItemMenuOnHold<Preview: View>: ViewModifier {
+    let item: PlanItem
+    let day: Day
+    let isEnabled: () -> Bool
+    /// Off for the lifted copy of the row itself.
+    let showsMenu: Bool
+    @ViewBuilder let preview: () -> Preview
+    @EnvironmentObject private var store: PlanStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.undoManager) private var undoManager
+    @State private var width: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        if showsMenu {
+            content
+                .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
+                .contentShape(.contextMenuPreview, ItemCard.shape)
+                .contextMenu {
+                    menuItems
+                } preview: {
+                    // One card: the row's own card is left plain, and this draws it around the
+                    // row and its history together.
+                    VStack(alignment: .leading, spacing: 0) {
+                        preview()
+                            .environment(\.itemCardPlain, true)
+                        Text(item.history)
+                            .font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            // In line with the title, past the completion circle.
+                            .padding(.leading, 52).padding(.trailing, ItemCard.trailingInset)
+                            .padding(.bottom, 12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(width: width)
+                    .background(ItemCard.tint(contrast))
+                    .background(Color(.systemBackground))
+                }
+                // The gap between cards stays outside what is lifted.
+                .padding(.vertical, 3)
+        } else {
+            content
+        }
+    }
+    @ViewBuilder private var menuItems: some View {
+        Button {
+            guard isEnabled() else { return }
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.setCancelled(item, !item.isCancelled, on: day) }
+        } label: {
+            if item.isCancelled {
+                Label("Uncancel", systemImage: "arrow.uturn.backward.circle")
+            } else {
+                Label("Cancel", systemImage: "xmark.circle")
+            }
+        }
+        if item.seriesID == nil {
+            Button(role: .destructive) {
+                guard isEnabled() else { return }
+                delete(.all)
+            } label: {
+                Label { Text("Delete") } icon: { Image.redTrash }
+            }
+        } else {
+            // A submenu, shown with the system's chevron, so the choices open in place.
+            Menu {
+                RepeatDeletionButtons(item: item) { scope in
+                    guard isEnabled() else { return }
+                    delete(scope)
+                }
+            } label: {
+                // A submenu can't take the destructive role in SwiftUI: the bin is drawn red
+                // here, and DestructiveSubmenu reddens the title and chevron.
+                Label { Text("Delete") } icon: { Image.redTrash }
+            }
+        }
+    }
+    private func delete(_ scope: RepeatDeletion) {
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) {
+            store.delete(item, children: false, scope: scope, undoManager: undoManager)
+        }
+    }
+}
+
+extension Image {
+    /// The bin in system red, kept red by menus that would otherwise draw icons in black.
+    static var redTrash: Image {
+        Image(uiImage: UIImage(systemName: "trash")?.withTintColor(.systemRed, renderingMode: .alwaysOriginal) ?? UIImage())
     }
 }
 
 extension View {
-    func deletableOnHold(_ item: PlanItem, isEnabled: @escaping () -> Bool = { true }) -> some View {
-        modifier(DeletableOnHold(item: item, isEnabled: isEnabled))
+    func itemMenuOnHold<Preview: View>(_ item: PlanItem, day: Day, isEnabled: @escaping () -> Bool = { true },
+                                       showsMenu: Bool = true, @ViewBuilder preview: @escaping () -> Preview) -> some View {
+        modifier(ItemMenuOnHold(item: item, day: day, isEnabled: isEnabled, showsMenu: showsMenu, preview: preview))
+    }
+}
+
+extension PlanItem {
+    /// When the item was made, and when it was completed or cancelled.
+    var history: String {
+        var lines = ["Created " + Self.stamp(createdAt)]
+        if let completedAt { lines.append("Completed " + Self.stamp(completedAt)) }
+        if let cancelledAt { lines.append("Cancelled " + Self.stamp(cancelledAt)) }
+        return lines.joined(separator: "\n")
+    }
+    private static func stamp(_ date: Date) -> String {
+        let sameYear = Calendar.current.isDate(date, equalTo: .now, toGranularity: .year)
+        let day = sameYear ? date.formatted(.dateTime.day().month(.abbreviated))
+            : date.formatted(.dateTime.day().month(.abbreviated).year())
+        return day + ", " + date.formatted(date: .omitted, time: .shortened)
+    }
+}
+
+/// Which occurrences of a repeating item to delete, from the narrowest choice to the widest, as
+/// Calendar does. On the original item, "this and following" is left out, since it would mean
+/// the same as all of them.
+struct RepeatDeletionButtons: View {
+    let item: PlanItem
+    let perform: (RepeatDeletion) -> Void
+    @EnvironmentObject private var store: PlanStore
+
+    var body: some View {
+        if store.startsSeries(item) {
+            Button("Original item only", role: .destructive) { perform(.occurrence) }
+        } else {
+            Button("This linked item only", role: .destructive) { perform(.occurrence) }
+            Button("This and following linked items", role: .destructive) { perform(.following) }
+        }
+        Button("Original and all linked items", role: .destructive) { perform(.all) }
+    }
+}
+
+/// The Undo offered after a deletion: a small glass capsule above the dock naming what went,
+/// like Mail's Undo Send. It stays a few seconds (longer with VoiceOver, which also announces
+/// it); the system's own undo (shake, or three fingers) works as well.
+struct UndoDeletionBar: View {
+    @EnvironmentObject private var store: PlanStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
+
+    var body: some View {
+        if let deletion = store.lastDeletion {
+            HStack(spacing: 14) {
+                Text("Deleted “\(deletion.title)”")
+                    .lineLimit(1)
+                    .foregroundStyle(.secondary)
+                Button("Undo") {
+                    withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) { store.undo(deletion) }
+                }
+                .fontWeight(.semibold)
+                .accessibilityHint("Puts back what was deleted")
+            }
+            .font(.subheadline)
+            .padding(.horizontal, 18).padding(.vertical, 10)
+            .glassEffect(.regular.interactive(), in: .capsule)
+            .glassEffectTransition(.materialize)
+            .padding(.horizontal, 24)
+            .task(id: deletion.id) {
+                AccessibilityNotification.Announcement("Deleted \(deletion.title). Undo available.").post()
+                try? await Task.sleep(for: .seconds(voiceOver ? 10 : 5))
+                if store.lastDeletion?.id == deletion.id {
+                    withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) { store.lastDeletion = nil }
+                }
+            }
+        }
+    }
+}
+
+extension View {
+    /// Completed titles are struck through and dimmed; cancelled ones fade further, so they
+    /// read as called off rather than done.
+    func settledTitleStyle(_ item: PlanItem) -> some View {
+        foregroundStyle(item.isCancelled ? .tertiary : item.isComplete ? .secondary : .primary)
+            .strikethrough(item.isSettled, pattern: .solid, color: Color.secondary.opacity(0.45))
+    }
+}
+
+extension PlanItem {
+    /// The completion circle: ticked when done, a quiet ✘ when cancelled, otherwise open.
+    var stateSymbol: String { isComplete ? "checkmark.circle.fill" : isCancelled ? "xmark.circle" : "circle" }
+    /// What tapping the circle does, for VoiceOver. A cancelled item's circle restores it.
+    var completionActionLabel: String {
+        isCancelled ? "Uncancel \(title)" : isComplete ? "Mark \(title) incomplete" : "Complete \(title)"
     }
 }

@@ -68,22 +68,6 @@
       },
       {
         "comment": "",
-        "key": "Mark %@ incomplete",
-        "location": {
-          "startingColumn": 51,
-          "startingLine": 213
-        }
-      },
-      {
-        "comment": "",
-        "key": "Complete %@",
-        "location": {
-          "startingColumn": 85,
-          "startingLine": 213
-        }
-      },
-      {
-        "comment": "",
         "key": "Open details and edit",
         "location": {
           "startingColumn": 32,
@@ -92,42 +76,114 @@
       },
       {
         "comment": "",
-        "key": "Carried from %@",
+        "key": "Uncancel",
         "location": {
-          "startingColumn": 34,
-          "startingLine": 223
+          "startingColumn": 60,
+          "startingLine": 252
         }
       },
       {
         "comment": "",
-        "key": "Delete all occurrences of this repeating item?",
+        "key": "Cancel",
         "location": {
-          "startingColumn": 33,
-          "startingLine": 311
+          "startingColumn": 73,
+          "startingLine": 252
+        }
+      },
+      {
+        "comment": "",
+        "key": "Carried from %@",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 222
+        }
+      },
+      {
+        "comment": "",
+        "key": "Uncancel",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 381
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 383
         }
       },
       {
         "comment": "",
         "key": "Delete",
         "location": {
-          "startingColumn": 50,
-          "startingLine": 305
+          "startingColumn": 30,
+          "startingLine": 391
         }
       },
       {
         "comment": "",
-        "key": "Delete repeating item",
+        "key": "Delete",
         "location": {
-          "startingColumn": 61,
-          "startingLine": 305
+          "startingColumn": 30,
+          "startingLine": 403
         }
       },
       {
         "comment": "",
-        "key": "Delete all occurrences",
+        "key": "Original item only",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 454
+        }
+      },
+      {
+        "comment": "",
+        "key": "This linked item only",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 456
+        }
+      },
+      {
+        "comment": "",
+        "key": "This and following linked items",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 457
+        }
+      },
+      {
+        "comment": "",
+        "key": "Original and all linked items",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 459
+        }
+      },
+      {
+        "comment": "",
+        "key": "Deleted “%@”",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 474
+        }
+      },
+      {
+        "comment": "",
+        "key": "Undo",
         "location": {
           "startingColumn": 24,
-          "startingLine": 312
+          "startingLine": 477
+        }
+      },
+      {
+        "comment": "",
+        "key": "Puts back what was deleted",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 481
         }
       }
     ]

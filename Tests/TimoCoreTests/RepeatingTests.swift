@@ -66,12 +66,89 @@ final class RepeatingTests: XCTestCase {
         }
         XCTAssertEqual(Set(items.map(\.id)).count, 3)
     }
-    func testRepeatingOccurrencesNeverCarryOver() {
+    func testScheduledRepeatingOccurrencesStayOnTheirScheduledDays() {
         let plan = RepeatingPlan(template: template(.daily))
         var items: [PlanItem] = []
         Planner.materialize([plan], in: &items, from: day(26), through: day(28), calendar: calendar)
-        items[0].movesToNextDay = true // Even an old preference cannot pile up repeats.
         XCTAssertEqual(items.map { $0.liveDay(now: date(29), calendar: calendar) }, [day(26), day(27), day(28)])
+    }
+    func testCarryPreferenceIsPreservedForEveryRepeatingSchedule() throws {
+        for timed in [false, true] {
+            for carries in [false, true] {
+                var master = PlanItem(title: "Read", day: day(26), minute: timed ? 540 : nil, movesToNextDay: carries)
+                master.repeatRule = .daily
+                var series: [RepeatingPlan] = []
+                var items: [PlanItem] = []
+                Planner.saveRepeating(master, items: &items, series: &series, calendar: calendar)
+                Planner.materialize(series, in: &items, from: day(26), through: day(28), calendar: calendar)
+                XCTAssertEqual(series[0].template.carries, carries)
+                XCTAssertTrue(items.allSatisfy { $0.carries == carries })
+                XCTAssertEqual(items[0].liveDay(now: date(30), calendar: calendar), carries ? day(30) : day(26))
+                var edited = items[0]
+                edited.movesToNextDay = !carries
+                Planner.saveRepeating(edited, items: &items, series: &series, calendar: calendar)
+                XCTAssertEqual(series[0].template.carries, !carries)
+                XCTAssertTrue(items.allSatisfy { $0.carries == !carries })
+                let saved = try JSONDecoder().decode([PlanItem].self, from: JSONEncoder().encode(items))
+                XCTAssertEqual(saved, items)
+                Planner.materialize(series, in: &items, from: day(29), through: day(29), calendar: calendar)
+                XCTAssertEqual(items.last?.carries, !carries)
+            }
+        }
+    }
+    func testAnytimeRepeatsCarryIndependentlyUntilCompletedOrCancelled() throws {
+        var template = PlanItem(title: "Read", day: day(26))
+        template.repeatRule = .daily
+        let plan = RepeatingPlan(template: template)
+        var items: [PlanItem] = []
+        Planner.materialize([plan], in: &items, from: day(26), through: day(29), calendar: calendar)
+        let firstID = items[0].id
+        XCTAssertTrue(items[0].movesToNextDay)
+        XCTAssertTrue(items[0].carries)
+        for today in [27, 28, 29] {
+            XCTAssertTrue(items[0].shows(on: day(today), now: date(today), calendar: calendar))
+            XCTAssertTrue(items[0].isCarried(now: date(today), calendar: calendar))
+            XCTAssertEqual(items[0].day, day(26))
+            XCTAssertEqual(items[0].occurrenceDay, day(26))
+        }
+        XCTAssertEqual(items.filter { $0.shows(on: day(29), now: date(29), calendar: calendar) }.count, 4)
+        XCTAssertTrue(items[0].movedAway(from: day(28), now: date(29), calendar: calendar))
+        items[0].completedAt = date(29)
+        Planner.setCancelled(true, &items[1], on: day(28), now: date(29), calendar: calendar)
+        XCTAssertFalse(items[0].shows(on: day(30), now: date(30), calendar: calendar))
+        XCTAssertTrue(items[0].shows(on: day(29), now: date(30), calendar: calendar))
+        XCTAssertFalse(items[1].shows(on: day(29), now: date(30), calendar: calendar))
+        XCTAssertTrue(items[1].shows(on: day(28), now: date(30), calendar: calendar))
+        XCTAssertTrue(items[2].shows(on: day(30), now: date(30), calendar: calendar))
+        let saved = try JSONDecoder().decode([PlanItem].self, from: JSONEncoder().encode(items))
+        XCTAssertEqual(saved, items)
+        XCTAssertFalse(Planner.materialize([plan], in: &items, from: day(26), through: day(29), calendar: calendar))
+        XCTAssertEqual(items[0].id, firstID)
+        XCTAssertEqual(items, saved)
+    }
+    func testEditingAnytimeSeriesPreservesCarriedOccurrencesAndTheirSettlement() throws {
+        var master = PlanItem(title: "Read", day: day(26))
+        master.repeatRule = .daily
+        var series: [RepeatingPlan] = []
+        var items: [PlanItem] = []
+        Planner.saveRepeating(master, items: &items, series: &series, calendar: calendar)
+        Planner.materialize(series, in: &items, from: day(26), through: day(28), calendar: calendar)
+        items[1].completedAt = date(28)
+        Planner.setCancelled(true, &items[2], on: day(28), now: date(29), calendar: calendar)
+        let original = items
+        master = items[0]
+        master.title = "Read a chapter"
+        Planner.saveRepeating(master, items: &items, series: &series, calendar: calendar)
+        for previous in original {
+            let updated = try XCTUnwrap(items.first { $0.id == previous.id })
+            XCTAssertEqual(updated.title, master.title)
+            XCTAssertEqual(updated.day, previous.day)
+            XCTAssertEqual(updated.occurrenceDay, previous.occurrenceDay)
+            XCTAssertEqual(updated.completedAt, previous.completedAt)
+            XCTAssertEqual(updated.cancelledAt, previous.cancelledAt)
+            XCTAssertTrue(updated.carries)
+        }
+        XCTAssertTrue(items[0].isCarried(now: date(30), calendar: calendar))
     }
     func testLegacyExclusionsPersistAndDeletingSeriesStopsAllGeneration() throws {
         var series = [RepeatingPlan(template: template(.daily))]
@@ -110,14 +187,14 @@ final class RepeatingTests: XCTestCase {
         XCTAssertEqual(items.first { $0.day == day(29) }?.title, "Office work")
         XCTAssertFalse(try XCTUnwrap(items.first { $0.day == day(29) }).isComplete)
     }
-    func testRemovingRepeatKeepsOnlyEditedOccurrence() {
+    func testRemovingRepeatFromTheFirstOccurrenceKeepsOnlyIt() {
         var series = [RepeatingPlan(template: template(.daily))]
         var items: [PlanItem] = []
         Planner.materialize(series, in: &items, from: day(26), through: day(30), calendar: calendar)
-        var edited = items[2]; edited.repeatRule = .never
+        var edited = items[0]; edited.repeatRule = .never
         Planner.saveRepeating(edited, items: &items, series: &series)
         Planner.materialize(series, in: &items, from: day(26), through: day(31), calendar: calendar)
-        XCTAssertEqual(items.map(\.day), [day(28)])
+        XCTAssertEqual(items.map(\.day), [day(26)])
         XCTAssertTrue(series.isEmpty)
         XCTAssertNil(items.first { $0.id == edited.id }?.seriesID)
     }
@@ -188,7 +265,8 @@ final class RepeatingTests: XCTestCase {
         var series = [RepeatingPlan(template: template(.daily))]
         var items: [PlanItem] = []
         Planner.materialize(series, in: &items, from: day(26), through: day(1, month: 11), calendar: calendar)
-        var edited = try XCTUnwrap(items.first { $0.day == day(29) })
+        // The first occurrence changes the pattern of the whole series; a later one would split off.
+        var edited = try XCTUnwrap(items.first { $0.day == day(26) })
         edited.repeatRule = .weekdays
         Planner.saveRepeating(edited, items: &items, series: &series, calendar: calendar)
         XCTAssertEqual(Set(items.map(\.day)), Set((26...30).map { day($0) }))
@@ -235,5 +313,187 @@ final class RepeatingTests: XCTestCase {
         XCTAssertThrowsError(try Planner.validate(custom, in: [], calendar: calendar))
         custom.repeatWeekdays = [2, 4, 6]
         XCTAssertNoThrow(try Planner.validate(custom, in: [], calendar: calendar))
+    }
+    func testDeletingOneOccurrenceKeepsTheRestAndIsNotGeneratedAgain() throws {
+        var series = [RepeatingPlan(template: template(.daily))]
+        var items: [PlanItem] = []
+        Planner.materialize(series, in: &items, from: day(26), through: day(30), calendar: calendar)
+        let target = try XCTUnwrap(items.first { $0.day == day(28) })
+        Planner.delete(target, .occurrence, items: &items, series: &series)
+        XCTAssertFalse(Planner.materialize(series, in: &items, from: day(26), through: day(30), calendar: calendar))
+        XCTAssertEqual(items.map(\.day).sorted(), [26, 27, 29, 30].map { day($0) })
+        XCTAssertEqual(series.count, 1)
+        // A later edit to the series keeps the deleted day out.
+        var edited = try XCTUnwrap(items.first { $0.day == day(27) }); edited.title = "Office"
+        Planner.saveRepeating(edited, items: &items, series: &series, calendar: calendar)
+        Planner.materialize(series, in: &items, from: day(26), through: day(30), calendar: calendar)
+        XCTAssertFalse(items.contains { $0.day == day(28) })
+        XCTAssertEqual(Set(items.map(\.title)), ["Office"])
+    }
+    func testDeletingFromAnOccurrenceOnEndsTheSeriesAndKeepsEarlierCompletion() throws {
+        var series = [RepeatingPlan(template: template(.daily))]
+        var items: [PlanItem] = []
+        Planner.materialize(series, in: &items, from: day(26), through: day(31), calendar: calendar)
+        items[0].completedAt = date(26, hour: 18)
+        let target = try XCTUnwrap(items.first { $0.day == day(29) })
+        XCTAssertFalse(Planner.startsSeries(target, in: series))
+        Planner.delete(target, .following, items: &items, series: &series)
+        XCTAssertFalse(Planner.materialize(series, in: &items, from: day(26), through: day(5, month: 11), calendar: calendar))
+        XCTAssertEqual(items.map(\.day).sorted(), [26, 27, 28].map { day($0) })
+        XCTAssertTrue(try XCTUnwrap(items.first { $0.day == day(26) }).isComplete)
+        XCTAssertEqual(series.first?.endBefore, day(29))
+    }
+    func testDeletingFollowingFromTheFirstOccurrenceIsTheWholeSeries() throws {
+        var series = [RepeatingPlan(template: template(.daily))]
+        var items: [PlanItem] = []
+        Planner.materialize(series, in: &items, from: day(26), through: day(28), calendar: calendar)
+        let first = try XCTUnwrap(items.first { $0.day == day(26) })
+        XCTAssertTrue(Planner.startsSeries(first, in: series))
+        Planner.delete(first, .following, items: &items, series: &series)
+        XCTAssertTrue(items.isEmpty)
+        XCTAssertTrue(series.isEmpty)
+    }
+    func testDeletingAllOccurrencesAndSingleItems() throws {
+        var series = [RepeatingPlan(template: template(.daily))]
+        var items: [PlanItem] = [PlanItem(title: "Single", day: day(26))]
+        Planner.materialize(series, in: &items, from: day(26), through: day(28), calendar: calendar)
+        let middle = try XCTUnwrap(items.first { $0.seriesID != nil && $0.day == day(27) })
+        Planner.delete(middle, .all, items: &items, series: &series)
+        XCTAssertEqual(items.map(\.title), ["Single"])
+        XCTAssertTrue(series.isEmpty)
+        // Any scope deletes just the item when it doesn't repeat.
+        Planner.delete(items[0], .occurrence, items: &items, series: &series)
+        XCTAssertTrue(items.isEmpty)
+    }
+    func testChangingTheFirstOccurrencesPatternChangesTheWholeSeriesAndDeletionKeepsTheConnection() throws {
+        var series = [RepeatingPlan(template: template(.daily))]
+        var items: [PlanItem] = []
+        Planner.materialize(series, in: &items, from: day(26), through: day(30), calendar: calendar)
+        Planner.delete(try XCTUnwrap(items.first { $0.day == day(27) }), .occurrence, items: &items, series: &series)
+        var later = try XCTUnwrap(items.first { $0.day == day(29) }); later.title = "Office"
+        Planner.saveRepeating(later, items: &items, series: &series, calendar: calendar)
+        XCTAssertEqual(Set(items.map(\.title)), ["Office"])
+        XCTAssertEqual(Planner.seriesStart(of: later, in: series), day(26))
+        var first = try XCTUnwrap(items.first { $0.day == day(26) }); first.repeatRule = .weekdays
+        Planner.saveRepeating(first, items: &items, series: &series, calendar: calendar)
+        XCTAssertEqual(series.count, 1)
+        XCTAssertEqual(series[0].template.repeatRule, .weekdays)
+    }
+    func testUndoingEachKindOfDeletionRestoresThePlan() throws {
+        for scope in RepeatDeletion.allCases {
+            var series = [RepeatingPlan(template: template(.daily))]
+            var items: [PlanItem] = []
+            Planner.materialize(series, in: &items, from: day(26), through: day(30), calendar: calendar)
+            items[0].completedAt = date(26, hour: 18)
+            var child = PlanItem(title: "Pack bag", day: day(28)); child.parentID = items[2].id
+            items.append(child)
+            let before = (items: items, series: series)
+            Planner.delete(items[2], scope, items: &items, series: &series)
+            let deletion = Planner.deletion(of: "Work", before: before, after: (items, series))
+            XCTAssertFalse(deletion.removed.isEmpty)
+            XCTAssertEqual(deletion.unlinked[child.id], before.items[2].id)
+            Planner.undo(deletion, items: &items, series: &series)
+            XCTAssertEqual(Set(items.map(\.id)), Set(before.items.map(\.id)), "\(scope)")
+            XCTAssertEqual(series, before.series, "\(scope)")
+            XCTAssertEqual(items.first { $0.id == child.id }?.parentID, before.items[2].id)
+            XCTAssertTrue(try XCTUnwrap(items.first { $0.id == before.items[0].id }).isComplete)
+            XCTAssertFalse(Planner.materialize(series, in: &items, from: day(26), through: day(30), calendar: calendar))
+        }
+    }
+    func testUndoingADeletionKeepsLaterChanges() {
+        var items = [PlanItem(title: "Read", day: day(26)), PlanItem(title: "Call", day: day(26))]
+        var series: [RepeatingPlan] = []
+        let before = (items: items, series: series)
+        Planner.delete(items[0], .all, items: &items, series: &series)
+        let deletion = Planner.deletion(of: "Read", before: before, after: (items, series))
+        items[0].title = "Call Mum"
+        Planner.undo(deletion, items: &items, series: &series)
+        XCTAssertEqual(Set(items.map(\.title)), ["Read", "Call Mum"])
+    }
+    func testTheOriginalEntryIsTheFirstDayStillInTheSeries() throws {
+        var series = [RepeatingPlan(template: template(.daily))]
+        var items: [PlanItem] = []
+        Planner.materialize(series, in: &items, from: day(26), through: day(29), calendar: calendar)
+        let third = try XCTUnwrap(items.first { $0.day == day(28) })
+        XCTAssertEqual(Planner.originalDay(of: third, in: series, calendar: calendar), day(26))
+        XCTAssertTrue(Planner.isOriginal(try XCTUnwrap(items.first { $0.day == day(26) }), in: series, calendar: calendar))
+        XCTAssertFalse(Planner.isOriginal(third, in: series, calendar: calendar))
+        // With the first day deleted, the next one becomes the original entry.
+        Planner.delete(try XCTUnwrap(items.first { $0.day == day(26) }), .occurrence, items: &items, series: &series)
+        XCTAssertEqual(Planner.originalDay(of: third, in: series, calendar: calendar), day(27))
+        XCTAssertTrue(Planner.isOriginal(PlanItem(title: "Single", day: day(28)), in: series))
+    }
+    func testDetachingAnOccurrenceMakesItASingleItemAndLeavesTheOthers() throws {
+        var series = [RepeatingPlan(template: template(.daily))]
+        var items: [PlanItem] = []
+        Planner.materialize(series, in: &items, from: day(26), through: day(30), calendar: calendar)
+        var third = try XCTUnwrap(items.first { $0.day == day(28) })
+        third.title = "Dentist instead"
+        third.completedAt = date(28, hour: 18)
+        Planner.detach(third, items: &items, series: &series)
+        XCTAssertFalse(Planner.materialize(series, in: &items, from: day(26), through: day(30), calendar: calendar))
+        let single = try XCTUnwrap(items.first { $0.id == third.id })
+        XCTAssertNil(single.seriesID)
+        XCTAssertEqual(single.repeatRule, .never)
+        XCTAssertEqual(single.title, "Dentist instead")
+        XCTAssertTrue(single.isComplete)
+        XCTAssertEqual(items.filter { $0.seriesID != nil }.map(\.day).sorted(), [26, 27, 29, 30].map { day($0) })
+        XCTAssertEqual(Set(items.filter { $0.seriesID != nil }.map(\.title)), ["Work"])
+        // Later edits to the original entry no longer reach the detached day.
+        var first = try XCTUnwrap(items.first { $0.day == day(26) }); first.title = "Office"
+        Planner.saveRepeating(first, items: &items, series: &series, calendar: calendar)
+        XCTAssertEqual(items.first { $0.id == third.id }?.title, "Dentist instead")
+        XCTAssertFalse(items.contains { $0.seriesID != nil && $0.day == day(28) })
+    }
+    func testALaterDayWithItsOwnPatternStartsANewMasterBesideTheOriginal() throws {
+        // X1–X4 weekly on Mondays; X3 changes to daily.
+        var series = [RepeatingPlan(template: template(.weekly))]
+        var items: [PlanItem] = []
+        Planner.materialize(series, in: &items, from: day(26), through: day(16, month: 11), calendar: calendar)
+        let x3Day = day(9, month: 11)
+        var x3 = try XCTUnwrap(items.first { $0.day == x3Day })
+        x3.repeatRule = .daily
+        Planner.detach(x3, items: &items, series: &series, calendar: calendar)
+        Planner.materialize(series, in: &items, from: day(26), through: day(16, month: 11), calendar: calendar)
+        let weekly = try XCTUnwrap(series.first { $0.template.repeatRule == .weekly })
+        let daily = try XCTUnwrap(series.first { $0.template.repeatRule == .daily })
+        XCTAssertNotEqual(weekly.familyID, daily.familyID)
+        // X1, X2 and X4 stay linked to the weekly master; X3 is Y1 of the daily one.
+        XCTAssertEqual(items.filter { $0.seriesID == weekly.id }.map(\.day).sorted(), [day(26), day(2, month: 11), day(16, month: 11)])
+        let y1 = try XCTUnwrap(items.first { $0.id == x3.id })
+        XCTAssertEqual(y1.seriesID, daily.id)
+        XCTAssertTrue(Planner.isOriginal(y1, in: series, calendar: calendar))
+        XCTAssertEqual(items.filter { $0.seriesID == daily.id }.map(\.day).sorted().first, x3Day)
+        XCTAssertEqual(items.filter { $0.seriesID == daily.id }.count, 8)
+        // The weekly master still reaches X4, and no longer reaches Y.
+        var x1 = try XCTUnwrap(items.first { $0.day == day(26) }); x1.title = "Office"
+        Planner.saveRepeating(x1, items: &items, series: &series, calendar: calendar)
+        XCTAssertEqual(items.first { $0.seriesID == weekly.id && $0.day == day(16, month: 11) }?.title, "Office")
+        XCTAssertEqual(items.first { $0.id == x3.id }?.title, "Work")
+    }
+    func testDetachingWithoutChangingThePatternNeverStartsADuplicateSeries() throws {
+        var series = [RepeatingPlan(template: template(.daily))]
+        var items: [PlanItem] = []
+        Planner.materialize(series, in: &items, from: day(26), through: day(30), calendar: calendar)
+        var third = try XCTUnwrap(items.first { $0.day == day(28) }); third.title = "Gym"
+        Planner.detach(third, items: &items, series: &series, calendar: calendar)
+        XCTAssertEqual(series.count, 1)
+        XCTAssertEqual(items.first { $0.id == third.id }?.repeatRule, .never)
+        XCTAssertEqual(items.count, 5)
+    }
+    func testLinkedCountIsTheTotalWhenTheSeriesEndsOtherwiseSoFar() throws {
+        var series = [RepeatingPlan(template: template(.daily))]
+        var items: [PlanItem] = []
+        Planner.materialize(series, in: &items, from: day(26), through: day(26), calendar: calendar)
+        let original = try XCTUnwrap(items.first)
+        let soFar = try XCTUnwrap(Planner.linkedCount(of: original, in: series, today: day(30), calendar: calendar))
+        XCTAssertEqual(soFar.count, 4)
+        XCTAssertFalse(soFar.isTotal)
+        series[0].excludedDays = [day(28)]
+        series[0].endBefore = day(5, month: 11)
+        let total = try XCTUnwrap(Planner.linkedCount(of: original, in: series, today: day(27), calendar: calendar))
+        XCTAssertEqual(total.count, 8)
+        XCTAssertTrue(total.isTotal)
+        XCTAssertNil(Planner.linkedCount(of: PlanItem(title: "Single", day: day(26)), in: series, today: day(27)))
     }
 }

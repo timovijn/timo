@@ -88,9 +88,9 @@ public struct RepeatingPlan: Codable, Equatable, Identifiable {
         familyID = id
         self.template = template
         self.template.completedAt = nil
+        self.template.cancelledAt = nil
         self.template.carriedFrom = nil
         self.template.suggestionDismissed = false
-        self.template.movesToNextDay = false
         self.template.seriesID = nil
         self.template.occurrenceDay = nil
     }
@@ -119,6 +119,9 @@ public struct PlanItem: Identifiable, Codable, Equatable {
     /// Moments to be reminded; an item can have several.
     public var reminders: [Date]
     public var completedAt: Date?
+    /// When the item was called off. A cancelled item is never complete, doesn't carry on,
+    /// isn't reviewed or reminded about, and stays visible in a quiet style until restored.
+    public var cancelledAt: Date?
     public var parentID: UUID?
     public var originalDay: Day
     /// Only in plans saved before the scheduled day stayed fixed: the day an item was moved on
@@ -127,6 +130,9 @@ public struct PlanItem: Identifiable, Codable, Equatable {
     public var suggestionDismissed: Bool
     public var createdAt: Date
     public var isComplete: Bool { completedAt != nil }
+    public var isCancelled: Bool { cancelledAt != nil }
+    /// Done with either way: completed or cancelled. Nothing more is asked of it.
+    public var isSettled: Bool { isComplete || isCancelled }
     public init(id: UUID = UUID(), title: String, notes: String = "", day: Day,
                 minute: Int? = nil, end: Date? = nil, parentID: UUID? = nil, movesToNextDay: Bool = true, reminders: [Date] = [], locations: [String] = [], people: [String] = []) {
         self.id = id; self.movesToNextDay = movesToNextDay; self.title = title; self.notes = notes; self.day = day
@@ -137,7 +143,7 @@ public struct PlanItem: Identifiable, Codable, Equatable {
     }
     // Read the original task/event format without changing IDs or scheduling choices.
     private enum CodingKeys: String, CodingKey {
-        case id, title, notes, locations, people, day, minute, end, reminders, completedAt, parentID, originalDay, carriedFrom, suggestionDismissed, createdAt, movesToNextDay, repeatRule, repeatWeekdays, seriesID, occurrenceDay, personas
+        case id, title, notes, locations, people, day, minute, end, reminders, completedAt, cancelledAt, parentID, originalDay, carriedFrom, suggestionDismissed, createdAt, movesToNextDay, repeatRule, repeatWeekdays, seriesID, occurrenceDay, personas
     }
     private enum LegacyKeys: String, CodingKey { case kind, reminderAt, persona }
     public init(from decoder: Decoder) throws {
@@ -169,6 +175,7 @@ public struct PlanItem: Identifiable, Codable, Equatable {
             reminders = try legacy.decodeIfPresent(Date.self, forKey: .reminderAt).map { [$0] } ?? []
         }
         completedAt = try c.decodeIfPresent(Date.self, forKey: .completedAt)
+        cancelledAt = try c.decodeIfPresent(Date.self, forKey: .cancelledAt)
         parentID = try c.decodeIfPresent(UUID.self, forKey: .parentID)
         originalDay = try c.decode(Day.self, forKey: .originalDay)
         carriedFrom = try c.decodeIfPresent(Day.self, forKey: .carriedFrom)
@@ -194,11 +201,11 @@ public struct PlanItem: Identifiable, Codable, Equatable {
         return calendar.date(bySettingHour: minute / 60, minute: minute % 60, second: 0, of: day.date(calendar: calendar))
     }
     public func isInProgress(now: Date, calendar: Calendar = .current) -> Bool {
-        guard !isComplete, let start = start(calendar: calendar), let end else { return false }
+        guard !isSettled, let start = start(calendar: calendar), let end else { return false }
         return start <= now && now < end
     }
     public func isElapsed(now: Date, calendar: Calendar = .current) -> Bool {
-        guard !isComplete else { return false }
+        guard !isSettled else { return false }
         guard let boundary = end ?? start(calendar: calendar) else { return false }
         return boundary < now
     }
@@ -208,14 +215,14 @@ public struct PlanItem: Identifiable, Codable, Equatable {
         let next = calendar.date(byAdding: .day, value: 1, to: beginning)!
         return start < next && end > beginning
     }
-    /// Whether an unfinished item is shown on later days until it is done. Repeats never are.
-    public var carries: Bool { movesToNextDay && seriesID == nil }
+    /// Whether this item carries forward until completed or cancelled.
+    public var carries: Bool { movesToNextDay }
     /// The day this item is shown as itself. Its scheduled `day` never changes: an item that
-    /// carries is shown on the day it was completed, or while unfinished on today. A time range
-    /// still running stays on its own day until it ends.
+    /// carries is shown on the day it was completed or cancelled, or while unfinished on today.
+    /// A time range still running stays on its own day until it ends.
     public func liveDay(now: Date, calendar: Calendar = .current) -> Day {
         guard carries else { return day }
-        if let completedAt { return max(day, Day(completedAt, calendar: calendar)) }
+        if let settled = completedAt ?? cancelledAt { return max(day, Day(settled, calendar: calendar)) }
         if let end, end > now { return day }
         return max(day, Day(now, calendar: calendar))
     }
@@ -235,6 +242,23 @@ public struct PlanItem: Identifiable, Codable, Equatable {
         let live = liveDay(now: now, calendar: calendar)
         return live > day && day <= selected && selected < live
     }
+}
+
+/// How much of a repeating item to delete: the occurrence that was chosen, it and every later
+/// one, or the whole series. Single items are simply deleted.
+public enum RepeatDeletion: CaseIterable {
+    case occurrence, following, all
+}
+
+/// What a deletion took away, so it can be put back: the items removed, every repeating plan
+/// as it was before the deletion changed or removed it, and the links it cut from children.
+public struct PlanDeletion: Identifiable {
+    public let id = UUID()
+    /// The deleted item's title, for "Undo" to name what comes back.
+    public let title: String
+    public let removed: [PlanItem]
+    public let previousPlans: [RepeatingPlan]
+    public let unlinked: [UUID: UUID]
 }
 
 public enum PlannerError: LocalizedError {
@@ -270,7 +294,7 @@ public enum Planner {
                     updateStart(&occurrence, day: cursor, minute: occurrence.minute, calendar: calendar)
                     occurrence.originalDay = cursor
                     occurrence.completedAt = nil
-                    occurrence.movesToNextDay = false
+                    occurrence.cancelledAt = nil
                     occurrence.parentID = nil
                     items.append(occurrence)
                     existing.insert(cursor)
@@ -284,6 +308,7 @@ public enum Planner {
     }
     // A repeating item has one shared definition. Editing any occurrence updates
     // the whole family, including plans split by older versions of the app.
+    // The editor only sends this the master (original entry); a later day is detached instead.
     public static func saveRepeating(_ edited: PlanItem, items: inout [PlanItem], series: inout [RepeatingPlan], calendar: Calendar = .current) {
         let previous = items.first { $0.id == edited.id }
         let family = series.first { $0.id == previous?.seriesID }?.familyID
@@ -356,7 +381,7 @@ public enum Planner {
             updated.originalDay = day
             updated.createdAt = old.createdAt
             updated.completedAt = old.id == edited.id ? edited.completedAt : old.completedAt
-            updated.movesToNextDay = false
+            updated.cancelledAt = old.id == edited.id ? edited.cancelledAt : old.cancelledAt
             updated.parentID = old.parentID
             let scheduleChanged = old.day != updated.day || old.minute != updated.minute || old.end != updated.end
             updated.suggestionDismissed = scheduleChanged ? false : old.suggestionDismissed
@@ -368,7 +393,6 @@ public enum Planner {
             first.seriesID = plan.id
             first.occurrenceDay = first.day
             first.originalDay = first.day
-            first.movesToNextDay = false
             items.append(first)
         }
         let retained = Set(items.map(\.id))
@@ -376,6 +400,143 @@ public enum Planner {
         for index in items.indices where items[index].parentID.map({ removed.contains($0) }) ?? false {
             items[index].parentID = nil
         }
+    }
+    /// Deletes a repeating occurrence, it and the later ones, or the whole series. One occurrence
+    /// is kept out of the series by its day, so it isn't generated again; deleting from an
+    /// occurrence on ends every plan in the family before that day and drops those starting on
+    /// or after it, leaving earlier occurrences (and their completion) as they were.
+    public static func delete(_ item: PlanItem, _ scope: RepeatDeletion, items: inout [PlanItem], series: inout [RepeatingPlan]) {
+        guard item.seriesID != nil, let family = series.first(where: { $0.id == item.seriesID })?.familyID else {
+            delete(item.id, includingChildren: false, from: &items)
+            return
+        }
+        let day = item.occurrenceDay ?? item.day
+        switch scope {
+        case .all:
+            deleteSeries(item, items: &items, series: &series)
+        case .occurrence:
+            if let index = series.firstIndex(where: { $0.id == item.seriesID }), !series[index].excludedDays.contains(day) {
+                series[index].excludedDays.append(day)
+            }
+            delete(item.id, includingChildren: false, from: &items)
+        case .following:
+            let related = Set(series.filter { $0.familyID == family }.map(\.id))
+            let ids = items.filter { occurrence in
+                occurrence.seriesID.map(related.contains) ?? false && (occurrence.occurrenceDay ?? occurrence.day) >= day
+            }.map(\.id)
+            for id in ids { delete(id, includingChildren: false, from: &items) }
+            series.removeAll { related.contains($0.id) && $0.template.day >= day }
+            for index in series.indices where related.contains(series[index].id) {
+                series[index].endBefore = min(series[index].endBefore ?? day, day)
+            }
+        }
+    }
+    /// Records what changed between a plan before and after a deletion.
+    public static func deletion(of title: String, before: (items: [PlanItem], series: [RepeatingPlan]),
+                                after: (items: [PlanItem], series: [RepeatingPlan])) -> PlanDeletion {
+        let remaining = Dictionary(after.items.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let plans = Dictionary(after.series.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var unlinked: [UUID: UUID] = [:]
+        for item in before.items {
+            if let parent = item.parentID, let now = remaining[item.id], now.parentID == nil { unlinked[item.id] = parent }
+        }
+        return PlanDeletion(title: title,
+                            removed: before.items.filter { remaining[$0.id] == nil },
+                            previousPlans: before.series.filter { plans[$0.id] != $0 },
+                            unlinked: unlinked)
+    }
+    /// Puts back what a deletion took away, leaving anything changed since then as it is.
+    public static func undo(_ deletion: PlanDeletion, items: inout [PlanItem], series: inout [RepeatingPlan]) {
+        let restoredPlans = Set(deletion.previousPlans.map(\.id))
+        series.removeAll { restoredPlans.contains($0.id) }
+        series.append(contentsOf: deletion.previousPlans)
+        let present = Set(items.map(\.id))
+        items.append(contentsOf: deletion.removed.filter { !present.contains($0.id) })
+        let ids = Set(items.map(\.id))
+        for index in items.indices {
+            if let parent = deletion.unlinked[items[index].id], items[index].parentID == nil, ids.contains(parent) {
+                items[index].parentID = parent
+            }
+        }
+    }
+    /// The day of a repeating item's original entry: its first occurrence still in the series.
+    /// Later occurrences are linked to it, and its editor is where the series is changed.
+    public static func originalDay(of item: PlanItem, in series: [RepeatingPlan], calendar: Calendar = .current) -> Day? {
+        guard let family = series.first(where: { $0.id == item.seriesID })?.familyID else { return nil }
+        let plans = series.filter { $0.familyID == family }
+        guard var cursor = plans.map(\.template.day).min() else { return nil }
+        let last = item.occurrenceDay ?? item.day
+        while cursor <= last {
+            if plans.contains(where: { $0.includes(cursor, calendar: calendar) }) { return cursor }
+            guard let next = calendar.date(byAdding: .day, value: 1, to: cursor.date(calendar: calendar)) else { break }
+            cursor = Day(next, calendar: calendar)
+        }
+        return last
+    }
+    /// How many linked items follow an original: all of them when its repeating item ends,
+    /// otherwise those up to and including `today` (nil for a single item). Counted from the
+    /// rule, since days are only generated as they are opened.
+    public static func linkedCount(of item: PlanItem, in series: [RepeatingPlan], today: Day,
+                                   calendar: Calendar = .current) -> (count: Int, isTotal: Bool)? {
+        guard let family = series.first(where: { $0.id == item.seriesID })?.familyID,
+              let start = originalDay(of: item, in: series, calendar: calendar) else { return nil }
+        let plans = series.filter { $0.familyID == family }
+        let ends = plans.allSatisfy { $0.endBefore != nil }
+        let last = ends ? plans.compactMap(\.endBefore).max()! : calendar.date(byAdding: .day, value: 1, to: today.date(calendar: calendar)).map { Day($0, calendar: calendar) }!
+        var count = 0
+        var cursor = start
+        while true {
+            guard let next = calendar.date(byAdding: .day, value: 1, to: cursor.date(calendar: calendar)) else { break }
+            cursor = Day(next, calendar: calendar)
+            guard cursor < last else { break }
+            if plans.contains(where: { $0.includes(cursor, calendar: calendar) }) { count += 1 }
+        }
+        return (count, ends)
+    }
+    /// Whether `item` is its repeating item's original entry (true for single items too).
+    public static func isOriginal(_ item: PlanItem, in series: [RepeatingPlan], calendar: Calendar = .current) -> Bool {
+        guard item.seriesID != nil else { return true }
+        return originalDay(of: item, in: series, calendar: calendar).map { (item.occurrenceDay ?? item.day) <= $0 } ?? true
+    }
+    /// Saves an edited later day on its own: it leaves its repeating item, whose day is kept out
+    /// of the series so the series doesn't fill it again, and every other day stays linked to its
+    /// master. Given a different repeat pattern, the detached day becomes the master of a new
+    /// repeating item from its day; the old one carries on beside it, so the two can share later
+    /// dates. Other changes make it a single item.
+    public static func detach(_ edited: PlanItem, items: inout [PlanItem], series: inout [RepeatingPlan], calendar: Calendar = .current) {
+        let previous = items.first { $0.id == edited.id }
+        if let seriesID = previous?.seriesID ?? edited.seriesID,
+           let index = series.firstIndex(where: { $0.id == seriesID }) {
+            let day = previous?.occurrenceDay ?? edited.occurrenceDay ?? edited.day
+            if !series[index].excludedDays.contains(day) { series[index].excludedDays.append(day) }
+        }
+        var single = edited
+        single.seriesID = nil
+        single.occurrenceDay = nil
+        single.originalDay = single.day
+        items.removeAll { $0.id == edited.id }
+        if single.repeatRule == .never || !(previous.map { changesPattern($0, to: edited) } ?? false) {
+            single.repeatRule = .never
+            single.repeatWeekdays = []
+            items.append(single)
+        } else {
+            saveRepeating(single, items: &items, series: &series, calendar: calendar)
+        }
+    }
+    /// Whether an edit changes how an item repeats, rather than what it is or when on its day.
+    public static func changesPattern(_ previous: PlanItem, to edited: PlanItem) -> Bool {
+        previous.repeatRule != edited.repeatRule
+            || (edited.repeatRule == .custom && Set(previous.repeatWeekdays) != Set(edited.repeatWeekdays))
+    }
+    /// The first day of the repeating item an occurrence belongs to, or nil for a single item.
+    public static func seriesStart(of item: PlanItem, in series: [RepeatingPlan]) -> Day? {
+        guard let family = series.first(where: { $0.id == item.seriesID })?.familyID else { return nil }
+        return series.filter { $0.familyID == family }.map(\.template.day).min()
+    }
+    /// Whether `item` is the first occurrence of its series, so deleting it and the following
+    /// ones would delete the whole series.
+    public static func startsSeries(_ item: PlanItem, in series: [RepeatingPlan]) -> Bool {
+        isOriginal(item, in: series)
     }
     public static func deleteSeries(_ item: PlanItem, items: inout [PlanItem], series: inout [RepeatingPlan]) {
         guard let family = series.first(where: { $0.id == item.seriesID })?.familyID else {
@@ -410,6 +571,14 @@ public enum Planner {
         let time = calendar.dateComponents([.hour, .minute, .second], from: now)
         return calendar.date(bySettingHour: time.hour ?? 12, minute: time.minute ?? 0, second: time.second ?? 0,
                              of: day.date(calendar: calendar)) ?? now
+    }
+    /// Cancels an item while viewing `day`, or restores it. Like completion, cancelling counts on
+    /// a past day when done from it, so a carried item stops there. The two never stand together:
+    /// cancelling clears completion, and restoring leaves the item open.
+    public static func setCancelled(_ cancelled: Bool, _ item: inout PlanItem, on day: Day, now: Date, calendar: Calendar = .current) {
+        item.cancelledAt = cancelled ? completionDate(on: day, now: now, calendar: calendar) : nil
+        item.completedAt = nil
+        item.suggestionDismissed = false
     }
     public static func validate(_ item: PlanItem, in items: [PlanItem], calendar: Calendar = .current) throws {
         guard !item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw PlannerError.title }
@@ -449,9 +618,9 @@ public enum Planner {
             }
             .sorted { $0.day > $1.day }
     }
-    /// The nearest future reminders of unfinished items, one entry per reminder.
+    /// The nearest future reminders of unfinished, uncancelled items, one entry per reminder.
     public static func upcomingReminders(in items: [PlanItem], now: Date, limit: Int = 64) -> [ScheduledReminder] {
-        Array(items.filter { !$0.isComplete }
+        Array(items.filter { !$0.isSettled }
             .flatMap { item in Set(item.reminders).filter { $0 > now }.map { ScheduledReminder(item: item, date: $0) } }
             .sorted {
                 if $0.date != $1.date { return $0.date < $1.date }
@@ -479,7 +648,7 @@ public enum Planner {
     }
     public static func suggestsParentCompletion(_ parent: PlanItem, in items: [PlanItem]) -> Bool {
         let children = items.filter { $0.parentID == parent.id }
-        return !parent.isComplete && !parent.suggestionDismissed && !children.isEmpty && children.allSatisfy(\.isComplete)
+        return !parent.isSettled && !parent.suggestionDismissed && !children.isEmpty && children.allSatisfy(\.isSettled)
     }
 }
 

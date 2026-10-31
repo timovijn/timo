@@ -7,13 +7,16 @@ import UserNotifications
     private var series: [RepeatingPlan] = []
     private var displayedDay = Day(Date())
     @Published var errorMessage: String?
+    /// The most recent deletion, offered for undoing until it is undone or dismissed.
+    @Published var lastDeletion: PlanDeletion?
+    private weak var deletionUndoManager: UndoManager?
     private let url: URL
     private var canWrite = true
     private var reminderRevision = 0
     private var reminderWorker: Task<Void, Never>?
     private let notificationCenter = UNUserNotificationCenter.current()
     private struct Document: Codable {
-        var version = 7
+        var version = 8
         var items: [PlanItem]
         var series: [RepeatingPlan]
         private enum CodingKeys: String, CodingKey { case version, items, series }
@@ -23,6 +26,16 @@ import UserNotifications
             version = try values.decode(Int.self, forKey: .version)
             items = try values.decode([PlanItem].self, forKey: .items)
             series = try values.decodeIfPresent([RepeatingPlan].self, forKey: .series) ?? []
+            // Older versions disabled the stored preference for all repeats. Preserve the
+            // previous behaviour for Anytime repeats while making it editable from now on.
+            if version < 8 {
+                for index in items.indices where items[index].seriesID != nil && items[index].minute == nil {
+                    items[index].movesToNextDay = true
+                }
+                for index in series.indices where series[index].template.minute == nil {
+                    series[index].template.movesToNextDay = true
+                }
+            }
         }
     }
     init() {
@@ -30,7 +43,7 @@ import UserNotifications
         do {
             if FileManager.default.fileExists(atPath: url.path) {
                 let document = try JSONDecoder().decode(Document.self, from: Data(contentsOf: url))
-                guard (1...7).contains(document.version) else { throw CocoaError(.fileReadCorruptFile) }
+                guard (1...8).contains(document.version) else { throw CocoaError(.fileReadCorruptFile) }
                 items = document.items
                 series = document.series
             }
@@ -57,7 +70,13 @@ import UserNotifications
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: now)
         let horizon = calendar.date(byAdding: .day, value: 60, to: today)!
-        let changed = Planner.materialize(plans, in: &updated, from: Day(today), through: Day(horizon))
+        var changed = false
+        for plan in plans {
+            // Carrying repeats can still be unfinished on days the app was never opened.
+            // Generate those occurrences as well, retaining their original occurrence keys.
+            let first = plan.template.carries ? plan.template.day : Day(today)
+            if Planner.materialize([plan], in: &updated, from: first, through: Day(horizon)) { changed = true }
+        }
         // Include earlier starts for overnight/multi-day ranges overlapping the viewed day.
         var selectedChanged = false
         for plan in plans {
@@ -97,7 +116,7 @@ import UserNotifications
                 notificationCenter.removePendingNotificationRequests(withIdentifiers:
                     pending.filter { $0.identifier.hasPrefix("timo.reminder.") }.map(\.identifier))
                 // Identifiers are "timo.reminder.<item>.<time>", one per reminder.
-                let activeIDs = Set(snapshot.filter { !$0.isComplete }.map(\.id.uuidString))
+                let activeIDs = Set(snapshot.filter { !$0.isSettled }.map(\.id.uuidString))
                 let delivered = await notificationCenter.deliveredNotifications()
                 notificationCenter.removeDeliveredNotifications(withIdentifiers: delivered.map(\.request.identifier)
                     .filter { $0.hasPrefix("timo.reminder.") && !activeIDs.contains(String($0.dropFirst("timo.reminder.".count).prefix(36))) })
@@ -127,6 +146,7 @@ import UserNotifications
         let previous = items.first { $0.id == item.id }
         var previousDefinition = previous
         previousDefinition?.completedAt = item.completedAt
+        previousDefinition?.cancelledAt = item.cancelledAt
         previousDefinition?.suggestionDismissed = item.suggestionDismissed
         if (item.repeatRule != .never || previous?.seriesID != nil) && previousDefinition != item {
             Planner.saveRepeating(item, items: &updated, series: &plans)
@@ -139,12 +159,21 @@ import UserNotifications
         commit(updated, series: plans)
     }
     /// Ticks an item off, or undoes it. Ticked off while viewing a past day, it counts as done on
-    /// that day, so a carried item stops there instead of showing on the days after.
+    /// that day, so a carried item stops there instead of showing on the days after. The circle of
+    /// a cancelled item restores it instead, so it is never completed by accident.
     func toggle(_ item: PlanItem, on day: Day) {
         var updated = items
         guard let i = updated.firstIndex(where: { $0.id == item.id }) else { return }
+        guard !updated[i].isCancelled else { return setCancelled(item, false, on: day) }
         updated[i].completedAt = updated[i].isComplete ? nil : Planner.completionDate(on: day, now: Date())
         updated[i].suggestionDismissed = false
+        commit(updated)
+    }
+    /// Cancels or restores a single item; for a repeating item, only this occurrence.
+    func setCancelled(_ item: PlanItem, _ cancelled: Bool, on day: Day) {
+        var updated = items
+        guard let i = updated.firstIndex(where: { $0.id == item.id }) else { return }
+        Planner.setCancelled(cancelled, &updated[i], on: day, now: Date())
         commit(updated)
     }
     func dismissSuggestion(_ item: PlanItem) {
@@ -152,14 +181,70 @@ import UserNotifications
         guard let i = updated.firstIndex(where: { $0.id == item.id }) else { return }
         updated[i].suggestionDismissed = true; commit(updated)
     }
-    func delete(_ item: PlanItem, children: Bool) {
+    /// Deletes an item. For a repeating item, `scope` says how much of the series goes with it.
+    /// The deletion can be undone from the Undo button that appears, and through the system's
+    /// own undo (shake, or three fingers) when an undo manager is given.
+    func delete(_ item: PlanItem, children: Bool, scope: RepeatDeletion = .all, undoManager: UndoManager? = nil) {
         var updated = items
         var plans = series
         if item.seriesID != nil {
-            Planner.deleteSeries(item, items: &updated, series: &plans)
+            Planner.delete(item, scope, items: &updated, series: &plans)
         } else {
             Planner.delete(item.id, includingChildren: children, from: &updated)
         }
+        let deletion = Planner.deletion(of: item.title, before: (items, series), after: (updated, plans))
+        commit(updated, series: plans)
+        guard items == updated else { return }
+        lastDeletion = deletion
+        deletionUndoManager = undoManager
+        undoManager?.registerUndo(withTarget: self) { store in
+            MainActor.assumeIsolated { store.undo(deletion) }
+        }
+        undoManager?.setActionName("Delete")
+    }
+    /// Puts back what a deletion removed.
+    func undo(_ deletion: PlanDeletion) {
+        var updated = items
+        var plans = series
+        Planner.undo(deletion, items: &updated, series: &plans)
+        commit(updated, series: plans)
+        if lastDeletion?.id == deletion.id { lastDeletion = nil }
+        // Undone from the button, the system's undo has nothing left to do.
+        if let manager = deletionUndoManager, !manager.isUndoing { manager.removeAllActions(withTarget: self) }
+    }
+    /// Whether a repeating item is its series' first occurrence; then "this and following" is everything.
+    func startsSeries(_ item: PlanItem) -> Bool { Planner.startsSeries(item, in: series) }
+    /// The first day of the repeating item an occurrence belongs to.
+    func seriesStart(of item: PlanItem) -> Day? { Planner.seriesStart(of: item, in: series) }
+    /// The day of the original entry of the repeating item an occurrence belongs to.
+    func originalDay(of item: PlanItem) -> Day? { Planner.originalDay(of: item, in: series) }
+    /// How many linked items follow an original item (see `Planner.linkedCount`).
+    func linkedCount(of item: PlanItem) -> (count: Int, isTotal: Bool)? {
+        Planner.linkedCount(of: item, in: series, today: Day(Date()))
+    }
+    /// Whether an item is its repeating item's original entry, where the series is edited.
+    func isOriginal(_ item: PlanItem) -> Bool { Planner.isOriginal(item, in: series) }
+    /// The original entry of the repeating item an occurrence belongs to. It may be on a day
+    /// that was never opened, so it is generated first when needed.
+    func original(of item: PlanItem) -> PlanItem? {
+        guard let day = Planner.originalDay(of: item, in: series),
+              let family = series.first(where: { $0.id == item.seriesID })?.familyID else { return nil }
+        let related = Set(series.filter { $0.familyID == family }.map(\.id))
+        func find(_ items: [PlanItem]) -> PlanItem? {
+            items.first { ($0.seriesID.map(related.contains) ?? false) && $0.occurrenceDay == day }
+        }
+        if let found = find(items) { return found }
+        var updated = items
+        Planner.materialize(series.filter { related.contains($0.id) }, in: &updated, from: day, through: day)
+        commit(updated)
+        return find(items)
+    }
+    /// Saves an edited occurrence as a single item of its own, leaving the rest of its series.
+    func saveDetached(_ item: PlanItem) throws {
+        try Planner.validate(item, in: items)
+        var updated = items
+        var plans = series
+        Planner.detach(item, items: &updated, series: &plans)
         commit(updated, series: plans)
     }
     func item(_ id: UUID?) -> PlanItem? { items.first { $0.id == id } }

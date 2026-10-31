@@ -2,6 +2,7 @@ import SwiftUI
 
 @main struct TimoApp: App {
     @StateObject private var store = PlanStore()
+    init() { DestructiveSubmenu.install() }
     var body: some Scene {
         WindowGroup {
             DayView().environmentObject(store)

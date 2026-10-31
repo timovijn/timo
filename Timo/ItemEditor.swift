@@ -8,7 +8,11 @@ struct ItemEditor: View {
     @State private var locations: [ItemTextEntry]
     @State private var people: [ItemTextEntry]
     @State private var issue: String?
-    @State private var showingDelete = false
+    /// An edited later day of a repeating item, waiting for the warning to be confirmed.
+    @State private var pendingDetach: PlanItem?
+    /// Opens another item's editor in place of this one, for Go to original item.
+    var openItem: ((PlanItem) -> Void)? = nil
+    @Environment(\.undoManager) private var undoManager
     @State private var requestingReminder = false
     @State private var needsNotificationSettings = false
     @State private var editingField: ScheduleField?
@@ -25,7 +29,8 @@ struct ItemEditor: View {
     /// Sections whose explanation is open. Explanations start closed, behind a small (i).
     @State private var openInfo: Set<String> = []
     private var existing: Bool { store.item(item.id) != nil }
-    init(item: PlanItem) {
+    init(item: PlanItem, openItem: ((PlanItem) -> Void)? = nil) {
+        self.openItem = openItem
         _item = State(initialValue: item)
         _locations = State(initialValue: item.locations.map { ItemTextEntry(text: $0) })
         _people = State(initialValue: item.people.map { ItemTextEntry(text: $0) })
@@ -35,6 +40,7 @@ struct ItemEditor: View {
         NavigationStack {
             // The reader lets a place or person row scroll well clear of the keyboard.
             ScrollViewReader { form in Form {
+                seriesSection
                 Section {
                     TextField("What’s on your day?", text: $item.title, axis: .vertical)
                         .font(.title3.weight(.medium)).focused($titleFocused)
@@ -55,7 +61,7 @@ struct ItemEditor: View {
                 } footer: {
                     InfoFooter(isExpanded: openInfo.contains("persona")) {
                         Text("Personas gather items by focus, such as health or work. An item can be in several, or none: tap a persona to add it and again to remove it. Choose one at the top left of your day to see everything in it, past and present."
-                             + (item.repeatRule != .never || item.seriesID != nil ? " Every occurrence of this repeating item shares its personas." : ""))
+                             + (item.repeatRule != .never || item.seriesID != nil ? " The original item and its linked items share their personas." : ""))
                     }
                 }
                 Section {
@@ -116,55 +122,19 @@ struct ItemEditor: View {
                         Text("The schedule stays as planned. Until it is done, the item is also shown on today. Tick it off on the day it actually happened to keep it there.")
                     }
                 }
+                repeatSection
                 Section {
-                    Picker("Repeat", selection: $item.repeatRule) {
-                        ForEach(RepeatRule.allCases) { rule in
-                            Text(rule.title).tag(rule)
-                        }
-                    }
-                    if item.repeatRule == .custom {
-                        ForEach(orderedWeekdays, id: \.self) { weekday in
-                            Toggle(Calendar.current.weekdaySymbols[weekday - 1], isOn: Binding(
-                                get: { item.repeatWeekdays.contains(weekday) },
-                                set: { selected in
-                                    if selected { item.repeatWeekdays.append(weekday) }
-                                    else { item.repeatWeekdays.removeAll { $0 == weekday } }
-                                }))
-                        }
-                    }
-                    if item.repeatRule == .weekly {
-                        Text("Every " + item.day.date().formatted(.dateTime.weekday(.wide)))
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
+                    Toggle("Move to next day if unfinished", isOn: Binding(get: { item.movesToNextDay }, set: {
+                        item.movesToNextDay = $0
+                        carryChosen = true
+                    }))
                 } header: {
-                    InfoHeader("Repeat", isExpanded: infoBinding("repeat"))
+                    InfoHeader("Carry over", isExpanded: infoBinding("carryOver"))
                 } footer: {
-                    InfoFooter(isExpanded: openInfo.contains("repeat")) {
-                        Text(item.repeatRule != .never || item.seriesID != nil
-                             ? "Starts on the first matching day on or after the selected date. Each occurrence can be completed independently and stays on its scheduled day. Edits apply to every occurrence of this repeating item, including earlier days. Completion is separate for each day. Choosing Never keeps only this occurrence."
-                             : "Repeat this item every day, every weekday, every week or on days you choose. Each occurrence stays on its own day and is completed separately.")
-                    }
-                }
-                .onChange(of: item.repeatRule) { _, rule in
-                    if rule != .never { item.movesToNextDay = false }
-                    if rule == .custom && item.repeatWeekdays.isEmpty {
-                        item.repeatWeekdays = [Calendar.current.component(.weekday, from: item.day.date())]
-                    }
-                }
-                if item.repeatRule == .never && item.seriesID == nil {
-                    Section {
-                        Toggle("Move to next day if unfinished", isOn: Binding(get: { item.movesToNextDay }, set: {
-                            item.movesToNextDay = $0
-                            carryChosen = true
-                        }))
-                    } header: {
-                        InfoHeader("Carry over", isExpanded: infoBinding("carryOver"))
-                    } footer: {
-                        InfoFooter(isExpanded: openInfo.contains("carryOver")) {
-                            Text(item.movesToNextDay
-                                 ? "Unfinished items move to today. A time range keeps its time and duration; a single time becomes any time."
-                                 : "This item stays on its scheduled day, even if unfinished.")
-                        }
+                    InfoFooter(isExpanded: openInfo.contains("carryOver")) {
+                        Text(item.movesToNextDay
+                             ? "Unfinished items move to today. A time range keeps its time and duration; a single time becomes any time."
+                             : "This item stays on its scheduled day, even if unfinished.")
                     }
                 }
                 Section {
@@ -217,12 +187,29 @@ struct ItemEditor: View {
                 Section("Notes") { TextField("Anything to remember", text: $item.notes, axis: .vertical).lineLimit(3...8) }
                 if existing {
                     Section {
-                        Button(item.seriesID == nil ? "Delete item" : "Delete repeating item", role: .destructive) { showingDelete = true }
+                        if item.seriesID == nil {
+                            // No confirmation: the Undo that follows a deletion covers a mistaken tap.
+                            Button(role: .destructive) {
+                                store.delete(item, children: false, undoManager: undoManager); dismiss()
+                            } label: {
+                                Label("Delete item", systemImage: "trash").foregroundStyle(.red)
+                            }
+                        } else {
+                            // The same choices as the long-press menu, opening from the button.
+                            Menu {
+                                RepeatDeletionButtons(item: item) { scope in
+                                    store.delete(item, children: false, scope: scope, undoManager: undoManager); dismiss()
+                                }
+                            } label: {
+                                Label { Text("Delete item") } icon: { Image(systemName: "trash") }
+                                    .foregroundStyle(.red)
+                            }
+                        }
                     }
                 }
             }
             .onChange(of: item.minute != nil) { _, timed in
-                guard !existing, !carryChosen, item.repeatRule == .never else { return }
+                guard !existing, !carryChosen else { return }
                 item.movesToNextDay = !timed
             }
             .onChange(of: pendingField) { _, field in
@@ -257,10 +244,16 @@ struct ItemEditor: View {
                 }
                 Button("OK", role: .cancel) { issue = nil; needsNotificationSettings = false }
             } message: { Text(issue ?? "") }
-            .confirmationDialog(item.seriesID == nil ? "Delete this item?" : "Delete all occurrences of this repeating item?", isPresented: $showingDelete, titleVisibility: .visible) {
-                Button(item.seriesID == nil ? "Delete item" : "Delete all occurrences", role: .destructive) {
-                    store.delete(item, children: false); dismiss()
+            .alert("Unlink this item?",
+                   isPresented: Binding(get: { pendingDetach != nil }, set: { if !$0 { pendingDetach = nil } }),
+                   presenting: pendingDetach) { saved in
+                Button("Unlink and Save") { saveDetached(saved) }
+                if openItem != nil, let stored = linkedOccurrence {
+                    Button("Edit Original Item") { goToOriginal(of: stored) }
                 }
+                Button("Cancel", role: .cancel) {}
+            } message: { saved in
+                Text(unlinkMessage(saved))
             }
         }
     }
@@ -447,6 +440,102 @@ struct ItemEditor: View {
         let first = Calendar.current.firstWeekday
         return (0..<7).map { (first - 1 + $0) % 7 + 1 }
     }
+    private var repeatSection: some View {
+        Section {
+            Picker("Repeat", selection: $item.repeatRule) {
+                ForEach(RepeatRule.allCases) { rule in
+                    Text(rule.title).tag(rule)
+                }
+            }
+            if item.repeatRule == .custom {
+                ForEach(orderedWeekdays, id: \.self) { weekday in
+                    Toggle(Calendar.current.weekdaySymbols[weekday - 1], isOn: Binding(
+                        get: { item.repeatWeekdays.contains(weekday) },
+                        set: { selected in
+                            if selected { item.repeatWeekdays.append(weekday) }
+                            else { item.repeatWeekdays.removeAll { $0 == weekday } }
+                        }))
+                }
+            }
+            if item.repeatRule == .weekly {
+                Text("Every " + item.day.date().formatted(.dateTime.weekday(.wide)))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        } header: {
+            InfoHeader("Repeat", isExpanded: infoBinding("repeat"))
+        } footer: {
+            InfoFooter(isExpanded: openInfo.contains("repeat")) {
+                Text(item.repeatRule != .never || item.seriesID != nil
+                     ? "Starts on the first matching day on or after the selected date. Changes to the original item, including how it repeats, apply to all its linked items. Changing how a linked item repeats unlinks it and makes it a new original item. Completion is separate for each item. The Carry over setting controls whether unfinished items move to the next day."
+                     : "Repeat this item every day, every weekday, every week or on days you choose. Each occurrence is completed separately. The Carry over setting controls whether unfinished items move to the next day.")
+            }
+        }
+        .onChange(of: item.repeatRule) { _, rule in
+            if rule == .custom && item.repeatWeekdays.isEmpty {
+                item.repeatWeekdays = [Calendar.current.component(.weekday, from: item.day.date())]
+            }
+        }
+    }
+    /// At the top of a repeating item's editor, in the words used everywhere and with the same
+    /// icon: "Original item, linked to N items", or "Linked item, linked to" its original, whose
+    /// name and date are a link that goes there.
+    @ViewBuilder private var seriesSection: some View {
+        if let stored = store.item(item.id), stored.seriesID != nil, let start = store.originalDay(of: stored) {
+            Section {
+                if store.isOriginal(stored) {
+                    Label(originalText(stored), systemImage: "repeat")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Label {
+                        Text(linkedToText(stored, start: start))
+                            .foregroundStyle(.secondary)
+                            .tint(.blue)
+                            // The link goes to the original item instead of opening a URL.
+                            .environment(\.openURL, OpenURLAction { _ in
+                                goToOriginal(of: stored)
+                                return .handled
+                            })
+                            .accessibilityHint(openItem == nil ? "" : "Goes to the original item")
+                    } icon: {
+                        Image(systemName: "repeat").foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+    }
+    private func originalText(_ stored: PlanItem) -> String {
+        guard let linked = store.linkedCount(of: stored) else { return "Original item" }
+        let items = linked.count == 1 ? "1 item" : "\(linked.count) items"
+        if linked.isTotal { return "Original item, linked to \(items)" }
+        return linked.count == 0 ? "Original item, no linked items yet" : "Original item, linked to \(items) so far"
+    }
+    private func linkedToText(_ stored: PlanItem, start: Day) -> AttributedString {
+        let text = AttributedString("Linked item, linked to ")
+        var original = AttributedString("\(stored.title), \(dayText(start))")
+        if openItem != nil { original.link = URL(string: "timo-original:") }
+        return text + original
+    }
+    private func goToOriginal(of stored: PlanItem) {
+        guard let original = store.original(of: stored) else { return }
+        openItem?(original)
+    }
+    private func dayText(_ day: Day) -> String {
+        day.date().formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated))
+    }
+    /// The stored item when it is a linked item of a repeating item rather than its original.
+    private var linkedOccurrence: PlanItem? {
+        guard let stored = store.item(item.id), stored.seriesID != nil, !store.isOriginal(stored) else { return nil }
+        return stored
+    }
+    private func repeatSummary(_ item: PlanItem) -> String {
+        switch item.repeatRule {
+        case .weekly: return "Every " + item.day.date().formatted(.dateTime.weekday(.wide))
+        case .custom:
+            let symbols = Calendar.current.shortWeekdaySymbols
+            return orderedWeekdays.filter(item.repeatWeekdays.contains).map { symbols[$0 - 1] }.joined(separator: ", ")
+        default: return item.repeatRule.title
+        }
+    }
     private func save() {
         item.locations = locations.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         item.people = people.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
@@ -455,9 +544,32 @@ struct ItemEditor: View {
         // Deduplicate a copy, so the editor's reminders keep matching their button identities.
         var saved = item
         saved.reminders = Array(Set(item.reminders)).sorted()
+        if let stored = linkedOccurrence {
+            // A linked item is only changed after a warning that saving unlinks it.
+            var unchanged = stored
+            unchanged.reminders = Array(Set(stored.reminders)).sorted()
+            guard saved != unchanged else { dismiss(); return }
+            pendingDetach = saved
+            return
+        }
         do { try store.save(saved); if store.errorMessage == nil { dismiss() } }
         catch { issue = error.localizedDescription }
     }
+    /// Saves a changed later day once the warning is confirmed: it leaves its repeating item,
+    /// and with a repeat pattern of its own it becomes the master of a new one.
+    private func saveDetached(_ saved: PlanItem) {
+        do { try store.saveDetached(saved); if store.errorMessage == nil { dismiss() } }
+        catch { issue = error.localizedDescription }
+    }
+    /// Says plainly what unlinking does to this item and what it leaves alone.
+    private func unlinkMessage(_ saved: PlanItem) -> String {
+        guard let stored = linkedOccurrence else { return "" }
+        guard saved.repeatRule != .never, Planner.changesPattern(stored, to: saved) else {
+            return "This item will be unlinked. The original item and other linked items won’t change. To change all of them, edit the original item."
+        }
+        return "This item will be unlinked and become a new original item, repeating \(lowercasedFirst(repeatSummary(saved))). The original item and other linked items won’t change."
+    }
+    private func lowercasedFirst(_ text: String) -> String { text.prefix(1).lowercased() + text.dropFirst() }
 }
 
 /// A section title with a small (i) beside it that shows or hides the section's explanation,

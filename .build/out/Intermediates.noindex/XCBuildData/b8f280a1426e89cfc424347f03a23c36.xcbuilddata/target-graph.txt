@@ -1,0 +1,7 @@
+Target dependency graph (3 targets)
+Target 'AllExcludingTests' in project 'Aggregate'
+➜ Explicit dependency on target 'TimoCore-product' in project 'TimoCore'
+➜ Explicit dependency on target 'TimoCore' in project 'TimoCore'
+Target 'TimoCore-product' in project 'TimoCore'
+➜ Explicit dependency on target 'TimoCore' in project 'TimoCore'
+Target 'TimoCore' in project 'TimoCore' (no dependencies)
