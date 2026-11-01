@@ -257,6 +257,7 @@ struct PersonaHistoryView: View {
                 SettingsLink()
                     .frame(maxWidth: .infinity).padding(.vertical, 28)
             }
+            .readableWidth()
             .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: items.map(\.id))
         }
         .scrollEdgeEffectHidden(true, for: .vertical)
@@ -484,6 +485,7 @@ struct ItemCard: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Set inside the lifted card, which draws one card around the row and its dates.
     @Environment(\.itemCardPlain) private var plain
+    @Environment(\.itemCardUnbacked) private var unbacked
     @State private var pressed = false
 
     static func tint(_ contrast: ColorSchemeContrast, colorScheme: ColorScheme) -> Color {
@@ -509,7 +511,7 @@ struct ItemCard: ViewModifier {
             .background(Self.tint(contrast, colorScheme: colorScheme).opacity(plain || outlined ? 0 : 1), in: Self.shape)
             // Keep an opaque base for the system's initial lift snapshot before
             // the expanded preview appears.
-            .background(plain ? .clear : Color(.systemBackground), in: Self.shape)
+            .background(plain || unbacked ? .clear : Color(.systemBackground), in: Self.shape)
             .overlay {
                 Self.shape.strokeBorder(Self.outline(contrast, colorScheme: colorScheme), lineWidth: 1)
                     .opacity(!plain && outlined ? 1 : 0)
@@ -528,6 +530,9 @@ extension EnvironmentValues {
     @Entry var itemCardPressed: Binding<Bool>? = nil
     /// Set by `ItemMenuOnHold` for the copy of the row inside the lifted card.
     @Entry var itemCardPlain = false
+    /// Set on day-view rows while List and Time view switch: the List and Time copies of a
+    /// row sit apart mid-move, and their opaque backings painted white over the timeline.
+    @Entry var itemCardUnbacked = false
 }
 
 /// For the button that opens an item: its press is shown by the whole card rather than by

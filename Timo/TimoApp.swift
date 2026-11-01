@@ -120,7 +120,7 @@ struct SettingsView: View {
 }
 
 /// Turns iCloud sync on or off and says how it's going. There's nothing to sign in to here:
-/// the app uses whichever iCloud account the iPhone is signed in to.
+/// the app uses whichever iCloud account the device is signed in to.
 private struct ICloudSection: View {
     let cloud: CloudSync
     @Environment(\.openURL) private var openURL
@@ -147,7 +147,7 @@ private struct ICloudSection: View {
         } header: {
             Text("iCloud")
         } footer: {
-            Text("Your plan is kept in your private iCloud, so it’s backed up and the same on each of your devices. Turning this off keeps the plan on this iPhone.")
+            Text("Your plan is kept in your private iCloud, so it’s backed up and the same on each of your devices. Turning this off keeps the plan on this \(UIDevice.current.model).")
         }
     }
 
@@ -162,8 +162,8 @@ private struct ICloudSection: View {
         switch cloud.status {
         case .off: nil
         case .checking: "Checking your iCloud account…"
-        case .noAccount: "Sign in to iCloud on this iPhone to sync your plan."
-        case .restricted: "iCloud is restricted on this iPhone."
+        case .noAccount: "Sign in to iCloud on this \(UIDevice.current.model) to sync your plan."
+        case .restricted: "iCloud is restricted on this \(UIDevice.current.model)."
         case .unavailable: "iCloud can’t be reached right now. Changes are kept and sent later."
         case .syncing: "Syncing…"
         case .upToDate: cloud.lastSynced.map { "Up to date · synced \($0.formatted(.relative(presentation: .named)))" } ?? "Up to date"

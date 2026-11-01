@@ -671,6 +671,7 @@ struct DayView: View {
                 SettingsLink(isEnabled: { daySwipeInteraction.allowsItemActions })
                     .frame(maxWidth: .infinity).padding(.vertical, 28)
             }
+            .readableWidth()
             // One SwiftUI scroll surface resizes continuously with the rows.
             // A UIKit List cell used to resize separately and interrupt the morph.
             // The view-mode animation lives on the mode-reading views below.
@@ -982,6 +983,7 @@ struct DayView: View {
         }
         // Every item has the same faint fill: open, ticked, cancelled or carried.
         .modifier(ItemCard())
+        .modifier(CardBackingWhileSwitching())
         .itemMenuOnHold(item, day: day, isEnabled: { daySwipeInteraction.allowsItemActions }, showsMenu: showsMenu) {
             AnyView(row(item, filter: filter, day: day, showsMenu: false, timeBelowTitle: timeBelowTitle))
         }
@@ -2003,6 +2005,16 @@ private struct SharedScheduleVisibility: ViewModifier {
     }
 }
 
+/// Cards drop their opaque backing while List and Time switch, so the row copies moving
+/// between them don't cover the timeline scale with white.
+private struct CardBackingWhileSwitching: ViewModifier {
+    @Environment(ViewMode.self) private var mode: ViewMode?
+
+    func body(content: Content) -> some View {
+        content.environment(\.itemCardUnbacked, mode?.switching == true)
+    }
+}
+
 /// The shared time label, shown only while List and Time view switch.
 private struct SharedLabelVisibility: ViewModifier {
     let shown: Bool
@@ -2409,11 +2421,12 @@ private struct DayPager: UIViewControllerRepresentable {
         coordinator.requestedDay = day
         coordinator.latestContent = content
         if !revision.hasSameUnfilteredContent(as: coordinator.latestRevision) { coordinator.previewsDirty = true }
+        let changed = revision != coordinator.latestRevision
         coordinator.latestRevision = revision
         if day != coordinator.day {
             coordinator.navigate(to: day)
         } else {
-            coordinator.refreshIfIdle()
+            coordinator.refreshIfIdle(animation: changed ? context.transaction.animation : nil)
         }
     }
     static func dismantleUIViewController(_ controller: UIViewController, coordinator: Coordinator) {
@@ -2437,6 +2450,11 @@ private struct DayPager: UIViewControllerRepresentable {
     struct PageSurface: View {
         let content: AnyView
         let policy: PageAnimationPolicy
+        /// The animation of the SwiftUI update that brought this content, if any. Replacing
+        /// the root view from UIKit drops that update's transaction, so a tick-off's dot and
+        /// time otherwise jumped. Keyed on a counter so only this one swap animates.
+        var animation: Animation? = nil
+        var animationKey = 0
         var body: some View {
             content.transaction { transaction in
                 if !policy.isForeground {
@@ -2444,13 +2462,18 @@ private struct DayPager: UIViewControllerRepresentable {
                     transaction.disablesAnimations = true
                 }
             }
+            .animation(animation, value: animationKey)
         }
     }
     final class PageHost: UIHostingController<PageSurface> {
         let policy: PageAnimationPolicy
         var content: AnyView {
             get { rootView.content }
-            set { rootView = PageSurface(content: newValue, policy: policy) }
+            set { setContent(newValue) }
+        }
+        func setContent(_ content: AnyView, animation: Animation? = nil) {
+            let key = rootView.animationKey &+ (animation == nil ? 0 : 1)
+            rootView = PageSurface(content: content, policy: policy, animation: animation, animationKey: key)
         }
         init(content: AnyView, isForeground: Bool) {
             let policy = PageAnimationPolicy(isForeground: isForeground)
@@ -2518,10 +2541,11 @@ private struct DayPager: UIViewControllerRepresentable {
                 }
             }
         }
-        func refreshIfIdle() {
+        /// `animation` is that of the update being shown now; a deferred refresh shows it unanimated.
+        func refreshIfIdle(animation: Animation? = nil) {
             guard !dragging, animator == nil, requestedDay == day, !interaction.holdsPageWork else { return }
             if displayedRevision != latestRevision {
-                host.content = latestContent
+                host.setContent(latestContent, animation: animation)
                 displayedRevision = latestRevision
             }
             scheduleWarm()
@@ -2795,5 +2819,13 @@ private struct DayPager: UIViewControllerRepresentable {
             host.safeAreaRegions = []
             return host
         }
+    }
+}
+
+extension View {
+    /// Keeps rows a comfortable reading width on iPad, centred, while the scroll view and its
+    /// swipes still span the screen. On iPhone the screen is narrower, so nothing changes.
+    func readableWidth() -> some View {
+        frame(maxWidth: 680).frame(maxWidth: .infinity)
     }
 }

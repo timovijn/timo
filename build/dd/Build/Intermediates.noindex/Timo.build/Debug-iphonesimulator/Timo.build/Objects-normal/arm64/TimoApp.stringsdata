@@ -100,7 +100,7 @@
       },
       {
         "comment": "",
-        "key": "Your plan is kept in your private iCloud, so it’s backed up and the same on each of your devices. Turning this off keeps the plan on this iPhone.",
+        "key": "Your plan is kept in your private iCloud, so it’s backed up and the same on each of your devices. Turning this off keeps the plan on this %@.",
         "location": {
           "startingColumn": 18,
           "startingLine": 150

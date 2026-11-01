@@ -103,7 +103,7 @@ import UIKit
         status = .off
     }
 
-    /// Turns sync off with a reason the iCloud section shows. The plan stays on this iPhone.
+    /// Turns sync off with a reason the iCloud section shows. The plan stays on this device.
     private func disable(because reason: String) {
         setEnabled(false)
         status = .failed(reason)
@@ -173,7 +173,7 @@ import UIKit
         case .accountChange(let change):
             switch change.changeType {
             case .signIn: queueEverything()
-            case .signOut: disable(because: "You signed out of iCloud. Your plan stays on this iPhone.")
+            case .signOut: disable(because: "You signed out of iCloud. Your plan stays on this \(UIDevice.current.model).")
             case .switchAccounts: disable(because: "The iCloud account changed. Turn sync on again to use this plan with the new account.")
             @unknown default: break
             }
