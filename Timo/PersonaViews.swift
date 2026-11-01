@@ -341,9 +341,11 @@ struct CompletionButton<Icon: View>: View {
         guard !reduceMotion else { store.toggle(current, on: day); return }
         let id = UUID()
         store.completionPresentation.pending.insert(item.id)
-        withAnimation(.smooth(duration: 0.3)) {
-            completion = id
-        } completion: {
+        withAnimation(.smooth(duration: 0.3)) { completion = id }
+        // Start the strike while the disc is still growing: waiting for the spring to report
+        // completion left a noticeable pause after the disc already looked filled.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(100))
             strikeTitle(id)
         }
     }

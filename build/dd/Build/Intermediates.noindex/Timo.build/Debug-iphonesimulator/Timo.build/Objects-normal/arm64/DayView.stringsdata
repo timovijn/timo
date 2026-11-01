@@ -271,7 +271,7 @@
         "key": "Uncancel",
         "location": {
           "startingColumn": 68,
-          "startingLine": 961
+          "startingLine": 959
         }
       },
       {
@@ -279,7 +279,7 @@
         "key": "Cancel",
         "location": {
           "startingColumn": 81,
-          "startingLine": 961
+          "startingLine": 959
         }
       },
       {
@@ -287,7 +287,7 @@
         "key": "Carried to %@",
         "location": {
           "startingColumn": 38,
-          "startingLine": 918
+          "startingLine": 916
         }
       },
       {
@@ -295,7 +295,7 @@
         "key": "%@: %@",
         "location": {
           "startingColumn": 33,
-          "startingLine": 1265
+          "startingLine": 1263
         }
       },
       {
@@ -303,7 +303,7 @@
         "key": "Switch to list view",
         "location": {
           "startingColumn": 48,
-          "startingLine": 1328
+          "startingLine": 1326
         }
       },
       {
@@ -311,7 +311,7 @@
         "key": "Switch to time view",
         "location": {
           "startingColumn": 72,
-          "startingLine": 1328
+          "startingLine": 1326
         }
       },
       {
@@ -319,7 +319,7 @@
         "key": "Time view",
         "location": {
           "startingColumn": 48,
-          "startingLine": 1329
+          "startingLine": 1327
         }
       },
       {
@@ -327,7 +327,7 @@
         "key": "List view",
         "location": {
           "startingColumn": 62,
-          "startingLine": 1329
+          "startingLine": 1327
         }
       },
       {
@@ -335,7 +335,7 @@
         "key": "%lld earlier %@ above",
         "location": {
           "startingColumn": 54,
-          "startingLine": 1608
+          "startingLine": 1606
         }
       },
       {
@@ -343,7 +343,7 @@
         "key": "%lld later %@ below",
         "location": {
           "startingColumn": 89,
-          "startingLine": 1608
+          "startingLine": 1606
         }
       },
       {
@@ -351,7 +351,7 @@
         "key": "Scrolls to the nearest one",
         "location": {
           "startingColumn": 36,
-          "startingLine": 1609
+          "startingLine": 1607
         }
       },
       {
@@ -359,7 +359,7 @@
         "key": "%lld earlier",
         "location": {
           "startingColumn": 47,
-          "startingLine": 1599
+          "startingLine": 1597
         }
       },
       {
@@ -367,7 +367,7 @@
         "key": "%lld later",
         "location": {
           "startingColumn": 68,
-          "startingLine": 1599
+          "startingLine": 1597
         }
       },
       {
@@ -375,7 +375,7 @@
         "key": "Reminder time",
         "location": {
           "startingColumn": 30,
-          "startingLine": 1690
+          "startingLine": 1688
         }
       },
       {
@@ -383,7 +383,7 @@
         "key": "Check this reminder",
         "location": {
           "startingColumn": 20,
-          "startingLine": 1695
+          "startingLine": 1693
         }
       },
       {
@@ -391,7 +391,7 @@
         "key": "Remind me at",
         "location": {
           "startingColumn": 32,
-          "startingLine": 1681
+          "startingLine": 1679
         }
       },
       {
@@ -399,7 +399,7 @@
         "key": "This updates the reminder time for the original item and all its linked items.",
         "location": {
           "startingColumn": 30,
-          "startingLine": 1686
+          "startingLine": 1684
         }
       },
       {
@@ -407,7 +407,7 @@
         "key": "Cancel",
         "location": {
           "startingColumn": 70,
-          "startingLine": 1692
+          "startingLine": 1690
         }
       },
       {
@@ -415,7 +415,7 @@
         "key": "Save",
         "location": {
           "startingColumn": 70,
-          "startingLine": 1693
+          "startingLine": 1691
         }
       },
       {
@@ -423,7 +423,7 @@
         "key": "OK",
         "location": {
           "startingColumn": 24,
-          "startingLine": 1696
+          "startingLine": 1694
         }
       },
       {
@@ -431,7 +431,7 @@
         "key": "·",
         "location": {
           "startingColumn": 22,
-          "startingLine": 1884
+          "startingLine": 1882
         }
       }
     ]

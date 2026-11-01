@@ -873,8 +873,6 @@ struct DayView: View {
     }
     private func row(_ item: PlanItem, filter: DayFilter, day: Day, sharedSchedule: Bool = false,
                      showsMenu: Bool = true, timeBelowTitle: Bool = false) -> some View {
-        let reviewing = filter == .review
-        let showingReminders = filter == .reminders
         // On the days an item was carried on from, it stays in its place as a quiet entry pointing
         // to where it went. It is the same item as on its live day, so completing or opening it
         // here acts on that copy; it isn't counted, reviewed or reminded about here, but keeps an

@@ -287,7 +287,7 @@ struct ItemEditor: View {
                 }
             }
             // Popovers let the editor behind them be used, so close one once the form is dragged.
-            .environment(\.popoverShown, { popoverShown = $0 })
+            .environment(\.popoverShown, PopoverShownAction { popoverShown = $0 })
             .onScrollPhaseChange { _, phase in if phase == .interacting { editingField = nil } }
             }
             .navigationTitle(existing ? "Your item" : "New item").navigationBarTitleDisplayMode(.inline)
@@ -765,7 +765,15 @@ private enum ScheduleField: Equatable { case day, time, end, reminder(Int), dead
 
 private extension EnvironmentValues {
     /// Tells the editor when a picker's popover appears and has fully gone.
-    @Entry var popoverShown: (Bool) -> Void = { _ in }
+    @Entry var popoverShown = PopoverShownAction { _ in }
+}
+
+/// Wraps the closure so the environment can compare it: it only ever reports to the editor that
+/// set it, so any two count as equal and updating it never invalidates the pills.
+private struct PopoverShownAction: Equatable {
+    let action: (Bool) -> Void
+    func callAsFunction(_ shown: Bool) { action(shown) }
+    static func == (lhs: Self, rhs: Self) -> Bool { true }
 }
 
 /// A capsule showing a schedule value, or an add button while it is unset. Tapping it opens
