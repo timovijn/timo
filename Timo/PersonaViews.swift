@@ -59,6 +59,14 @@ struct PersonaOrb: View {
 extension Persona {
     /// The menu's order: All first, then each persona.
     static let menuOrder: [Persona?] = [nil] + allCases.map { $0 }
+
+    /// The next or previous persona, wrapping around. From All, forward starts at the first
+    /// persona and back at the last, so cycling never returns to All.
+    static func cycled(from persona: Persona?, by offset: Int) -> Persona {
+        let all = allCases
+        guard let persona, let index = all.firstIndex(of: persona) else { return offset > 0 ? all.first! : all.last! }
+        return all[(index + offset + all.count) % all.count]
+    }
 }
 
 /// The top-left control. Tapping it opens a menu, grown out of the capsule, listing All and
@@ -111,21 +119,64 @@ struct PersonaSwitcher: View {
         .sensoryFeedback(.selection, trigger: selection)
         .accessibilityLabel("Persona")
         .accessibilityValue(selection?.title ?? "All")
-        .accessibilityHint("Opens the list of personas")
+        .accessibilityHint("Opens the list of personas. Swipe up or down to cycle through them.")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: step(1)
+            case .decrement: step(-1)
+            @unknown default: break
+            }
+        }
     }
     private func choose(_ persona: Persona?) {
         withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut(duration: 0.3)) { selection = persona }
     }
+    private func step(_ offset: Int) { choose(Persona.cycled(from: selection, by: offset)) }
+}
+
+/// A horizontal swipe across a persona page. It only begins for a clearly sideways drag, so the
+/// page's vertical scrolling is left alone, and recognises alongside the scroll view.
+private struct PersonaSwipe: UIGestureRecognizerRepresentable {
+    /// Called once per swipe; `true` for a swipe to the left, which goes forward like the day pager.
+    let swiped: (Bool) -> Void
+
+    func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
+        let pan = UIPanGestureRecognizer()
+        pan.delegate = context.coordinator
+        pan.maximumNumberOfTouches = 1
+        return pan
+    }
+
+    func handleUIGestureRecognizerAction(_ pan: UIPanGestureRecognizer, context: Context) {
+        guard pan.state == .ended else { return }
+        let move = pan.translation(in: pan.view)
+        guard abs(move.x) > 24, abs(move.x) > abs(move.y) else { return }
+        swiped(move.x < 0)
+    }
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return false }
+            let velocity = pan.velocity(in: pan.view)
+            return abs(velocity.x) > abs(velocity.y) * 1.5
+        }
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+    }
 }
 
 /// The persona pages over the day view. Changing persona cross-fades the pages, so each
-/// page's gradient wash blends into the next instead of sliding across.
+/// page's gradient wash blends into the next instead of sliding across. Swiping left or right
+/// cycles through the personas, never back to All.
 struct PersonaPages: View {
-    let persona: Persona?
+    @Binding var persona: Persona?
     let now: Date
     let add: () -> Void
     /// The day list's own row, so a persona page shows each item exactly as the day view does.
     let row: (PlanItem, Day) -> AnyView
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
@@ -133,7 +184,14 @@ struct PersonaPages: View {
                 PersonaHistoryView(persona: persona, now: now, add: add, row: row)
                     .id(persona)
                     .transition(.opacity)
+                    // Like the day pager: swiping left goes forward.
+                    .gesture(PersonaSwipe { forward in step(forward ? 1 : -1) })
             }
+        }
+    }
+    private func step(_ offset: Int) {
+        withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut(duration: 0.3)) {
+            persona = Persona.cycled(from: persona, by: offset)
         }
     }
 }

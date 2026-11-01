@@ -10,6 +10,13 @@ struct ItemEditor: View {
     let viewingDay: Day
     @State private var locations: [ItemTextEntry]
     @State private var people: [ItemTextEntry]
+    /// What is being typed into a new location or person pill, held here so Save keeps it
+    /// even though the pill only adds it once its field loses focus.
+    @State private var locationDraft = ""
+    @State private var personDraft = ""
+    /// The item as the editor opened with it, to tell whether there is anything to lose on closing.
+    private let opened: PlanItem
+    @State private var confirmingClose = false
     @State private var issue: String?
     /// An edited later day of a repeating item, waiting for the warning to be confirmed.
     @State private var pendingDetach: PlanItem?
@@ -24,6 +31,8 @@ struct ItemEditor: View {
     @State private var carryChosen = false
     /// A picker about to open, once its row has scrolled up to leave it room below.
     @State private var pendingField: ScheduleField?
+    /// Whether a picker's popover is on screen, including while it animates away.
+    @State private var popoverShown = false
     @State private var removedDuration: TimeInterval?
     /// Identities for `item.reminders`, kept in the same order, so a button follows its reminder when sorting.
     @State private var reminderIDs: [UUID]
@@ -38,25 +47,39 @@ struct ItemEditor: View {
         self.viewingDay = viewingDay
         self.openItem = openItem
         _item = State(initialValue: item)
+        opened = item
         _locations = State(initialValue: item.locations.map { ItemTextEntry(text: $0) })
         _people = State(initialValue: item.people.map { ItemTextEntry(text: $0) })
         _reminderIDs = State(initialValue: item.reminders.map { _ in UUID() })
     }
     var body: some View {
+        editor
+        // With unsaved changes the sheet springs back from a swipe; Cancel asks what to do with them.
+        .interactiveDismissDisabled(hasChanges)
+        .confirmationDialog("Save your changes?", isPresented: $confirmingClose, titleVisibility: .visible) {
+            if canSave { Button("Save") { commitAndSave() } }
+            Button("Discard Changes", role: .destructive) { dismiss() }
+            Button("Keep Editing", role: .cancel) {}
+        } message: {
+            Text(canSave ? "This item has changes that haven’t been saved." : "This item has changes, but it needs a title to be saved.")
+        }
+    }
+    private var editor: some View {
         NavigationStack {
             // The reader lets a place or person row scroll well clear of the keyboard.
             ScrollViewReader { form in Form {
                 itemStatusSection
                 Section {
-                    TextField("What’s on your day?", text: $item.title, axis: .vertical)
+                    // The title wraps but stays one line: Return finishes editing instead of adding a break.
+                    // The break is dropped in the binding, before it's stored; removing it afterwards in
+                    // onChange let the field grow a line for a frame, which made the form jump.
+                    TextField("What’s on your day?", text: Binding(get: { item.title }, set: { title in
+                        guard title.contains(where: \.isNewline) else { item.title = title; return }
+                        item.title = title.split(whereSeparator: \.isNewline).joined(separator: " ")
+                        titleFocused = false
+                    }), axis: .vertical)
                         .font(.title3.weight(.medium)).focused($titleFocused)
                         .submitLabel(.done)
-                        // The title wraps but stays one line: Return finishes editing instead of adding a break.
-                        .onChange(of: item.title) { _, title in
-                            guard title.contains(where: \.isNewline) else { return }
-                            item.title = title.split(whereSeparator: \.isNewline).joined(separator: " ")
-                            titleFocused = false
-                        }
                 }
                 Section {
                     PersonaChips(selection: $item.personas)
@@ -207,11 +230,11 @@ struct ItemEditor: View {
                     }
                 }
                 Section("Locations") {
-                    TextPills(kind: .location, entries: $locations) { reveal("locations", in: form) }
+                    TextPills(kind: .location, entries: $locations, draft: $locationDraft) { reveal("locations", in: form) }
                         .id("locations")
                 }
                 Section("People") {
-                    TextPills(kind: .person, entries: $people) { reveal("people", in: form) }
+                    TextPills(kind: .person, entries: $people, draft: $personDraft) { reveal("people", in: form) }
                         .id("people")
                 }
                 Section("Notes") { TextField("Anything to remember", text: $item.notes, axis: .vertical).lineLimit(3...8) }
@@ -244,6 +267,8 @@ struct ItemEditor: View {
             }
             .onChange(of: pendingField) { _, field in
                 guard let field else { return }
+                // Moving on from another picker: close it first.
+                editingField = nil
                 // Pickers open below their button; lift the row first so a tall calendar
                 // is never cut off by the bottom of the screen.
                 let row: PickerRow = switch field {
@@ -254,19 +279,29 @@ struct ItemEditor: View {
                 withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { form.scrollTo(row, anchor: .top) }
                 Task { @MainActor in
                     try? await Task.sleep(for: .milliseconds(reduceMotion ? 50 : 280))
+                    // A popover presented while the last one is still leaving is dropped, so wait it out.
+                    for _ in 0..<30 where popoverShown { try? await Task.sleep(for: .milliseconds(30)) }
+                    guard pendingField == field else { return }
                     editingField = field
                     pendingField = nil
                 }
-            } }
+            }
+            // Popovers let the editor behind them be used, so close one once the form is dragged.
+            .environment(\.popoverShown, { popoverShown = $0 })
+            .onScrollPhaseChange { _, phase in if phase == .interacting { editingField = nil } }
+            }
             .navigationTitle(existing ? "Your item" : "New item").navigationBarTitleDisplayMode(.inline)
+            // A quiet note under the title once an existing item differs from what was opened.
+            .navigationSubtitle(existing && hasChanges ? "Edited" : "")
             .background(KeyboardDismissal())
+            .background(PopoverDismissal(isActive: editingField != nil) { editingField = nil })
             // A popover replaces the keyboard, whichever field was being typed in.
             .onChange(of: editingField) { _, field in
                 if field != nil { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
             }
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) { Button("Save") { save() }.fontWeight(.semibold).disabled(requestingReminder || item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { close() } }
+                ToolbarItem(placement: .confirmationAction) { Button("Save") { commitAndSave() }.fontWeight(.semibold).disabled(!canSave) }
             }
             .onAppear { if !existing { titleFocused = true } }
             .alert("Check this item", isPresented: Binding(get: { issue != nil }, set: { if !$0 { issue = nil } })) {
@@ -311,7 +346,8 @@ struct ItemEditor: View {
     }
     private func editing(_ field: ScheduleField) -> Binding<Bool> {
         Binding(get: { editingField == field }, set: { open in
-            if open { pendingField = field } else { editingField = nil }
+            // Tapping the pill whose picker is open closes it; any other pill moves straight on.
+            if open, editingField != field { pendingField = field } else { editingField = nil }
         })
     }
     private func setDay(_ day: Day) { Planner.updateStart(&item, day: day, minute: item.minute) }
@@ -428,7 +464,7 @@ struct ItemEditor: View {
     }
     /// Sorts reminders and their identities together, so each button slides to its new place.
     private func sortReminders() {
-        guard editingField == nil, item.reminders.count == reminderIDs.count else { return }
+        guard editingField == nil, pendingField == nil, item.reminders.count == reminderIDs.count else { return }
         let order = item.reminders.indices.sorted { item.reminders[$0] < item.reminders[$1] }
         animate {
             item.reminders = order.map { item.reminders[$0] }
@@ -609,9 +645,45 @@ struct ItemEditor: View {
         default: return item.repeatRule.title
         }
     }
+    private var canSave: Bool {
+        !requestingReminder && !item.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    /// The item as Save would store it, with places and people still being typed included.
+    private var edited: PlanItem {
+        func texts(_ entries: [ItemTextEntry], _ draft: String) -> [String] {
+            (entries.map(\.text) + [draft]).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        }
+        var edited = item
+        edited.locations = texts(locations, locationDraft)
+        edited.people = texts(people, personDraft)
+        return edited
+    }
+    private var hasChanges: Bool {
+        guard !deleted else { return false }
+        // Reminders compare as a set: sorting or a duplicate isn't a change.
+        func normalized(_ item: PlanItem) -> PlanItem {
+            var item = item
+            item.reminders = Array(Set(item.reminders)).sorted()
+            return item
+        }
+        return normalized(edited) != normalized(opened)
+    }
+    private func close() {
+        if hasChanges { confirmingClose = true } else { dismiss() }
+    }
+    /// Ends editing before saving, so text still being typed (including unconfirmed keyboard
+    /// suggestions) reaches its field's value, then saves on the next turn of the run loop.
+    private func commitAndSave() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        Task { @MainActor in
+            guard canSave else { return }
+            save()
+        }
+    }
     private func save() {
-        item.locations = locations.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-        item.people = people.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        let edited = edited
+        item.locations = edited.locations
+        item.people = edited.people
         // Retain existing relationships unless their saved parent no longer exists.
         if let parentID = item.parentID, store.item(parentID) == nil { item.parentID = nil }
         // Deduplicate a copy, so the editor's reminders keep matching their button identities.
@@ -691,6 +763,11 @@ private enum PickerRow: Hashable { case schedule, reminders, deadline }
 
 private enum ScheduleField: Equatable { case day, time, end, reminder(Int), deadline }
 
+private extension EnvironmentValues {
+    /// Tells the editor when a picker's popover appears and has fully gone.
+    @Entry var popoverShown: (Bool) -> Void = { _ in }
+}
+
 /// A capsule showing a schedule value, or an add button while it is unset. Tapping it opens
 /// its picker in a popover; a set value that can be cleared carries its own remove button.
 private struct SchedulePill<Picker: View>: View {
@@ -705,6 +782,7 @@ private struct SchedulePill<Picker: View>: View {
     var tint: Color? = nil
     @Binding var isEditing: Bool
     var onAdd: (() -> Void)? = nil
+    @Environment(\.popoverShown) private var popoverShown
     var onRemove: (() -> Void)? = nil
     @ViewBuilder let picker: () -> Picker
 
@@ -762,6 +840,10 @@ private struct SchedulePill<Picker: View>: View {
         .popover(isPresented: $isEditing, attachmentAnchor: .rect(.bounds), arrowEdge: .top) {
             // A fixed width lets the chips wrap before the popover measures its height.
             picker().frame(width: 320).padding().presentationCompactAdaptation(.popover)
+                // Taps reach the editor behind, so the next pill (End after Time) opens in one tap.
+                .background(PopoverPassthrough())
+                .onAppear { popoverShown(true) }
+                .onDisappear { popoverShown(false) }
         }
     }
 }
@@ -893,12 +975,15 @@ private enum TextKind: Equatable {
 private struct TextPills: View {
     let kind: TextKind
     @Binding var entries: [ItemTextEntry]
+    /// The new pill's text, owned by the editor so Save can include it before the pill is added.
+    @Binding var draft: String
     /// Called when one of the pills starts being typed in.
     var onEditing: () -> Void = {}
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var focus: Field?
     @State private var adding = false
-    @State private var draft = ""
+    /// Set while the add button starts another pill from the new one, so losing focus keeps the field.
+    @State private var continuing = false
     private enum Field: Hashable { case entry(UUID), new }
 
     var body: some View {
@@ -930,16 +1015,15 @@ private struct TextPills: View {
                 .padding(.horizontal, 12)
                 .frame(minHeight: 36)
                 .background(.fill.tertiary, in: .capsule)
-            } else {
-                Button {
-                    adding = true
-                    // Focus once the field exists.
-                    Task { @MainActor in focus = .new }
-                } label: {
+            }
+            // While typing a new one, the add button stays so the next can follow straight away.
+            if !adding || !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Button(action: startAdding) {
                     AddPillLabel(title: kind.name)
                 }
                 .buttonStyle(.borderless)
                 .accessibilityLabel(kind.addTitle)
+                .transition(.opacity)
             }
         }
         .padding(.vertical, 2)
@@ -947,12 +1031,10 @@ private struct TextPills: View {
         .onChange(of: focus) { old, new in
             if new != nil { onEditing() }
             // Settle a pill once its field loses focus: keep new text, and drop any left empty.
-            if old == .new {
-                let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-                draft = ""
+            if old == .new, new != .new {
                 animate {
-                    if !text.isEmpty { entries.append(ItemTextEntry(text: text)) }
-                    adding = false
+                    keepDraft()
+                    if !continuing { adding = false }
                 }
             }
             if case .entry(let id) = old, let index = entries.firstIndex(where: { $0.id == id }) {
@@ -960,6 +1042,20 @@ private struct TextPills: View {
                 if text.isEmpty { animate { entries.remove(at: index) } } else { entries[index].text = text }
             }
         }
+    }
+    private func startAdding() {
+        continuing = true
+        animate { keepDraft(); adding = true }
+        // Focus once the field exists.
+        Task { @MainActor in
+            focus = .new
+            continuing = false
+        }
+    }
+    private func keepDraft() {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        draft = ""
+        if !text.isEmpty { entries.append(ItemTextEntry(text: text)) }
     }
     private func field(text: Binding<String>, focusedAs field: Field) -> some View {
         TextField(kind.placeholder, text: text)
@@ -991,6 +1087,84 @@ private struct AddPillLabel: View {
         .frame(minHeight: 36)
         .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
         .contentShape(.capsule)
+    }
+}
+
+/// While a picker's popover is open, closes it when a tap lands on the editor behind it. The tap
+/// still reaches what it landed on, so another pill opens its own picker in the same tap.
+private struct PopoverDismissal: UIViewRepresentable {
+    let isActive: Bool
+    let dismiss: () -> Void
+    func makeUIView(context: Context) -> InstallerView { InstallerView() }
+    func updateUIView(_ uiView: InstallerView, context: Context) {
+        uiView.isActive = isActive
+        uiView.dismiss = dismiss
+    }
+    static func dismantleUIView(_ uiView: InstallerView, coordinator: ()) { uiView.uninstall() }
+
+    final class InstallerView: UIView, UIGestureRecognizerDelegate {
+        var isActive = false
+        var dismiss: () -> Void = {}
+        private lazy var tap: UITapGestureRecognizer = {
+            let tap = UITapGestureRecognizer(target: self, action: #selector(tapped))
+            tap.cancelsTouchesInView = false
+            tap.delegate = self
+            return tap
+        }()
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            uninstall()
+            window?.addGestureRecognizer(tap)
+        }
+        func uninstall() { tap.view?.removeGestureRecognizer(tap) }
+
+        // After the tapped pill's own action, which then sees which picker was open and can toggle it.
+        @objc private func tapped() { DispatchQueue.main.async { [dismiss] in dismiss() } }
+
+        /// Only taps on the editor itself: the popover, and pickers it presents in turn, sit outside its view.
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            guard isActive, let view = touch.view, let editor = editorController?.view else { return false }
+            return view.isDescendant(of: editor)
+        }
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+        private var editorController: UIViewController? {
+            var responder: UIResponder? = self
+            while let current = responder {
+                if let controller = current as? UIViewController, controller.presentingViewController != nil { return controller }
+                responder = current.next
+            }
+            return nil
+        }
+    }
+}
+
+/// Lets taps outside a popover reach the view it was presented from, instead of only closing it.
+/// SwiftUI's `presentationBackgroundInteraction` covers sheets but not popovers.
+private struct PopoverPassthrough: UIViewRepresentable {
+    func makeUIView(context: Context) -> PassthroughView { PassthroughView() }
+    func updateUIView(_ uiView: PassthroughView, context: Context) {}
+
+    final class PassthroughView: UIView {
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            guard window != nil else { return }
+            apply()
+            // UIKit resets the pass-through views once the popover has finished appearing.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.apply() }
+        }
+        private func apply() {
+            var responder: UIResponder? = self
+            while let current = responder {
+                if let controller = current as? UIViewController, let popover = controller.popoverPresentationController,
+                   let presenting = controller.presentingViewController {
+                    popover.passthroughViews = [presenting.view]
+                    return
+                }
+                responder = current.next
+            }
+        }
     }
 }
 

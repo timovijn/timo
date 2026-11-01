@@ -47,7 +47,7 @@
         "key": "Settings",
         "location": {
           "startingColumn": 30,
-          "startingLine": 109
+          "startingLine": 111
         }
       },
       {
@@ -55,7 +55,7 @@
         "key": "Appearance",
         "location": {
           "startingColumn": 26,
-          "startingLine": 104
+          "startingLine": 106
         }
       },
       {
@@ -63,7 +63,7 @@
         "key": "System follows your device’s Light and Dark appearance.",
         "location": {
           "startingColumn": 26,
-          "startingLine": 106
+          "startingLine": 108
         }
       },
       {
@@ -71,7 +71,39 @@
         "key": "Done",
         "location": {
           "startingColumn": 28,
-          "startingLine": 113
+          "startingLine": 115
+        }
+      },
+      {
+        "comment": "",
+        "key": "Open Settings",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 145
+        }
+      },
+      {
+        "comment": "",
+        "key": "Sync with iCloud",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 135
+        }
+      },
+      {
+        "comment": "",
+        "key": "iCloud",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 148
+        }
+      },
+      {
+        "comment": "",
+        "key": "Your plan is kept in your private iCloud, so it’s backed up and the same on each of your devices. Turning this off keeps the plan on this iPhone.",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 150
         }
       }
     ]

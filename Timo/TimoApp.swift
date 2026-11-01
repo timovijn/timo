@@ -72,11 +72,13 @@ struct SettingsLink: View {
 
 struct SettingsView: View {
     @AppStorage("appearance") private var appearance: AppAppearance = .system
+    @EnvironmentObject private var store: PlanStore
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             Form {
+                if CloudSync.isAvailable { ICloudSection(cloud: store.cloud) }
                 Section {
                     ForEach(AppAppearance.allCases) { option in
                         Button {
@@ -113,6 +115,59 @@ struct SettingsView: View {
                     Button("Done", systemImage: "checkmark") { dismiss() }
                 }
             }
+        }
+    }
+}
+
+/// Turns iCloud sync on or off and says how it's going. There's nothing to sign in to here:
+/// the app uses whichever iCloud account the iPhone is signed in to.
+private struct ICloudSection: View {
+    let cloud: CloudSync
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        Section {
+            Toggle(isOn: Binding(get: { cloud.isEnabled }, set: { cloud.setEnabled($0) })) {
+                HStack(spacing: 12) {
+                    Image(systemName: "icloud")
+                        .frame(width: 22)
+                        .foregroundStyle(.secondary)
+                    Text("Sync with iCloud")
+                }
+                .frame(minHeight: 32)
+            }
+            if let detail {
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(isProblem ? .orange : .secondary)
+            }
+            if cloud.status == .noAccount, let url = URL(string: UIApplication.openSettingsURLString) {
+                Button("Open Settings") { openURL(url) }
+            }
+        } header: {
+            Text("iCloud")
+        } footer: {
+            Text("Your plan is kept in your private iCloud, so it’s backed up and the same on each of your devices. Turning this off keeps the plan on this iPhone.")
+        }
+    }
+
+    private var isProblem: Bool {
+        switch cloud.status {
+        case .noAccount, .restricted, .unavailable, .failed: true
+        default: false
+        }
+    }
+
+    private var detail: String? {
+        switch cloud.status {
+        case .off: nil
+        case .checking: "Checking your iCloud account…"
+        case .noAccount: "Sign in to iCloud on this iPhone to sync your plan."
+        case .restricted: "iCloud is restricted on this iPhone."
+        case .unavailable: "iCloud can’t be reached right now. Changes are kept and sent later."
+        case .syncing: "Syncing…"
+        case .upToDate: cloud.lastSynced.map { "Up to date · synced \($0.formatted(.relative(presentation: .named)))" } ?? "Up to date"
+        case .failed(let message): message
         }
     }
 }

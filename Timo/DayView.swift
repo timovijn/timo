@@ -20,6 +20,7 @@ struct DayView: View {
     /// The day capsule's own size, which the glass folds back to.
     @State private var capsuleSize = CGSize(width: 222, height: 56)
     @State private var dockWidth: CGFloat = 402
+    @State private var timelineOverflow = TimelineOverflow()
     @ScaledMetric(relativeTo: .subheadline) private var dateLabelWidth: CGFloat = 110
     @ScaledMetric(relativeTo: .caption) private var scheduleColumnWidth: CGFloat = 90
     // Only the views that move or fade read the mode, so switching never
@@ -66,14 +67,23 @@ struct DayView: View {
     private var reviewItems: [PlanItem] {
         (visible + moved).filter { matches($0, .review, on: day) }
     }
-    /// Whether the row for `item` on `day` has the filter's dot, and so is in that filter. A
-    /// "Carried to" entry keeps its orange dot until the item is done or left open; it gets no
-    /// reminder dot, as reminders are about its live day.
+    /// Whether `item` on `day` is in the filter. A row is in a filter when it has that filter's
+    /// dot, except that an item left open keeps its orange dot but leaves the review filter. A
+    /// "Carried to" entry gets no reminder dot, as reminders are about its live day.
     private func matches(_ item: PlanItem, _ filter: DayFilter, on day: Day) -> Bool {
-        let carried = item.movedAway(from: day, now: now)
         switch filter {
         case .all: return true
-        case .review: return carried ? !item.isSettled && !item.suggestionDismissed : needsReview(item)
+        case .review: return hasDot(item, .review, on: day) && !item.suggestionDismissed
+        case .reminders, .deadlines: return hasDot(item, filter, on: day)
+        }
+    }
+    /// Whether the row for `item` on `day` shows the filter's dot in the full day. The orange
+    /// dot stays while the item is unfinished and late, even once it has been left open.
+    private func hasDot(_ item: PlanItem, _ filter: DayFilter, on day: Day) -> Bool {
+        let carried = item.movedAway(from: day, now: now)
+        switch filter {
+        case .all: return false
+        case .review: return !item.isSettled && (carried || isLate(item))
         case .reminders: return !carried && hasOpenReminder(item)
         case .deadlines: return item.hasOpenDeadline
         }
@@ -82,16 +92,19 @@ struct DayView: View {
         !item.isSettled && item.reminders.contains { $0 > now }
     }
     private func needsReview(_ item: PlanItem) -> Bool {
+        !item.isSettled && !item.suggestionDismissed && isLate(item)
+    }
+    private func isLate(_ item: PlanItem) -> Bool {
         // A carried item is already late and shown as untimed, so its old time isn't flagged.
-        !item.isSettled && !item.suggestionDismissed && !item.isCarried(now: now) &&
-        item.isElapsed(now: now)
+        !item.isCarried(now: now) && item.isElapsed(now: now)
     }
     var body: some View {
         NavigationStack {
             GeometryReader { viewport in
                 ZStack(alignment: .bottom) {
                     DayPager(day: day,
-                             content: pageContent(for: date, filter: filter, mode: viewMode, insets: viewport.safeAreaInsets),
+                             content: pageContent(for: date, filter: filter, mode: viewMode, insets: viewport.safeAreaInsets,
+                                                  overflow: timelineOverflow),
                              adjacentContent: { adjacentDay in
                                  pageContent(for: adjacentDay.date(), filter: .all, mode: previewMode, insets: viewport.safeAreaInsets)
                              },
@@ -102,6 +115,7 @@ struct DayView: View {
                              onSwipe: { move($0) },
                              interaction: daySwipeInteraction)
                         .ignoresSafeArea(.container, edges: .vertical)
+                    TimelineOverflowIndicators(overflow: timelineOverflow, insets: viewport.safeAreaInsets)
                     if pickingDate {
                         // Tapping anywhere outside the calendar closes it.
                         Color.black.opacity(0.08)
@@ -119,7 +133,7 @@ struct DayView: View {
                 .accessibilityHidden(persona != nil)
                 .overlay {
                     ZStack(alignment: .bottomTrailing) {
-                        PersonaPages(persona: persona, now: now, add: add) { AnyView(row($0, filter: .all, day: $1)) }
+                        PersonaPages(persona: $persona, now: now, add: add) { AnyView(row($0, filter: .all, day: $1)) }
                             .contentMargins(.bottom, 94, for: .scrollContent)
                         if persona != nil {
                             // Sits where the day dock's add button does, and stays put as pages slide.
@@ -173,7 +187,8 @@ struct DayView: View {
                     }
                 } catch { /* A new day restarts the label's display time. */ }
             }
-            .onChange(of: date) { _, _ in filter = .all; store.showDay(day) }
+            .onChange(of: date) { _, _ in filter = .all; store.showDay(day); timelineOverflow.day = day }
+            .onAppear { timelineOverflow.day = day }
             // Resolving the last item in a filter returns to the full day rather than an empty list.
             .onChange(of: activeFilterCount) { _, count in
                 if count == 0 { setFilter(.all) }
@@ -181,12 +196,13 @@ struct DayView: View {
             .onAppear { store.showDay(day) }
             .onReceive(timer) { refresh($0) }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active { refresh(Date()); store.refreshReminders() }
+                if phase == .active { refresh(Date()); store.refreshReminders(); store.cloud.resume() }
                 else { daySwipeInteraction.cancelExternalDrag() }
             }
         }.tint(.primary)
     }
-    private func pageContent(for date: Date, filter: DayFilter, mode: ViewMode, insets: EdgeInsets) -> AnyView {
+    private func pageContent(for date: Date, filter: DayFilter, mode: ViewMode, insets: EdgeInsets,
+                             overflow: TimelineOverflow? = nil) -> AnyView {
         AnyView(dayList(for: date, filter: filter)
             .contentMargins(.top, insets.top, for: .scrollContent)
             .contentMargins(.bottom, insets.bottom + 94, for: .scrollContent)
@@ -194,6 +210,7 @@ struct DayView: View {
             .contentMargins(.top, insets.top, for: .scrollIndicators)
             .contentMargins(.bottom, insets.bottom + 94, for: .scrollIndicators)
             .environment(mode)
+            .environment(overflow)
             .environmentObject(store).tint(.primary))
     }
     private var dayDock: some View {
@@ -213,6 +230,7 @@ struct DayView: View {
                     // Bottom-aligned with the capsule, so the calendar grows up out of it.
                     dateGlass
                         .background(alignment: .bottom) { capsuleDecorations }
+                        .overlay(alignment: .top) { calendarTodayButton }
                         .padding(.bottom, 8)
                 }
         }
@@ -292,14 +310,7 @@ struct DayView: View {
     /// stall the opening frames. It's laid out at its own width whatever the glass's size,
     /// so the morph never makes it lay out again.
     private var calendarCard: some View {
-        DayCalendar(selection: date, today: now) { picked in
-            navigate(to: picked)
-            // Leave the new selection visible for a moment before folding away.
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(180))
-                closeCalendar()
-            }
-        }
+        DayCalendar(selection: date, today: now) { pickFromCalendar($0) }
             .padding(.horizontal, 12).padding(.vertical, 8)
             .frame(width: max(min(dockWidth - 32, 380), 0))
             .fixedSize(horizontal: false, vertical: true)
@@ -316,6 +327,34 @@ struct DayView: View {
             }, isEnabled: pickingDate)
             .accessibilityAddTraits(.isModal)
             .accessibilityAction(.escape) { closeCalendar() }
+    }
+    /// Floats above the open calendar rather than in it, so the calendar keeps its size. It rides
+    /// the top of the glass as it grows and leaves as soon as it starts to fold.
+    @ViewBuilder private var calendarTodayButton: some View {
+        if pickingDate {
+            Button { pickFromCalendar(Calendar.current.startOfDay(for: Date())) } label: {
+                Text("Today")
+                    .font(.subheadline.weight(.medium))
+                    .padding(.horizontal, 18)
+                    .frame(minHeight: 44)
+                    .contentShape(.capsule)
+            }
+            .buttonStyle(.plain)
+            .glassEffect(.regular.interactive(), in: .capsule)
+            .glassEffectTransition(.materialize)
+            // A zero-height frame on the glass's top edge, so the button sits wholly above it.
+            .padding(.bottom, 10)
+            .frame(height: 0, alignment: .bottom)
+            .accessibilityLabel("Go to today")
+        }
+    }
+    private func pickFromCalendar(_ picked: Date) {
+        navigate(to: picked)
+        // Leave the new selection visible for a moment before folding away.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(180))
+            closeCalendar()
+        }
     }
     /// Reduce Motion swaps the glass's size at once; only the contents cross-fade.
     private var calendarAnimation: Animation? {
@@ -641,6 +680,7 @@ struct DayView: View {
         }
         .scrollEdgeEffectHidden(true, for: .vertical)
         .modifier(ScrollsToNowInTimeView(proxy: proxy))
+        .modifier(TimelineOverflowScroll(proxy: proxy))
         }
     }
     /// A section whose last item was deleted leaves quickly: with the list's half-second
@@ -656,7 +696,7 @@ struct DayView: View {
     /// Use the same measured-row layout as Scheduled, without the clock-axis placement.
     private func anytimeItems(items: [PlanItem], shown: Set<UUID>, day: Day, filter: DayFilter) -> some View {
         let contentKey = TimelineContentKey(items: items, day: day, order: items.map(\.id),
-                                            markers: items.map { item in [DayFilter.review, .reminders, .deadlines].map { matches(item, $0, on: day) } },
+                                            markers: items.map { item in [DayFilter.review, .reminders, .deadlines].map { hasDot(item, $0, on: day) } },
                                             filter: filter.rawValue, showNow: false, timeNotes: [], typeSize: dynamicTypeSize)
         return DayTimelineLayout(startMinute: 0, laneCount: 1, contentKey: contentKey, compactOnly: true, progress: 0) {
             // The same rows as Scheduled, with the same pair of List and Time view copies and
@@ -717,7 +757,7 @@ struct DayView: View {
         // Keep both text layouts at fixed endpoint widths. Only their positions
         // and opacity animate, so wrapping never changes in the middle of a frame.
         let contentKey = TimelineContentKey(items: items, day: day, order: compactItems.map(\.id),
-                                            markers: items.map { item in [DayFilter.review, .reminders, .deadlines].map { matches(item, $0, on: day) } },
+                                            markers: items.map { item in [DayFilter.review, .reminders, .deadlines].map { hasDot(item, $0, on: day) } },
                                             filter: filter.rawValue, showNow: showNow,
                                             timeNotes: items.map { timeNote($0, day: day) != nil },
                                             typeSize: dynamicTypeSize)
@@ -746,6 +786,10 @@ struct DayView: View {
             ForEach(items) { item in
                 ForEach([false, true], id: \.self) { timedVariant in
                     row(item, filter: filter, day: day, sharedSchedule: true, timeBelowTitle: timedVariant)
+                        .modifier(TimelineOverflowReport(id: item.id, day: day, minute: entries.first(where: { $0.id == item.id })?.minute ?? 0,
+                                                                         isTimed: timedVariant, shown: shown.contains(item.id)))
+                        // Only the Time view copy is a target for the edge indicators' scroll.
+                        .id(timedVariant ? AnyHashable(item.id) : AnyHashable("list-\(item.id)"))
                         .modifier(FilterCollapse(collapsed: !shown.contains(item.id)))
                         .layoutValue(key: TimelineCollapsedKey.self, value: !shown.contains(item.id))
                         .modifier(ModeRowVariant(isTimed: timedVariant,
@@ -826,9 +870,9 @@ struct DayView: View {
         // here acts on that copy; it isn't counted, reviewed or reminded about here, but keeps an
         // orange dot while unfinished so the earlier day still shows it was left open.
         let carried = carriedDestination(item, from: day)
-        let review = matches(item, .review, on: day)
-        let reminder = matches(item, .reminders, on: day)
-        let deadline = matches(item, .deadlines, on: day)
+        let review = hasDot(item, .review, on: day)
+        let reminder = hasDot(item, .reminders, on: day)
+        let deadline = hasDot(item, .deadlines, on: day)
         // A carried entry keeps its time on its scheduled day; elsewhere a carried item is untimed.
         let showsTime = carried != nil ? day == item.day : !item.isCarried(now: now)
         return VStack(alignment: .leading, spacing: 0) {
@@ -850,7 +894,7 @@ struct DayView: View {
                 }
                 .accessibilityValue([carried.map { "Carried to \($0)" }, item.isCancelled ? "Cancelled" : nil,
                                      carried == nil ? timeProgress(item).flatMap { $0 >= 1 ? "Time passed" : $0 > 0 ? "\(Int($0 * 100))% of the time passed" : nil } : nil,
-                                     review ? "Needs review" : nil, reminder ? "Reminder set" : nil,
+                                     review ? (item.suggestionDismissed ? "Left open" : "Needs review") : nil, reminder ? "Reminder set" : nil,
                                      deadline ? item.deadline.map { "Due \($0.formatted(date: .abbreviated, time: .shortened))" } : nil].compactMap { $0 }.joined(separator: ", "))
                 Button {
                     guard daySwipeInteraction.allowsItemActions else { return }
@@ -901,7 +945,7 @@ struct DayView: View {
                                          timeNote(item, day: day, width: .wide),
                                          // A carried entry's circle doesn't show a tick, so say it here.
                                          item.isCancelled ? "Cancelled" : carried != nil && item.isComplete ? "Completed" : nil].compactMap { $0 }.joined(separator: ", "))
-                    .accessibilityHint((review ? "Needs review. " : "") + (reminder ? "Reminder set. " : "") + "Open details and edit")
+                    .accessibilityHint((review && !item.suggestionDismissed ? "Needs review. " : "") + (reminder ? "Reminder set. " : "") + "Open details and edit")
                     .accessibilityAction(named: item.isCancelled ? "Uncancel" : "Cancel") { setCancelled(item, !item.isCancelled, on: day) }
             }
             // Always present, collapsed outside a filter, so it opens and moves with its row in
@@ -942,13 +986,13 @@ struct DayView: View {
     /// The dots of every filter the row is in, in the full day only.
     private func rowMarkers(_ item: PlanItem, filter: DayFilter, day: Day) -> some View {
         HStack(spacing: 8) {
-            if filter == .all && matches(item, .review, on: day) {
+            if filter == .all && hasDot(item, .review, on: day) {
                 Circle().fill(reviewTint).frame(width: 6, height: 6)
             }
-            if filter == .all && matches(item, .reminders, on: day) {
+            if filter == .all && hasDot(item, .reminders, on: day) {
                 Circle().fill(.blue).frame(width: 6, height: 6)
             }
-            if filter == .all && matches(item, .deadlines, on: day) {
+            if filter == .all && hasDot(item, .deadlines, on: day) {
                 Circle().fill(.red).frame(width: 6, height: 6)
             }
         }
@@ -1440,6 +1484,130 @@ private struct DayCalendar: UIViewRepresentable {
             day = Day(date)
             onPick(date)
         }
+    }
+}
+
+/// Which Time view rows lie beyond the part of the page between the top controls and the
+/// dock, for the small counts at its edges. Rows only write here when they cross an edge.
+/// The counts live outside the day page: drawn over its scroll view, a tap on them while the
+/// page was still moving only stopped the scroll.
+@Observable
+private final class TimelineOverflow {
+    enum Edge { case above, below }
+    private struct Key: Hashable { let day: Day; let id: UUID }
+    private var edges: [Key: Edge] = [:]
+    @ObservationIgnored private var minutes: [Key: Double] = [:]
+    @ObservationIgnored var insets = EdgeInsets()
+    /// The day on screen; a page that slid aside as a neighbour may still have rows listed.
+    var day = Day(Date())
+    /// Set by an indicator and carried out by the page, which owns the scroll view.
+    var scrollTarget: UUID?
+
+    func set(_ edge: Edge?, for id: UUID, on day: Day, minute: Double) {
+        let key = Key(day: day, id: id)
+        minutes[key] = minute
+        if edges[key] != edge { edges[key] = edge }
+    }
+    func count(_ edge: Edge) -> Int { edges.filter { $0.key.day == day && $0.value == edge }.count }
+    /// The hidden item closest to the visible part: the latest above, the earliest below.
+    func nearest(_ edge: Edge) -> UUID? {
+        let keys = edges.filter { $0.key.day == day && $0.value == edge }.map(\.key)
+        let minute = { (key: Key) in self.minutes[key] ?? 0 }
+        let key = edge == .above ? keys.max { minute($0) < minute($1) } : keys.min { minute($0) < minute($1) }
+        return key?.id
+    }
+}
+
+/// Reports whether a Time view row lies wholly above or below the visible part of the page.
+/// Only the day on screen has the tracker in its environment.
+private struct TimelineOverflowReport: ViewModifier {
+    let id: UUID
+    let day: Day
+    let minute: Double
+    let isTimed: Bool
+    let shown: Bool
+    @Environment(ViewMode.self) private var mode
+    @Environment(TimelineOverflow.self) private var overflow: TimelineOverflow?
+    @State private var edge: TimelineOverflow.Edge?
+
+    func body(content: Content) -> some View {
+        let active = isTimed && shown && mode.showingTime
+        content
+            // Only the edge is compared, so scrolling writes nothing until a row crosses one.
+            .onGeometryChange(for: TimelineOverflow.Edge?.self) { proxy in
+                guard let overflow, let page = proxy.bounds(of: .scrollView) else { return nil }
+                if proxy.size.height <= page.minY + overflow.insets.top { return .above }
+                if page.maxY - overflow.insets.bottom <= 0 { return .below }
+                return nil
+            } action: { edge = $0 }
+            // Also when a neighbouring page becomes the day on screen and gains the tracker.
+            .onChange(of: overflow.map { _ in active ? edge : nil }, initial: true) { _, report in
+                overflow?.set(report ?? nil, for: id, on: day, minute: minute)
+            }
+            .onDisappear { overflow?.set(nil, for: id, on: day, minute: minute) }
+    }
+}
+
+/// Carries out an indicator's scroll request on the page's own scroll view.
+private struct TimelineOverflowScroll: ViewModifier {
+    let proxy: ScrollViewProxy
+    @Environment(TimelineOverflow.self) private var overflow: TimelineOverflow?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content.onChange(of: overflow?.scrollTarget) { _, target in
+            guard let target, let overflow else { return }
+            overflow.scrollTarget = nil
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.4)) { proxy.scrollTo(target, anchor: .center) }
+        }
+    }
+}
+
+/// Small glass counts at the top and bottom of Time view for scheduled items scrolled out of
+/// sight; tapping one brings the nearest of them into view.
+private struct TimelineOverflowIndicators: View {
+    let overflow: TimelineOverflow
+    let insets: EdgeInsets
+
+    var body: some View {
+        let bottom = insets.bottom + 94
+        VStack {
+            indicator(.above)
+            Spacer(minLength: 0)
+            indicator(.below)
+        }
+        .padding(.top, insets.top + 6).padding(.bottom, bottom + 6)
+        .ignoresSafeArea(.container, edges: .vertical)
+        .onChange(of: [insets.top, bottom], initial: true) {
+            overflow.insets = EdgeInsets(top: insets.top, leading: 0, bottom: bottom, trailing: 0)
+        }
+    }
+    private func indicator(_ edge: TimelineOverflow.Edge) -> some View {
+        let count = overflow.count(edge)
+        let noun = count == 1 ? "item" : "items"
+        return ZStack {
+            if count > 0 {
+                Button {
+                    overflow.scrollTarget = overflow.nearest(edge)
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: edge == .above ? "chevron.up" : "chevron.down")
+                            .font(.caption2.weight(.semibold))
+                        Text(edge == .above ? "\(count) earlier" : "\(count) later")
+                            .font(.caption.weight(.medium)).monospacedDigit()
+                    }
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .contentShape(.capsule)
+                }
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: .capsule)
+                .accessibilityLabel(edge == .above ? "\(count) earlier \(noun) above" : "\(count) later \(noun) below")
+                .accessibilityHint("Scrolls to the nearest one")
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: count > 0)
     }
 }
 

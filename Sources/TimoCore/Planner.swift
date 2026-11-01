@@ -195,6 +195,26 @@ public struct PlanItem: Identifiable, Codable, Equatable {
             movesToNextDay = kind == "task"
         }
     }
+    /// The ID of a repeating item's occurrence on `day`: the same on every device, from the
+    /// series and the day alone. Two 64-bit FNV-1a hashes keep it Foundation-only; the version
+    /// and variant bits mark it as a custom (version 8) UUID.
+    public static func occurrenceID(series: UUID, day: Day) -> UUID {
+        let s = series.uuid
+        var bytes: [UInt8] = [s.0, s.1, s.2, s.3, s.4, s.5, s.6, s.7, s.8, s.9, s.10, s.11, s.12, s.13, s.14, s.15]
+        for part in [day.era, day.year, day.month, day.day] {
+            withUnsafeBytes(of: Int32(truncatingIfNeeded: part).littleEndian) { bytes.append(contentsOf: $0) }
+        }
+        func fnv(_ basis: UInt64) -> UInt64 {
+            bytes.reduce(basis) { ($0 ^ UInt64($1)) &* 0x100000001b3 }
+        }
+        let high = fnv(0xcbf29ce484222325), low = fnv(0x84222325cbf29ce4)
+        var out = (0..<8).map { UInt8(truncatingIfNeeded: high >> (56 - 8 * $0)) }
+            + (0..<8).map { UInt8(truncatingIfNeeded: low >> (56 - 8 * $0)) }
+        out[6] = out[6] & 0x0f | 0x80
+        out[8] = out[8] & 0x3f | 0x80
+        return UUID(uuid: (out[0], out[1], out[2], out[3], out[4], out[5], out[6], out[7],
+                           out[8], out[9], out[10], out[11], out[12], out[13], out[14], out[15]))
+    }
     /// Unfinished with a deadline set, passed or not; marked with a red dot.
     public var hasOpenDeadline: Bool { !isSettled && deadline != nil }
     /// The reminder to show for this item: the next one still to come, otherwise the latest.
@@ -249,6 +269,50 @@ public struct PlanItem: Identifiable, Codable, Equatable {
     }
 }
 
+/// What each person keeps for themselves on a shared item: my reminders don't notify you and
+/// my personas aren't yours. Everything else is the same for everyone, completion included,
+/// so one person ticking an item off completes it for all.
+public struct PersonalDetails: Codable, Equatable {
+    public var reminders: [Date]
+    public var personas: [Persona]
+    public var suggestionDismissed: Bool
+    public init(reminders: [Date] = [], personas: [Persona] = [], suggestionDismissed: Bool = false) {
+        self.reminders = reminders; self.personas = personas; self.suggestionDismissed = suggestionDismissed
+    }
+}
+
+extension PlanItem {
+    public var personal: PersonalDetails {
+        get { PersonalDetails(reminders: reminders, personas: personas, suggestionDismissed: suggestionDismissed) }
+        set { reminders = newValue.reminders; personas = Persona.ordered(newValue.personas); suggestionDismissed = newValue.suggestionDismissed }
+    }
+    /// Combines two edits of one item made apart from each other, from the version both started
+    /// from: whatever `mine` changed wins, everything else comes from `theirs`. Fields that only
+    /// make sense together (the schedule, completion and cancelling, the repeat pattern) are
+    /// taken as one, so a merge never pairs one edit's start with another's end.
+    public static func merged(base: PlanItem, mine: PlanItem, theirs: PlanItem) -> PlanItem {
+        var result = theirs
+        func changed(_ fields: (PlanItem) -> [AnyHashable]) -> Bool { fields(mine) != fields(base) }
+        func take<T: Equatable>(_ path: WritableKeyPath<PlanItem, T>) {
+            if mine[keyPath: path] != base[keyPath: path] { result[keyPath: path] = mine[keyPath: path] }
+        }
+        take(\.title); take(\.notes); take(\.locations); take(\.people); take(\.deadline)
+        take(\.parentID); take(\.movesToNextDay); take(\.carriedFrom)
+        take(\.reminders); take(\.personas); take(\.suggestionDismissed)
+        if changed({ [$0.day, $0.minute, $0.end, $0.originalDay] }) {
+            result.day = mine.day; result.minute = mine.minute; result.end = mine.end; result.originalDay = mine.originalDay
+        }
+        if changed({ [$0.completedAt, $0.cancelledAt] }) {
+            result.completedAt = mine.completedAt; result.cancelledAt = mine.cancelledAt
+        }
+        if changed({ [$0.repeatRule, $0.repeatWeekdays, $0.seriesID, $0.occurrenceDay] }) {
+            result.repeatRule = mine.repeatRule; result.repeatWeekdays = mine.repeatWeekdays
+            result.seriesID = mine.seriesID; result.occurrenceDay = mine.occurrenceDay
+        }
+        return result
+    }
+}
+
 /// How much of a repeating item to delete: the occurrence that was chosen, it and every later
 /// one, or the whole series. Single items are simply deleted.
 public enum RepeatDeletion: CaseIterable {
@@ -287,13 +351,18 @@ public enum Planner {
                                                       calendar: Calendar = .current) -> Bool {
         guard first <= last else { return false }
         var changed = false
+        var usedIDs = Set(items.map(\.id))
         for plan in series {
             var existing = Set(items.filter { $0.seriesID == plan.id }.compactMap(\.occurrenceDay))
             var cursor = max(first, plan.template.day)
             while cursor <= last {
                 if !existing.contains(cursor), plan.includes(cursor, calendar: calendar) {
                     var occurrence = plan.template
-                    occurrence.id = UUID()
+                    // Every device derives the same ID for a series' day, so syncing doesn't
+                    // double it. A shifted or detached occurrence can already hold that ID.
+                    let derived = PlanItem.occurrenceID(series: plan.id, day: cursor)
+                    occurrence.id = usedIDs.contains(derived) ? UUID() : derived
+                    usedIDs.insert(occurrence.id)
                     occurrence.seriesID = plan.id
                     occurrence.occurrenceDay = cursor
                     updateStart(&occurrence, day: cursor, minute: occurrence.minute, calendar: calendar)
@@ -313,6 +382,35 @@ public enum Planner {
             }
         }
         return changed
+    }
+    /// Folds occurrences of the same series day into one. Before occurrence IDs came from the
+    /// series and day, each device generated its own, so syncing two can bring a day twice. The
+    /// one kept is chosen from the IDs alone, so every device keeps the same one: the derived ID,
+    /// otherwise the lowest. A dropped copy that was completed or cancelled passes that on, and
+    /// its children move to the one kept.
+    @discardableResult public static func mergeDuplicateOccurrences(_ items: inout [PlanItem]) -> Bool {
+        struct Key: Hashable { let series: UUID; let day: Day }
+        let occurrences = items.indices.filter { items[$0].seriesID != nil && items[$0].occurrenceDay != nil }
+        let groups = Dictionary(grouping: occurrences) { Key(series: items[$0].seriesID!, day: items[$0].occurrenceDay!) }
+        var dropped: [UUID: UUID] = [:]
+        for (key, indices) in groups where indices.count > 1 {
+            let derived = PlanItem.occurrenceID(series: key.series, day: key.day)
+            let keep = indices.first { items[$0].id == derived }
+                ?? indices.min { items[$0].id.uuidString < items[$1].id.uuidString }!
+            for index in indices where index != keep {
+                if !items[keep].isSettled, items[index].isSettled {
+                    items[keep].completedAt = items[index].completedAt
+                    items[keep].cancelledAt = items[index].cancelledAt
+                }
+                dropped[items[index].id] = items[keep].id
+            }
+        }
+        guard !dropped.isEmpty else { return false }
+        items.removeAll { dropped[$0.id] != nil }
+        for index in items.indices {
+            if let parent = items[index].parentID, let kept = dropped[parent] { items[index].parentID = kept }
+        }
+        return true
     }
     // A repeating item has one shared definition. Editing any occurrence updates
     // the whole family, including plans split by older versions of the app.

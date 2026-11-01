@@ -5,11 +5,12 @@ SwiftUI day planner for iOS 26 with a Liquid Glass look. The README describes ev
 ## Layout
 
 - `Sources/TimoCore/Planner.swift`: the Foundation-only model (`Day`, `PlanItem`, `RepeatingPlan`, `Persona`, `Planner`). It's compiled straight into the app target and is the only code under test.
-- `Tests/TimoCoreTests/`: XCTest suite (`PlannerTests`, `RepeatingTests`, `PersonaTests`, `TimelineLaneTests`).
+- `Tests/TimoCoreTests/`: XCTest suite (`PlannerTests`, `RepeatingTests`, `PersonaTests`, `TimelineLaneTests`, `CancelTests`, `SyncTests`).
 - `Timo/DayView.swift`: the main screen (day pager, dock, date control and calendar, list/time views, rows). It's large; search it with grep and read only the part you need.
 - `Timo/ItemEditor.swift`: the item editor (schedule/reminder pills, persona chips, location/people pills, (i) explanations).
 - `Timo/PersonaViews.swift`: persona orb, top-left persona menu, persona history page, long-press delete.
-- `Timo/PlanStore.swift`: JSON persistence (document version 7, reads 1–7), reminders, sample day.
+- `Timo/PlanStore.swift`: JSON persistence (document version 8, reads 1–8), reminders, sample day.
+- `Timo/CloudSync.swift`: iCloud sync with `CKSyncEngine` (one JSON record per item and repeating plan); every `PlanStore.commit` queues its changes.
 - A new Swift file in `Timo/` must also be added to `Timo.xcodeproj/project.pbxproj` (PBXBuildFile, PBXFileReference, group child and Sources phase).
 
 ## Commands

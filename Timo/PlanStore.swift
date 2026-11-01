@@ -6,7 +6,9 @@ import UserNotifications
 @MainActor final class PlanStore: ObservableObject {
     @Published private(set) var items: [PlanItem] = []
     let completionPresentation = CompletionPresentation()
+    let cloud = CloudSync()
     private var series: [RepeatingPlan] = []
+    var repeatingPlans: [RepeatingPlan] { series }
     private var displayedDay = Day(Date())
     @Published var errorMessage: String?
     /// The most recent deletion, offered for undoing until it is undone or dismissed.
@@ -56,13 +58,17 @@ import UserNotifications
         notificationCenter.delegate = ReminderNotificationDelegate.shared
         reconcile()
         refreshReminders()
+        // Never sync a plan that couldn't be read, so iCloud can't overwrite or lose it.
+        if canWrite { cloud.attach(self) }
     }
-    private func commit(_ updated: [PlanItem], series updatedSeries: [RepeatingPlan]? = nil) {
+    /// Saves the plan. Changes are also queued for iCloud, except those that came from it.
+    private func commit(_ updated: [PlanItem], series updatedSeries: [RepeatingPlan]? = nil, fromCloud: Bool = false) {
         guard canWrite else { errorMessage = "Saving is disabled to protect the existing plan. Please close the app and resolve the saved-file error."; return }
         do {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
             try encoder.encode(Document(items: updated, series: updatedSeries ?? series)).write(to: url, options: .atomic)
+            if !fromCloud { cloud.queueChanges(items: items, updated, series: series, updatedSeries ?? series) }
             items = updated
             if let updatedSeries { series = updatedSeries }
             refreshReminders()
@@ -87,6 +93,15 @@ import UserNotifications
             if Planner.materialize([plan], in: &updated, from: Day(previous), through: displayedDay) { selectedChanged = true }
         }
         return changed || selectedChanged
+    }
+    /// Writes what iCloud brought. Occurrences doubled by two devices are then folded into one
+    /// and missing ones generated, both as ordinary saves, so iCloud gets the result.
+    func applyFromCloud(items updated: [PlanItem], series updatedSeries: [RepeatingPlan]) {
+        guard updated != items || updatedSeries != series else { return }
+        commit(updated, series: updatedSeries, fromCloud: true)
+        var folded = items
+        if Planner.mergeDuplicateOccurrences(&folded) { commit(folded) }
+        reconcile()
     }
     func showDay(_ day: Day) {
         displayedDay = day
