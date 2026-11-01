@@ -15,6 +15,11 @@ final class TimelineLaneTests: XCTestCase {
     func testFullyOverlappingEventsAllRemainDistinct() {
         XCTAssertEqual(TimelineLanes.assign([540..<900, 600..<840, 660..<780, 720..<750]), [0, 1, 2, 3])
     }
+    func testPointsTakeTracksBesideOverlappingEntries() {
+        // A 10–11 meeting, a task at 10:00, another at 10:30, two at 12:00 and one at 12:10.
+        XCTAssertEqual(TimelineLanes.assign(starts: [600, 600, 630, 720, 720, 730], ends: [660, nil, 630, nil, nil, nil]),
+                       [0, 1, 1, 0, 1, 0])
+    }
     func testUnsortedAndEmptyInput() {
         XCTAssertEqual(TimelineLanes.assign([960..<1080, 600..<660, 540..<1020]), [1, 1, 0])
         XCTAssertEqual(TimelineLanes.assign([]), [])

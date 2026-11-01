@@ -805,4 +805,16 @@ public enum TimelineLanes {
         }
         return lanes
     }
+
+    /// Minutes a point task's dot occupies on its track, about the dot's height.
+    public static let pointMinutes: Double = 4
+
+    /// Tracks for timeline entries, where a point task (no end, or an end at its start)
+    /// takes a short span so it moves aside from a range or point it would sit on.
+    public static func assign(starts: [Double], ends: [Double?]) -> [Int] {
+        assign(zip(starts, ends).map { start, end in
+            if let end, end > start { return start..<end }
+            return start..<(start + pointMinutes)
+        })
+    }
 }

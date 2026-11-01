@@ -133,7 +133,9 @@ struct DayView: View {
                 .accessibilityHidden(persona != nil)
                 .overlay {
                     ZStack(alignment: .bottomTrailing) {
-                        PersonaPages(persona: $persona, now: now, add: add) { AnyView(row($0, filter: .all, day: $1)) }
+                        PersonaPages(persona: $persona, now: now, add: add,
+                                     row: { AnyView(row($0, filter: .all, day: $1)) },
+                                     swipeBegan: daySwipeInteraction.begin, swipeEnded: daySwipeInteraction.end)
                             .contentMargins(.bottom, 94, for: .scrollContent)
                         if persona != nil {
                             // Sits where the day dock's add button does, and stays put as pages slide.
@@ -802,7 +804,7 @@ struct DayView: View {
                     // Keep one visible time label across both modes. The rows
                     // reserve its measured space but never crossfade its text, also
                     // when a filter opens a panel below the row.
-                    scheduleLabel(item, start: start, day: day)
+                    ModeScheduleLabel(label: scheduleLabel(item, start: start, day: day))
                         .multilineTextAlignment(.trailing)
                         .modifier(ModeScheduleColumn(width: scheduleColumnWidth))
                         .fixedSize(horizontal: false, vertical: true)
@@ -836,6 +838,13 @@ struct DayView: View {
                         Color.clear.frame(width: 1, height: 1).id(TimelineNowMarker.anchorID)
                     }
                     .accessibilityHidden(true)
+                    // The part of the axis already behind us fills in down to the marker's line.
+                    Rectangle()
+                        .fill(TimelineNowMarker.fill)
+                        .frame(width: 1.5, height: CGFloat(currentMinute - startMinute) * DayTimelineLayout.pointsPerMinute)
+                        .offset(x: TimelineNowMarker.axisX - 0.75, y: DayTimelineLayout.top)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
                     TimelineNowMarker()
                         .offset(y: DayTimelineLayout.top + CGFloat(currentMinute - startMinute) * DayTimelineLayout.pointsPerMinute
                                 - TimelineNowMarker.height / 2)
@@ -909,8 +918,10 @@ struct DayView: View {
                                     .font(.caption).foregroundStyle(.tertiary)
                             }
                             if timeBelowTitle, let start = item.start(), showsTime {
-                                scheduleLabel(item, start: start, day: day)
-                                    .frame(width: scheduleColumnWidth, alignment: .leading)
+                                // Time view has room beside the time for its note.
+                                let inline = !dynamicTypeSize.isAccessibilitySize
+                                scheduleLabel(item, start: start, day: day, inline: inline)
+                                    .frame(width: inline ? nil : scheduleColumnWidth, alignment: .leading)
                                     .fixedSize(horizontal: false, vertical: true)
                                     .modifier(SharedScheduleVisibility(shared: sharedSchedule))
                                     .accessibilityHidden(sharedSchedule)
@@ -1127,23 +1138,13 @@ struct DayView: View {
         Text(item.title).font(.body.weight(.medium))
             .settledTitleStyle(item, isCarriedEntry: isCarriedEntry)
     }
-    private func scheduleLabel(_ item: PlanItem, start: Date, day: Day) -> some View {
-        VStack(alignment: .trailing, spacing: 2) {
-            // The same light grey as the row's other small text (people, places, carried, time left).
-            Text(timeLabel(item, start: start, day: day))
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.tertiary)
-            if let note = timeNote(item, day: day) {
-                Text(note)
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-            }
-        }
+    private func scheduleLabel(_ item: PlanItem, start: Date, day: Day, inline: Bool = false) -> ScheduleLabel {
+        ScheduleLabel(time: timeLabel(item, start: start, day: day), note: timeNote(item, day: day), inline: inline)
     }
     // Today only: how long an item in progress has left, or how soon an upcoming one starts.
+    // Ticking an item off early keeps the note; cancelling drops it.
     private func timeNote(_ item: PlanItem, day: Day, width: Duration.UnitsFormatStyle.UnitWidth = .narrow) -> String? {
-        guard day == Day(now), !item.isSettled, let start = item.start() else { return nil }
+        guard day == Day(now), !item.isCancelled, let start = item.start() else { return nil }
         let target: Date
         if item.isInProgress(now: now), let end = item.end { target = end }
         else if start > now { target = start }
@@ -1826,11 +1827,13 @@ private struct TimelineEntry: Equatable {
     let endMinute: Double?
     let complete: Bool
 
+    /// Every entry gets a track beside the axis; points move aside like ranges do.
     static func durationLanes(for entries: [TimelineEntry]) -> [UUID: Int] {
-        let ranges = entries.filter { ($0.endMinute ?? $0.minute) > $0.minute }
-        let assignments = TimelineLanes.assign(ranges.map { $0.minute..<$0.endMinute! })
-        return Dictionary(uniqueKeysWithValues: zip(ranges.map(\.id), assignments))
+        let assignments = TimelineLanes.assign(starts: entries.map(\.minute), ends: entries.map(\.endMinute))
+        return Dictionary(uniqueKeysWithValues: zip(entries.map(\.id), assignments))
     }
+    /// The axis is kept for the current-time fill, so track 0 sits one spacing to its right.
+    static func laneX(_ lane: Int) -> CGFloat { TimelineNowMarker.axisX + CGFloat(lane + 1) * 6 }
 }
 
 private struct TimelineMinuteKey: LayoutValueKey {
@@ -1864,6 +1867,93 @@ private extension VerticalAlignment {
 }
 
 /// Only the small shared label reads the mode; the day and its endpoint rows stay mounted.
+/// A timed row's time with its time-left note: beneath it in List view, beside it after a
+/// dot in Time view. The same three texts are laid out either way, so the shared label can
+/// slide the note across during a switch rather than crossfade it.
+private struct ScheduleLabel: View {
+    let time: String
+    let note: String?
+    var inline: Bool
+    var body: some View {
+        // The same light grey as the row's other small text (people, places, carried).
+        ScheduleLabelLayout(inline: inline ? 1 : 0) {
+            Text(time).font(.caption.monospacedDigit())
+            if let note {
+                Text("·").font(.caption2).opacity(inline ? 1 : 0)
+                Text(note).font(.caption2.monospacedDigit()).lineLimit(1)
+            }
+        }
+        .foregroundStyle(.tertiary)
+    }
+}
+
+/// The shared label follows List/Time view, and with it the mode's animation.
+private struct ModeScheduleLabel: View {
+    var label: ScheduleLabel
+    @Environment(ViewMode.self) private var mode
+    @Environment(\.dynamicTypeSize) private var typeSize
+    var body: some View {
+        var label = label
+        label.inline = mode.showingTime && !typeSize.isAccessibilitySize
+        return label
+    }
+}
+
+private struct ScheduleLabelLayout: Layout {
+    /// 0 stacks the note under the time, 1 puts it on the time's line; values between blend.
+    var inline: CGFloat
+    var animatableData: CGFloat {
+        get { inline }
+        set { inline = newValue }
+    }
+    private static let spacing: CGFloat = 2, gap: CGFloat = 4
+
+    private func layout(_ proposal: ProposedViewSize, _ subviews: Subviews) -> (size: CGSize, frames: [CGRect]) {
+        // Stacked, the texts wrap to the column as the old VStack did; on one line they keep their ideal widths.
+        let column = ProposedViewSize(width: proposal.width, height: nil)
+        guard subviews.count == 3 else {
+            let size = subviews.first?.sizeThatFits(column) ?? .zero
+            return (size, subviews.map { _ in CGRect(origin: .zero, size: size) })
+        }
+        let time = subviews[0], dot = subviews[1], note = subviews[2]
+        let time0 = time.sizeThatFits(column), note0 = note.sizeThatFits(column)
+        let time1 = time.sizeThatFits(.unspecified), note1 = note.sizeThatFits(.unspecified)
+        let dotSize = dot.sizeThatFits(.unspecified)
+        let width0 = max(time0.width, note0.width)
+        let stacked = [CGRect(origin: CGPoint(x: width0 - time0.width, y: 0), size: time0),
+                       CGRect(origin: CGPoint(x: width0 + Self.gap, y: 0), size: dotSize),
+                       CGRect(origin: CGPoint(x: width0 - note0.width, y: time0.height + Self.spacing), size: note0)]
+        // Smaller caption2 text shares the time's baseline.
+        func baseline(_ subview: LayoutSubview, _ size: CGSize) -> CGFloat {
+            subview.dimensions(in: ProposedViewSize(size))[VerticalAlignment.firstTextBaseline]
+        }
+        let timeBaseline = baseline(time, time1)
+        let dotX = time1.width + Self.gap
+        let line = [CGRect(origin: .zero, size: time1),
+                    CGRect(origin: CGPoint(x: dotX, y: timeBaseline - baseline(dot, dotSize)), size: dotSize),
+                    CGRect(origin: CGPoint(x: dotX + dotSize.width + Self.gap, y: timeBaseline - baseline(note, note1)), size: note1)]
+        let t = min(1, max(0, inline))
+        func mix(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + (b - a) * t }
+        let frames = zip(stacked, line).map { a, b in
+            CGRect(x: mix(a.minX, b.minX), y: mix(a.minY, b.minY), width: mix(a.width, b.width), height: mix(a.height, b.height))
+        }
+        // The dot is hidden while stacked, so it doesn't count towards the stacked size.
+        let size0 = CGSize(width: width0, height: stacked[2].maxY)
+        let size1 = CGSize(width: line[2].maxX, height: line.map(\.maxY).max() ?? 0)
+        return (CGSize(width: mix(size0.width, size1.width), height: mix(size0.height, size1.height)), frames)
+    }
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        layout(proposal, subviews).size
+    }
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let frames = layout(proposal, subviews).frames
+        for (subview, frame) in zip(subviews, frames) {
+            subview.place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                          proposal: ProposedViewSize(frame.size))
+        }
+    }
+}
+
 private struct ModeScheduleColumn: ViewModifier {
     let width: CGFloat
     @Environment(ViewMode.self) private var mode
@@ -1946,7 +2036,7 @@ private struct DayTimelineLayout: Layout {
         get { progress }
         set { progress = newValue }
     }
-    private var gutter: CGFloat { 76 + CGFloat(max(0, laneCount - 1)) * 6 }
+    private var gutter: CGFloat { 82 + CGFloat(max(0, laneCount - 1)) * 6 }
     static let top: CGFloat = 28
     static let pointsPerMinute: CGFloat = 1
 
@@ -2009,7 +2099,7 @@ private struct DayTimelineLayout: Layout {
                 // The preceding timed row supplies a fixed endpoint, its card's leading edge.
                 // Connector bounds never interpolate, so Canvas does not redraw each frame.
                 let row = lastTimedRow
-                let x = 54 + CGFloat(lane) * 6 + 3
+                let x = TimelineEntry.laneX(lane) + 3
                 let y = Self.top + CGFloat(subview[TimelineMinuteKey.self] - startMinute) * Self.pointsPerMinute
                 let frame = CGRect(x: x, y: y, width: max(1, row.minX - x), height: max(1, row.midY - y + 1))
                 cache.compact.append(frame)
@@ -2135,7 +2225,7 @@ private struct TimelineScale: View, Equatable {
         // The full-day scale is tall; rasterise it off the main thread so
         // revealing Time view does not stall the first animation frames.
         Canvas(rendersAsynchronously: true) { context, size in
-            let axisX: CGFloat = 54
+            let axisX = TimelineNowMarker.axisX
             var axis = Path()
             axis.move(to: CGPoint(x: axisX, y: y(startMinute)))
             axis.addLine(to: CGPoint(x: axisX, y: y(1440)))
@@ -2155,7 +2245,7 @@ private struct TimelineScale: View, Equatable {
             }
             for entry in entries {
                 let timeY = y(entry.minute)
-                let barX = axisX + CGFloat(lanes[entry.id] ?? 0) * 6
+                let barX = TimelineEntry.laneX(lanes[entry.id] ?? 0)
                 let opacity = entry.complete ? 0.12 : 0.3
                 if let end = entry.endMinute, end > entry.minute {
                     var duration = Path()
@@ -2179,16 +2269,17 @@ private struct TimelineScale: View, Equatable {
 private struct TimelineNowMarker: View {
     static let height: CGFloat = 5
     static let anchorID = "timeline-now"
+    static let axisX: CGFloat = 54
+    // A dark grey rather than the black accent, so the filled axis stays quiet.
+    static let fill = Color.primary.opacity(0.45)
     var body: some View {
         Canvas { context, size in
-            let axisX: CGFloat = 54, middle = size.height / 2
+            let axisX = Self.axisX, middle = size.height / 2
             var current = Path()
             current.move(to: CGPoint(x: axisX - 4, y: middle))
             current.addLine(to: CGPoint(x: size.width, y: middle))
-            context.stroke(current, with: .color(.accentColor.opacity(0.4)),
+            context.stroke(current, with: .color(.primary.opacity(0.25)),
                            style: StrokeStyle(lineWidth: 0.5, dash: [3, 4]))
-            context.fill(Path(ellipseIn: CGRect(x: axisX - 2.5, y: 0, width: 5, height: 5)),
-                         with: .color(.accentColor))
         }
         .frame(height: Self.height)
         .allowsHitTesting(false)

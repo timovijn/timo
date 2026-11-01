@@ -92,14 +92,31 @@ struct PersonaSwitcher: View {
             .pickerStyle(.inline)
         } label: {
             HStack(spacing: 8) {
-                PersonaOrb(persona: selection, size: orbSize)
-                Text(selection?.title ?? "All")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.primary)
-                    .fixedSize()
+                // Cycling hands one orb to the next: the old one shrinks away blurred as the new
+                // one grows in its place.
+                ZStack {
+                    PersonaOrb(persona: selection, size: orbSize)
+                        .id(selection)
+                        .transition(orbTransition)
+                }
+                ZStack(alignment: .leading) {
+                    // On a persona the capsule keeps the widest name's width, so cycling only
+                    // changes what's inside it; the toolbar's glass resizes on its own timing and
+                    // would otherwise part from the tint mid-animation.
+                    if selection != nil {
+                        ForEach(Persona.allCases, id: \.self) { Text($0.title).hidden() }
+                    }
+                    Text(selection?.title ?? "All")
+                        .foregroundStyle(.primary)
+                        .contentTransition(reduceMotion ? ContentTransition.opacity : .interpolate)
+                }
+                .font(.subheadline.weight(.medium))
+                .fixedSize()
+                .accessibilityHidden(true)
             }
-            // The label swaps at once; the menu folding back into the capsule is the motion.
-            .transaction { $0.animation = nil }
+            // From the menu the label swaps at once, since the menu folding back into the capsule
+            // is the motion; cycling by swipe or VoiceOver animates it, as nothing else moves there.
+            .transaction { if !$0.cyclesPersona { $0.animation = nil } }
             // The toolbar draws the glass capsule around this, matching the other bar buttons.
             .padding(.horizontal, 4)
             .frame(minHeight: 44)
@@ -112,8 +129,8 @@ struct PersonaSwitcher: View {
                         .allowsHitTesting(false)
                 }
             }
-            // Like the label, the tint changes at once rather than fading with the page.
-            .transaction { $0.animation = nil }
+            // Like the label, the tint changes at once from the menu and blends when cycling.
+            .transaction { if !$0.cyclesPersona { $0.animation = nil } }
         }
         .menuOrder(.fixed)
         .sensoryFeedback(.selection, trigger: selection)
@@ -128,10 +145,27 @@ struct PersonaSwitcher: View {
             }
         }
     }
+    private var orbTransition: AnyTransition { reduceMotion ? .opacity : AnyTransition(.blurReplace) }
     private func choose(_ persona: Persona?) {
         withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut(duration: 0.3)) { selection = persona }
     }
-    private func step(_ offset: Int) { choose(Persona.cycled(from: selection, by: offset)) }
+    private func step(_ offset: Int) {
+        withTransaction(.cyclingPersona(reduceMotion: reduceMotion)) {
+            selection = Persona.cycled(from: selection, by: offset)
+        }
+    }
+}
+
+extension Transaction {
+    /// Set when stepping to the next or previous persona rather than choosing from the menu,
+    /// so the top-left button animates its orb and name.
+    @Entry var cyclesPersona = false
+
+    static func cyclingPersona(reduceMotion: Bool) -> Transaction {
+        var transaction = Transaction(animation: reduceMotion ? .easeInOut(duration: 0.2) : .smooth(duration: 0.35))
+        transaction.cyclesPersona = true
+        return transaction
+    }
 }
 
 /// A horizontal swipe across a persona page. It only begins for a clearly sideways drag, so the
@@ -139,6 +173,9 @@ struct PersonaSwitcher: View {
 private struct PersonaSwipe: UIGestureRecognizerRepresentable {
     /// Called once per swipe; `true` for a swipe to the left, which goes forward like the day pager.
     let swiped: (Bool) -> Void
+    /// Bracket the drag, so the rows under the finger can hold off opening or completing.
+    let began: () -> Void
+    let ended: () -> Void
 
     func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
         let pan = UIPanGestureRecognizer()
@@ -148,7 +185,13 @@ private struct PersonaSwipe: UIGestureRecognizerRepresentable {
     }
 
     func handleUIGestureRecognizerAction(_ pan: UIPanGestureRecognizer, context: Context) {
+        switch pan.state {
+        case .began: began()
+        case .cancelled, .failed: ended()
+        default: break
+        }
         guard pan.state == .ended else { return }
+        ended()
         let move = pan.translation(in: pan.view)
         guard abs(move.x) > 24, abs(move.x) > abs(move.y) else { return }
         swiped(move.x < 0)
@@ -176,6 +219,9 @@ struct PersonaPages: View {
     let add: () -> Void
     /// The day list's own row, so a persona page shows each item exactly as the day view does.
     let row: (PlanItem, Day) -> AnyView
+    /// The day pager's swipe gate, shared so a sideways swipe never opens the item it started on.
+    let swipeBegan: () -> Void
+    let swipeEnded: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -185,12 +231,13 @@ struct PersonaPages: View {
                     .id(persona)
                     .transition(.opacity)
                     // Like the day pager: swiping left goes forward.
-                    .gesture(PersonaSwipe { forward in step(forward ? 1 : -1) })
+                    .gesture(PersonaSwipe(swiped: { forward in step(forward ? 1 : -1) },
+                                          began: swipeBegan, ended: swipeEnded))
             }
         }
     }
     private func step(_ offset: Int) {
-        withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut(duration: 0.3)) {
+        withTransaction(.cyclingPersona(reduceMotion: reduceMotion)) {
             persona = Persona.cycled(from: persona, by: offset)
         }
     }
