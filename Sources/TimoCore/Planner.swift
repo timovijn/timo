@@ -225,8 +225,10 @@ public struct PlanItem: Identifiable, Codable, Equatable {
         guard let minute else { return nil }
         return calendar.date(bySettingHour: minute / 60, minute: minute % 60, second: 0, of: day.date(calendar: calendar))
     }
+    // About the time, not the item: a range ticked off early still runs until its end,
+    // so it stays in the In progress group. Only cancelling takes it out.
     public func isInProgress(now: Date, calendar: Calendar = .current) -> Bool {
-        guard !isSettled, let start = start(calendar: calendar), let end else { return false }
+        guard !isCancelled, let start = start(calendar: calendar), let end else { return false }
         return start <= now && now < end
     }
     public func isElapsed(now: Date, calendar: Calendar = .current) -> Bool {

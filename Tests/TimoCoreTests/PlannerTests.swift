@@ -21,7 +21,7 @@ final class PlannerTests: XCTestCase {
         XCTAssertTrue(overnight.isInProgress(now: date(30, 1), calendar: calendar))
         XCTAssertFalse(overnight.isInProgress(now: date(30, 2), calendar: calendar))
         overnight.completedAt = date(30, 1)
-        XCTAssertFalse(overnight.isInProgress(now: date(30, 1), calendar: calendar))
+        XCTAssertTrue(overnight.isInProgress(now: date(30, 1), calendar: calendar))
         let zeroLength = PlanItem(title: "Point", day: Day(date(29), calendar: calendar), minute: 540, end: date(29, 9))
         XCTAssertFalse(zeroLength.isInProgress(now: date(29, 9), calendar: calendar))
     }
