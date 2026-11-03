@@ -408,7 +408,7 @@ struct DayView: View {
     private var dayNavigation: some View {
         HStack(spacing: 0) {
             Button {
-                guard daySwipeInteraction.allowsItemActions else { return }
+                guard daySwipeInteraction.allowsDayNavigation else { return }
                 move(-1)
             } label: {
                 Image(systemName: "chevron.left")
@@ -434,12 +434,12 @@ struct DayView: View {
                                 daySwipeInteraction.cancelExternalDrag()
                                 return
                             }
-                            guard daySwipeInteraction.allowsItemActions else { return }
+                            guard daySwipeInteraction.allowsDayNavigation else { return }
                             goToToday()
                         }
                 )
                 .onTapGesture {
-                    guard daySwipeInteraction.allowsItemActions else { return }
+                    guard daySwipeInteraction.allowsDayNavigation else { return }
                     openCalendar()
                 }
                 .accessibilityAddTraits(.isButton)
@@ -449,7 +449,7 @@ struct DayView: View {
                 .accessibilityAction { openCalendar() }
                 .accessibilityAction(named: "Go to today") { goToToday() }
             Button {
-                guard daySwipeInteraction.allowsItemActions else { return }
+                guard daySwipeInteraction.allowsDayNavigation else { return }
                 move(1)
             } label: {
                 Image(systemName: "chevron.right")
@@ -1740,12 +1740,18 @@ private final class TimelineOverflow {
     /// The day on screen; a page that slid aside as a neighbour may still have rows listed.
     /// A new day drops the last target: the page that takes the tracker over saw it as a new
     /// request and jumped to where the previous day's row had been.
-    var day = Day(Date()) { didSet { if day != oldValue { target = nil } } }
+    var day = Day(Date()) { didSet { if day != oldValue { target = nil; readyTarget = nil } } }
     /// Where an indicator's tap scrolls to, carried out by the page, which owns the scroll view:
     /// the middle of the nearest hidden row on the timeline, and a count so a second tap on the
     /// same row still asks again.
     struct Target: Equatable { let y: CGFloat; let request: Int }
     private(set) var target: Target?
+    /// Published by the anchor after layout, so a request is never consumed before it exists.
+    private(set) var readyTarget: Target?
+    func markTargetReady(_ target: Target) {
+        guard self.target == target else { return }
+        readyTarget = target
+    }
     /// Requests so far, and the last one a page carried out, so a page that gains the tracker
     /// later doesn't carry it out again.
     @ObservationIgnored private var requests = 0
@@ -1753,15 +1759,16 @@ private final class TimelineOverflow {
     /// The view at the target that the page scrolls to. A plain view laid out at that point:
     /// asked for a row itself, the scroll found it where List view would place it, at the top
     /// of the timeline, so a tap only worked when the two happened to be close.
-    static let anchorID = "timeline-overflow-target"
+    static func anchorID(for target: Target) -> String { "timeline-overflow-target-\(target.request)" }
     static let space = "timeline"
 
-    func set(_ edge: Edge?, for id: UUID, on day: Day, minute: Double) {
+    func set(_ edge: Edge?, for id: UUID, on day: Day, minute: Double, centre: CGFloat? = nil) {
         let key = Key(day: day, id: id)
         minutes[key] = minute
+        // The count must never advertise a row until its scroll position is available.
+        if let centre { centres[key] = centre }
         if edges[key] != edge { edges[key] = edge }
     }
-    func setCentre(_ y: CGFloat, for id: UUID, on day: Day) { centres[Key(day: day, id: id)] = y }
     func count(_ edge: Edge) -> Int { edges.filter { $0.key.day == day && $0.value == edge }.count }
     /// Scrolls to the hidden row closest to the visible part: the lowest above, the highest below.
     func scroll(to edge: Edge) {
@@ -1782,7 +1789,11 @@ private struct TimelineOverflowAnchor: View {
         if let target = overflow?.target {
             VStack(spacing: 0) {
                 Color.clear.frame(width: 1, height: max(0, target.y))
-                Color.clear.frame(width: 1, height: 1).id(TimelineOverflow.anchorID)
+                Color.clear.frame(width: 1, height: 1)
+                    .id(TimelineOverflow.anchorID(for: target))
+                    .onGeometryChange(for: Int.self) { _ in target.request } action: { _ in
+                        overflow?.markTargetReady(target)
+                    }
             }
             .allowsHitTesting(false)
             .accessibilityHidden(true)
@@ -1800,31 +1811,32 @@ private struct TimelineOverflowReport: ViewModifier {
     let shown: Bool
     @Environment(ViewMode.self) private var mode
     @Environment(TimelineOverflow.self) private var overflow: TimelineOverflow?
-    @State private var edge: TimelineOverflow.Edge?
-    @State private var centre: CGFloat?
+    private struct Position: Equatable {
+        let edge: TimelineOverflow.Edge?
+        let centre: CGFloat
+    }
+    @State private var position: Position?
 
     func body(content: Content) -> some View {
         let active = isTimed && shown && mode.showingTime
         content
-            // Only the edge is compared, so scrolling writes nothing until a row crosses one.
-            .onGeometryChange(for: TimelineOverflow.Edge?.self) { proxy in
-                guard let overflow, let page = proxy.bounds(of: .scrollView) else { return nil }
-                // The page's bounds already stop at its content margins (the bar and the dock), so
-                // a row is out of sight only once it has also passed the glass beyond them.
-                if proxy.size.height <= page.minY - overflow.reach.top { return .above }
-                if page.maxY + overflow.reach.bottom <= 0 { return .below }
-                return nil
-            } action: { edge = $0 }
-            // Where the card is on the timeline, for the indicators' scroll. It only changes when
-            // the rows move, not as the page scrolls.
-            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(TimelineOverflow.space)).midY } action: { centre = $0 }
-            // Also when a neighbouring page becomes the day on screen and gains the tracker.
-            .onChange(of: overflow.map { _ in active ? edge : nil }, initial: true) { _, report in
-                overflow?.set(report ?? nil, for: id, on: day, minute: minute)
-            }
-            // Likewise, as a page swiped to gains the tracker without its rows moving.
-            .onChange(of: overflow.map { _ in active ? centre : nil }, initial: true) { _, report in
-                if let report, let report { overflow?.setCentre(report, for: id, on: day) }
+            // One geometry report supplies both visibility and target position. Separate
+            // callbacks allowed the pill's count to change before its new target was ready.
+            .onGeometryChange(for: Position.self) { proxy in
+                let centre = proxy.frame(in: .named(TimelineOverflow.space)).midY
+                guard let overflow, let page = proxy.bounds(of: .scrollView) else {
+                    return Position(edge: nil, centre: centre)
+                }
+                let edge: TimelineOverflow.Edge?
+                if proxy.size.height <= page.minY - overflow.reach.top { edge = .above }
+                else if page.maxY + overflow.reach.bottom <= 0 { edge = .below }
+                else { edge = nil }
+                return Position(edge: edge, centre: centre)
+            } action: { position = $0 }
+            // Also publish when a cached neighbouring page gains the tracker.
+            .onChange(of: overflow.map { _ in active ? position : nil }, initial: true) { _, report in
+                let position = report ?? nil
+                overflow?.set(position?.edge, for: id, on: day, minute: minute, centre: position?.centre)
             }
             .onDisappear { overflow?.set(nil, for: id, on: day, minute: minute) }
     }
@@ -1837,15 +1849,14 @@ private struct TimelineOverflowScroll: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
-        content.onChange(of: overflow?.target) { _, target in
-            guard let target, let overflow, target.request > overflow.handled else { return }
-            overflow.handled = target.request
-            // Once the anchor has been laid out at its new place.
-            Task { @MainActor in
-                withAnimation(reduceMotion ? nil : .smooth(duration: 0.4)) {
-                    proxy.scrollTo(TimelineOverflow.anchorID, anchor: .center)
-                }
+        content.onChange(of: overflow?.readyTarget) { _, target in
+            guard let target, let overflow, overflow.target == target,
+                  target.request > overflow.handled else { return }
+            // A newer tap cancels the older request, and every request has its own laid-out anchor.
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.4)) {
+                proxy.scrollTo(TimelineOverflow.anchorID(for: target), anchor: .center)
             }
+            overflow.handled = target.request
         }
     }
 }
@@ -1874,6 +1885,8 @@ private struct TimelineOverflowIndicators: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showingRelativeDate = true
     @State private var relativeDatePillHeight: CGFloat = 20
+    @State private var lastEarlierCount = 1
+    @State private var lastLaterCount = 1
     private var showsRelativeDate: Bool { showingRelativeDate && !calendarIsOpen }
     private var pillAnimation: Animation? { reduceMotion ? nil : .easeInOut(duration: 0.25) }
     private struct RelativeDateShowing: Equatable {
@@ -1931,14 +1944,16 @@ private struct TimelineOverflowIndicators: View {
     }
     private func indicator(_ edge: TimelineOverflow.Edge) -> some View {
         let count = overflow.count(edge)
-        let noun = count == 1 ? "item" : "items"
+        // The pill remains rendered during its exit animation; keep its last positive label.
+        let displayedCount = count > 0 ? count : (edge == .above ? lastEarlierCount : lastLaterCount)
+        let noun = displayedCount == 1 ? "item" : "items"
         return Button {
             overflow.scroll(to: edge)
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: edge == .above ? "chevron.up" : "chevron.down")
                     .font(.caption2.weight(.semibold))
-                Text(edge == .above ? "\(count) earlier" : "\(count) later")
+                Text(edge == .above ? "\(displayedCount) earlier" : "\(displayedCount) later")
                     .font(.caption.weight(.medium)).monospacedDigit()
             }
             .foregroundStyle(.secondary)
@@ -1954,9 +1969,14 @@ private struct TimelineOverflowIndicators: View {
         .contentTransition(.opacity)
         .allowsHitTesting(count > 0)
         .accessibilityHidden(count == 0)
-        .accessibilityLabel(edge == .above ? "\(count) earlier \(noun) above" : "\(count) later \(noun) below")
+        .accessibilityLabel(edge == .above ? "\(displayedCount) earlier \(noun) above" : "\(displayedCount) later \(noun) below")
         .accessibilityHint("Scrolls to the nearest one")
         .animation(pillAnimation, value: count)
+        .onChange(of: count, initial: true) { _, count in
+            guard count > 0 else { return }
+            if edge == .above { lastEarlierCount = count }
+            else { lastLaterCount = count }
+        }
     }
 
     /// Every dock pill enters and leaves with the same fade, travel and timing.
@@ -2808,6 +2828,9 @@ private final class DaySwipeInteraction: ObservableObject {
         self.now = now
     }
     var allowsItemActions: Bool { !swiping && !isPaging && now() >= suppressUntil }
+    // A new navigation input interrupts settling; only the active finger gesture blocks taps.
+    // Item actions retain their stricter gate so releasing a swipe cannot open or tick a row.
+    var allowsDayNavigation: Bool { !swiping }
     var isExternalDragging: Bool { externalDragging }
     func begin() { swiping = true }
     func end() {
@@ -3078,7 +3101,7 @@ private struct DayPager: UIViewControllerRepresentable {
                 interaction.end()
                 let projected = translation.x + gesture.velocity(in: gesture.view).x * 0.16
                 endDrag(translation: translation.x, projected: projected,
-                        minimumTravel: max(32, size.width * 0.18), cancelled: false)
+                        minimumTravel: 6, cancelled: false)
             case .cancelled, .failed:
                 interaction.end()
                 endDrag(translation: 0, projected: 0, minimumTravel: 24, cancelled: true)
@@ -3122,8 +3145,10 @@ private struct DayPager: UIViewControllerRepresentable {
         func endDrag(translation: CGFloat, projected: CGFloat, minimumTravel: CGFloat, cancelled: Bool) {
             guard dragging else { return }
             dragging = false
-            let travel = dragOrigin + translation
-            let projection = dragOrigin + projected
+            // The visual offset includes the interrupted slide, but the new gesture alone
+            // determines intent. Otherwise a short swipe can select the opposite day.
+            let travel = translation
+            let projection = projected
             let commit = !cancelled && (abs(travel) >= minimumTravel ||
                 (abs(travel) >= 10 && abs(projection) > size.width * 0.2))
             let direction: Int? = commit ? ((abs(travel) >= minimumTravel ? travel : projection) < 0 ? 1 : -1) : nil
