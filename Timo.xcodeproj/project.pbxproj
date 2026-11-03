@@ -15,7 +15,36 @@
 		1CADA818579E1792F1E74D6B /* Timo/PlanStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CEA8AA3E9EF380055DA8E77 /* Timo/PlanStore.swift */; };
 		1FC8B6921AA115A479B98253 /* Sources/TimoCore/Planner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83DD306496F70F3A81ED3AB1 /* Sources/TimoCore/Planner.swift */; };
 		23A958BBB730D3775CE701BE /* Timo/DayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A65AF34DED73459E58BCC7D5 /* Timo/DayView.swift */; };
+		B1D0A0010000000000000001 /* Sources/TimoCore/Planner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83DD306496F70F3A81ED3AB1 /* Sources/TimoCore/Planner.swift */; };
+		B1D0A0010000000000000002 /* Timo/PlanLocation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1D0A0010000000000000011 /* Timo/PlanLocation.swift */; };
+		B1D0A0010000000000000003 /* Timo/PlanLocation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1D0A0010000000000000011 /* Timo/PlanLocation.swift */; };
+		B1D0A0010000000000000004 /* TimoWidget/TimoWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1D0A0010000000000000012 /* TimoWidget/TimoWidget.swift */; };
+		B1D0A0010000000000000005 /* TimoWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B1D0A0010000000000000013 /* TimoWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		B1D0A0010000000000000027 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 98F54143AB4E86B28C3AFEE0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B1D0A0010000000000000021;
+			remoteInfo = TimoWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		B1D0A0010000000000000025 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				B1D0A0010000000000000005 /* TimoWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		5E7A0C3D9F1B4A2E8C6D0F12 /* Timo/PersonaViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/PersonaViews.swift; sourceTree = "<group>"; };
@@ -27,10 +56,20 @@
 		83DD306496F70F3A81ED3AB1 /* Sources/TimoCore/Planner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/TimoCore/Planner.swift; sourceTree = "<group>"; };
 		A65AF34DED73459E58BCC7D5 /* Timo/DayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/DayView.swift; sourceTree = "<group>"; };
 		CC6864D4F6482CA3DEF937AD /* Timo/TimoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/TimoApp.swift; sourceTree = "<group>"; };
+		B1D0A0010000000000000011 /* Timo/PlanLocation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/PlanLocation.swift; sourceTree = "<group>"; };
+		B1D0A0010000000000000012 /* TimoWidget/TimoWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimoWidget/TimoWidget.swift; sourceTree = "<group>"; };
+		B1D0A0010000000000000013 /* TimoWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TimoWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		7561BFB015D8F536760CB671 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1D0A0010000000000000023 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -51,6 +90,8 @@
 				CC6864D4F6482CA3DEF937AD /* Timo/TimoApp.swift */,
 				A65AF34DED73459E58BCC7D5 /* Timo/DayView.swift */,
 				2D817EF2461BD1202B03023E /* Timo/ItemEditor.swift */,
+				B1D0A0010000000000000011 /* Timo/PlanLocation.swift */,
+				B1D0A0010000000000000012 /* TimoWidget/TimoWidget.swift */,
 				FBDC4F23F93125BBEEAE800C /* Products */,
 			);
 			sourceTree = "<group>";
@@ -59,6 +100,7 @@
 			isa = PBXGroup;
 			children = (
 				7D1043473D55BFA90E8530D3 /* Timo.app */,
+				B1D0A0010000000000000013 /* TimoWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -73,15 +115,34 @@
 				BCE16DD0260827ECF338C787 /* Sources */,
 				7561BFB015D8F536760CB671 /* Frameworks */,
 				0189424A5A60FED329FA868E /* Resources */,
+				B1D0A0010000000000000025 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				B1D0A0010000000000000026 /* PBXTargetDependency */,
 			);
 			name = Timo;
 			productName = Timo;
 			productReference = 7D1043473D55BFA90E8530D3 /* Timo.app */;
 			productType = "com.apple.product-type.application";
+		};
+		B1D0A0010000000000000021 /* TimoWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B1D0A0010000000000000031 /* Build configuration list for PBXNativeTarget "TimoWidget" */;
+			buildPhases = (
+				B1D0A0010000000000000022 /* Sources */,
+				B1D0A0010000000000000023 /* Frameworks */,
+				B1D0A0010000000000000024 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TimoWidget;
+			productName = TimoWidget;
+			productReference = B1D0A0010000000000000013 /* TimoWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -93,6 +154,9 @@
 				LastUpgradeCheck = 2710;
 				TargetAttributes = {
 					0E8A3AD980EC179856012B7E = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					B1D0A0010000000000000021 = {
 						CreatedOnToolsVersion = 27.0;
 					};
 				};
@@ -111,12 +175,20 @@
 			projectRoot = "";
 			targets = (
 				0E8A3AD980EC179856012B7E /* Timo */,
+				B1D0A0010000000000000021 /* TimoWidget */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		0189424A5A60FED329FA868E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1D0A0010000000000000024 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -138,10 +210,29 @@
 				5E7A0C3D9F1B4A2E8C6D0F11 /* Timo/PersonaViews.swift in Sources */,
 				7A1D3E5F9B2C4D6E8F0A1B21 /* Timo/DestructiveSubmenu.swift in Sources */,
 				7A1D3E5F9B2C4D6E8F0A1B31 /* Timo/CloudSync.swift in Sources */,
+				B1D0A0010000000000000002 /* Timo/PlanLocation.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1D0A0010000000000000022 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B1D0A0010000000000000001 /* Sources/TimoCore/Planner.swift in Sources */,
+				B1D0A0010000000000000003 /* Timo/PlanLocation.swift in Sources */,
+				B1D0A0010000000000000004 /* TimoWidget/TimoWidget.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		B1D0A0010000000000000026 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B1D0A0010000000000000021 /* TimoWidget */;
+			targetProxy = B1D0A0010000000000000027 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		639A7CA24D39909E713B47F7 /* Release */ = {
@@ -283,6 +374,60 @@
 			};
 			name = Release;
 		};
+		B1D0A0010000000000000032 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "$(TIMO_WIDGET_ENTITLEMENTS_$(TIMO_ICLOUD))";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TimoWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = timo;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.timovijn.timo.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TIMO_ICLOUD = NO;
+				"TIMO_ICLOUD[sdk=iphonesimulator*]" = YES;
+				TIMO_WIDGET_ENTITLEMENTS_YES = TimoWidget/TimoWidget.entitlements;
+			};
+			name = Debug;
+		};
+		B1D0A0010000000000000033 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "$(TIMO_WIDGET_ENTITLEMENTS_$(TIMO_ICLOUD))";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TimoWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = timo;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.timovijn.timo.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TIMO_ICLOUD = NO;
+				"TIMO_ICLOUD[sdk=iphonesimulator*]" = YES;
+				TIMO_WIDGET_ENTITLEMENTS_YES = TimoWidget/TimoWidget.entitlements;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -300,6 +445,15 @@
 			buildConfigurations = (
 				7082CC0B6FC1282FCEABD07A /* Debug */,
 				639A7CA24D39909E713B47F7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B1D0A0010000000000000031 /* Build configuration list for PBXNativeTarget "TimoWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B1D0A0010000000000000032 /* Debug */,
+				B1D0A0010000000000000033 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

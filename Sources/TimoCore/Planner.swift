@@ -269,6 +269,27 @@ public struct PlanItem: Identifiable, Codable, Equatable {
         let live = liveDay(now: now, calendar: calendar)
         return live > day && day <= selected && selected < live
     }
+    /// Whether a reminder still to come falls on `selected`, while the item is unfinished.
+    public func reminds(on selected: Day, now: Date, calendar: Calendar = .current) -> Bool {
+        !isSettled && reminders.contains { $0 > now && Day($0, calendar: calendar) == selected }
+    }
+    /// Whether the item's open deadline falls on `selected`, passed or not.
+    public func isDue(on selected: Day, calendar: Calendar = .current) -> Bool {
+        hasOpenDeadline && deadline.map { Day($0, calendar: calendar) == selected } == true
+    }
+    /// Whether `selected` doesn't show this item, as itself or as a "Carried to" entry, but has
+    /// one of its upcoming reminders or its open deadline: the reminder and deadline filters
+    /// show it there too, as a visitor from its own day.
+    public func visits(_ selected: Day, now: Date, calendar: Calendar = .current) -> Bool {
+        !shows(on: selected, now: now, calendar: calendar) && !movedAway(from: selected, now: now, calendar: calendar)
+            && (reminds(on: selected, now: now, calendar: calendar) || isDue(on: selected, calendar: calendar))
+    }
+    /// When a visitor's first upcoming reminder or deadline falls on `selected`, where it's placed.
+    public func visitTime(on selected: Day, now: Date, calendar: Calendar = .current) -> Date? {
+        let reminder = isSettled ? nil : reminders.filter { $0 > now && Day($0, calendar: calendar) == selected }.min()
+        let due = isDue(on: selected, calendar: calendar) ? deadline : nil
+        return [reminder, due].compactMap { $0 }.min()
+    }
 }
 
 /// What each person keeps for themselves on a shared item: my reminders don't notify you and
@@ -711,6 +732,12 @@ public enum Planner {
     public static func movedItems(from day: Day, in items: [PlanItem], now: Date, calendar: Calendar = .current) -> [PlanItem] {
         items.filter { $0.movedAway(from: day, now: now, calendar: calendar) }.sorted { $0.createdAt < $1.createdAt }
     }
+    /// Items from other days with an upcoming reminder or open deadline on `day`, by when it falls.
+    public static func visitingItems(on day: Day, in items: [PlanItem], now: Date, calendar: Calendar = .current) -> [PlanItem] {
+        items.filter { $0.visits(day, now: now, calendar: calendar) }.sorted {
+            ($0.visitTime(on: day, now: now, calendar: calendar) ?? .distantFuture) < ($1.visitTime(on: day, now: now, calendar: calendar) ?? .distantFuture)
+        }
+    }
     /// Every item in `persona` (among any others it has), grouped by day, newest day first. Each
     /// day lists what that day's list shows of the persona, in the same order: an item on its own
     /// (live) day, a "Carried to" entry on every day it was carried on from, and today for anything
@@ -818,5 +845,18 @@ public enum TimelineLanes {
             if let end, end > start { return start..<end }
             return start..<(start + pointMinutes)
         })
+    }
+}
+
+/// How far a day is: what its list shows, done and in all, the same as its "x/y complete".
+/// Cancelled items aren't counted.
+public struct DayProgress: Equatable {
+    public let done: Int
+    public let total: Int
+    init(done: Int, total: Int) { self.done = done; self.total = total }
+    public init(items: [PlanItem], day: Day, now: Date, calendar: Calendar = .current) {
+        let shown = items.filter { $0.shows(on: day, now: now, calendar: calendar) }
+        done = shown.filter(\.isComplete).count
+        total = shown.filter { !$0.isCancelled }.count
     }
 }

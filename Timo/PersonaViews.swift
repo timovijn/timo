@@ -478,6 +478,8 @@ private struct CrossMark: Shape {
 /// keeps it still.
 struct ItemCard: ViewModifier {
     var outlined = false
+    /// An item from another day, shown for a reminder or deadline: no fill, a dashed outline.
+    var dashed = false
     /// Space between the card's trailing edge and the time; the day view's shared time label
     /// is placed outside the row, so it uses the same inset.
     static let trailingInset: CGFloat = 12
@@ -510,13 +512,16 @@ struct ItemCard: ViewModifier {
             .environment(\.itemCardPressed, $pressed)
             // Fade between the fill and the outline; the list reconfigures a completed row
             // without the caller's transaction, which used to swap them in a single frame.
-            .background(Self.tint(contrast, colorScheme: colorScheme).opacity(plain || outlined ? 0 : 1), in: Self.shape)
+            .background(Self.tint(contrast, colorScheme: colorScheme).opacity(plain || outlined || dashed ? 0 : 1), in: Self.shape)
             // Keep an opaque base for the system's initial lift snapshot before
             // the expanded preview appears.
             .background(plain || unbacked ? .clear : Color(.systemBackground), in: Self.shape)
             .overlay {
-                Self.shape.strokeBorder(Self.outline(contrast, colorScheme: colorScheme), lineWidth: 1)
-                    .opacity(!plain && outlined ? 1 : 0)
+                // Filled cards get a hairline edge so they read as surfaces; outlined
+                // (carried) cards keep their fuller stroke in place of the fill.
+                Self.shape.strokeBorder(Self.outline(contrast, colorScheme: colorScheme).opacity(dashed ? 2.5 : 1),
+                                        style: StrokeStyle(lineWidth: outlined || dashed ? 1 : 0.5, dash: dashed ? [4, 3] : []))
+                    .opacity(plain ? 0 : 1)
                     .allowsHitTesting(false)
             }
             .animation(reduceMotion ? nil : .smooth(duration: 0.35), value: outlined)

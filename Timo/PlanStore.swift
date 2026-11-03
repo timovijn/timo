@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import Combine
 import UserNotifications
+import WidgetKit
 
 @MainActor final class PlanStore: ObservableObject {
     @Published private(set) var items: [PlanItem] = []
@@ -43,7 +44,7 @@ import UserNotifications
         }
     }
     init() {
-        url = URL.applicationSupportDirectory.appending(path: "Timo", directoryHint: .isDirectory).appending(path: "plan.json")
+        url = PlanLocation.appURL()
         do {
             if FileManager.default.fileExists(atPath: url.path) {
                 let document = try JSONDecoder().decode(Document.self, from: Data(contentsOf: url))
@@ -72,6 +73,7 @@ import UserNotifications
             items = updated
             if let updatedSeries { series = updatedSeries }
             refreshReminders()
+            WidgetCenter.shared.reloadAllTimelines()
         } catch { errorMessage = "This change could not be saved. \(error.localizedDescription)" }
     }
     @discardableResult private func materialize(_ updated: inout [PlanItem], series plans: [RepeatingPlan], now: Date) -> Bool {
@@ -143,7 +145,7 @@ import UserNotifications
                     guard date > Date() else { continue }
                     let content = UNMutableNotificationContent()
                     content.title = item.title
-                    content.body = "A moment for what you planned."
+                    content.body = reminderBody(for: item, at: date)
                     content.sound = .default
                     content.userInfo = ["itemID": item.id.uuidString]
                     let components = Calendar.current.dateComponents([.calendar, .timeZone, .year, .month, .day, .hour, .minute, .second], from: date)
@@ -155,6 +157,48 @@ import UserNotifications
             }
             reminderWorker = nil
         }
+    }
+    /// Relative dates are based on delivery, since reminders may be scheduled days ahead.
+    private func reminderBody(for item: PlanItem, at delivery: Date) -> String {
+        let calendar = Calendar.current
+        func dayLabel(_ date: Date) -> String {
+            if calendar.isDate(date, inSameDayAs: delivery) { return "Today" }
+            if let tomorrow = calendar.date(byAdding: .day, value: 1, to: delivery),
+               calendar.isDate(date, inSameDayAs: tomorrow) { return "Tomorrow" }
+            return date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated).year())
+        }
+        func when(_ date: Date, sentenceStart: Bool = false) -> String {
+            let day = dayLabel(date)
+            let label = !sentenceStart && (day == "Today" || day == "Tomorrow") ? day.lowercased() : day
+            return "\(label) at \(date.formatted(date: .omitted, time: .shortened))"
+        }
+        var lines: [String] = []
+        if let start = item.start(calendar: calendar) {
+            var schedule = when(start, sentenceStart: true)
+            if let end = item.end {
+                let ending = calendar.isDate(start, inSameDayAs: end)
+                    ? end.formatted(date: .omitted, time: .shortened) : when(end)
+                schedule += " – \(ending)"
+            }
+            let minutes = Int(ceil(start.timeIntervalSince(delivery) / 60))
+            if minutes > 0 {
+                schedule += " · in \(minutes)m"
+            } else if start == delivery {
+                schedule += " · now"
+            }
+            lines.append(schedule)
+        } else {
+            lines.append("Anytime · \(dayLabel(item.liveDay(now: delivery, calendar: calendar).date(calendar: calendar)))")
+        }
+        if let deadline = item.deadline {
+            lines.append("\(deadline < delivery ? "Was due" : "Due") \(when(deadline))")
+        }
+        let locations = item.locations.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        let people = item.people.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        let context = [people.joined(separator: ", "), locations.joined(separator: ", ")]
+            .filter { !$0.isEmpty }.joined(separator: " • ")
+        if !context.isEmpty { lines.append(context) }
+        return lines.joined(separator: "\n")
     }
     func save(_ item: PlanItem) throws {
         try Planner.validate(item, in: items)

@@ -1,0 +1,88 @@
+{
+  "source": "/Users/timovijn/Timo/GitHub/timo/TimoWidget/TimoWidget.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Today",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 14
+        }
+      },
+      {
+        "comment": "",
+        "key": "How many of today's items are done.",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 15
+        }
+      },
+      {
+        "comment": "",
+        "key": "Open timo",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 78
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nothing planned today",
+        "location": {
+          "startingColumn": 66,
+          "startingLine": 82
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld of %lld done today",
+        "location": {
+          "startingColumn": 92,
+          "startingLine": 82
+        }
+      },
+      {
+        "comment": "",
+        "key": "Open timo to show your day",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 83
+        }
+      },
+      {
+        "comment": "",
+        "key": "Today",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 88
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld/%lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 93
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nothing planned",
+        "location": {
+          "startingColumn": 40,
+          "startingLine": 102
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld of %lld done",
+        "location": {
+          "startingColumn": 60,
+          "startingLine": 102
+        }
+      }
+    ]
+  },
+  "version": 1
+}

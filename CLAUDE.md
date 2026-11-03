@@ -5,11 +5,13 @@ SwiftUI day planner for iOS 26 with a Liquid Glass look. The README describes ev
 ## Layout
 
 - `Sources/TimoCore/Planner.swift`: the Foundation-only model (`Day`, `PlanItem`, `RepeatingPlan`, `Persona`, `Planner`). It's compiled straight into the app target and is the only code under test.
-- `Tests/TimoCoreTests/`: XCTest suite (`PlannerTests`, `RepeatingTests`, `PersonaTests`, `TimelineLaneTests`, `CancelTests`, `SyncTests`).
+- `Tests/TimoCoreTests/`: XCTest suite (`PlannerTests`, `RepeatingTests`, `PersonaTests`, `TimelineLaneTests`, `CancelTests`, `SyncTests`, `DayProgressTests`, `VisitTests`).
 - `Timo/DayView.swift`: the main screen (day pager, dock, date control and calendar, list/time views, rows). It's large; search it with grep and read only the part you need.
 - `Timo/ItemEditor.swift`: the item editor (schedule/reminder pills, persona chips, location/people pills, (i) explanations).
 - `Timo/PersonaViews.swift`: persona orb, top-left persona menu, persona history page, long-press delete.
 - `Timo/PlanStore.swift`: JSON persistence (document version 8, reads 1–8), reminders, sample day.
+- `Timo/PlanLocation.swift`: where the plan file lives (the App Group's shared container when available), compiled into the app and the widget.
+- `TimoWidget/TimoWidget.swift`: the lock screen widget extension (today's done count); it also compiles `Planner.swift`.
 - `Timo/CloudSync.swift`: iCloud sync with `CKSyncEngine` (one JSON record per item and repeating plan); every `PlanStore.commit` queues its changes.
 - A new Swift file in `Timo/` must also be added to `Timo.xcodeproj/project.pbxproj` (PBXBuildFile, PBXFileReference, group child and Sources phase).
 
@@ -26,7 +28,7 @@ xcodebuild -project Timo.xcodeproj -scheme Timo -destination 'id=E9FCCB9D-0F3D-4
 
 ## Simulator data
 
-- The plan lives at `$(xcrun simctl get_app_container <sim> com.timovijn.timo data)/Library/Application Support/Timo/plan.json`. The container path changes when the app is reinstalled, so look it up each time.
+- The plan lives at `$(xcrun simctl get_app_container <sim> com.timovijn.timo group.com.timovijn.timo)/Timo/plan.json` (the App Group container). The container path changes when the app is reinstalled, so look it up each time.
 - It holds the user's sample data. Back it up before seeding or saving test items, and restore it afterwards. Opening the app also rewrites old plans to the current format.
 
 ## Model rules worth knowing

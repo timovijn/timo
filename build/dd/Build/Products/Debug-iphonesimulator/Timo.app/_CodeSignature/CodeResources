@@ -12,9 +12,29 @@
 		<data>
 		n57qDP4tZfLD1rCS43W0B4LQjzE=
 		</data>
+		<key>PlugIns/TimoWidget.appex/Info.plist</key>
+		<data>
+		BX3PIcfbir1W703SKeFHySoYOFI=
+		</data>
+		<key>PlugIns/TimoWidget.appex/TimoWidget</key>
+		<data>
+		eB55R8o05xksA6j6mVVAAjwdgDY=
+		</data>
+		<key>PlugIns/TimoWidget.appex/TimoWidget.debug.dylib</key>
+		<data>
+		C2mvDiUTu0RhZgmW5c4zGXkUaNA=
+		</data>
+		<key>PlugIns/TimoWidget.appex/_CodeSignature/CodeResources</key>
+		<data>
+		LYmHGdzqkllIzCK5YRCKw2RGd6s=
+		</data>
+		<key>PlugIns/TimoWidget.appex/__preview.dylib</key>
+		<data>
+		IUhYT41f2fp5bXAXt3wH2Qfbsyg=
+		</data>
 		<key>Timo.debug.dylib</key>
 		<data>
-		PXSWmx0V1XXZS0Egb/fiMpyZK+M=
+		rF3OP+gFcFi5huLNXO4nog34V94=
 		</data>
 		<key>__preview.dylib</key>
 		<data>
@@ -23,11 +43,46 @@
 	</dict>
 	<key>files2</key>
 	<dict>
+		<key>PlugIns/TimoWidget.appex/Info.plist</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			IFRB/WcF6BLsHv9xEIlp0w371KyguECdQ+Cf0aCpgLQ=
+			</data>
+		</dict>
+		<key>PlugIns/TimoWidget.appex/TimoWidget</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			8iUqRxBpNCgdGS8eHS42eYevVXXNdWneXT5zGZ9EjPw=
+			</data>
+		</dict>
+		<key>PlugIns/TimoWidget.appex/TimoWidget.debug.dylib</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			ZiP63lhVBxTAijXmz84Bp/cknyqaxwHsE/k1139iJnY=
+			</data>
+		</dict>
+		<key>PlugIns/TimoWidget.appex/_CodeSignature/CodeResources</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			0KZAcBPX/wDvVti2UyWvNOVFwT1N1IgoSNoUOYg4+2w=
+			</data>
+		</dict>
+		<key>PlugIns/TimoWidget.appex/__preview.dylib</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			h5cpJsockroaGJqdpEhitsgBLQ/0EIKP3/Wly8SBLHU=
+			</data>
+		</dict>
 		<key>Timo.debug.dylib</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			bKkkJ1TXb/P0rflPvau73l8LXmCZxaTWPz2tht6CwG0=
+			gMmJN2WwBJSqsKeJW9uw4MpuoLpAgQApkuG//JvWPx8=
 			</data>
 		</dict>
 		<key>__preview.dylib</key>

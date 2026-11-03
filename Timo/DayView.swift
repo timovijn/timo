@@ -41,8 +41,10 @@ struct DayView: View {
     private var reviewing: Bool { filter == .review }
     private var showingReminders: Bool { filter == .reminders }
     private var showingDeadlines: Bool { filter == .deadlines }
-    private var reminderItems: [PlanItem] { (visible + moved).filter { matches($0, .reminders, on: day) } }
-    private var deadlineItems: [PlanItem] { (visible + moved).filter { matches($0, .deadlines, on: day) } }
+    private var reminderItems: [PlanItem] { (visible + moved + visiting).filter { matches($0, .reminders, on: day) } }
+    private var deadlineItems: [PlanItem] { (visible + moved + visiting).filter { matches($0, .deadlines, on: day) } }
+    /// Items from other days with an upcoming reminder or open deadline on the viewed day.
+    private var visiting: [PlanItem] { Planner.visitingItems(on: day, in: store.items, now: now) }
     @State private var now = Date()
     @State private var lastToday = Day(Date())
     private let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
@@ -71,6 +73,14 @@ struct DayView: View {
     /// dot, except that an item left open keeps its orange dot but leaves the review filter. A
     /// "Carried to" entry gets no reminder dot, as reminders are about its live day.
     private func matches(_ item: PlanItem, _ filter: DayFilter, on day: Day) -> Bool {
+        // An item from another day is here only for the reminder or deadline that falls today.
+        if item.visits(day, now: now) {
+            switch filter {
+            case .reminders: return item.reminds(on: day, now: now)
+            case .deadlines: return item.isDue(on: day)
+            case .all, .review: return false
+            }
+        }
         switch filter {
         case .all: return true
         case .review: return hasDot(item, .review, on: day) && !item.suggestionDismissed
@@ -78,14 +88,18 @@ struct DayView: View {
         }
     }
     /// Whether the row for `item` on `day` shows the filter's dot in the full day. The orange
-    /// dot stays while the item is unfinished and late, even once it has been left open.
+    /// dot stays while the item is unfinished and late, even once it has been left open. A
+    /// planned item's upcoming reminders and open deadline stay visible even on other dates.
+    /// Visitors only get the dot for the reminder or deadline that brings them to this day.
     private func hasDot(_ item: PlanItem, _ filter: DayFilter, on day: Day) -> Bool {
         let carried = item.movedAway(from: day, now: now)
         switch filter {
         case .all: return false
         case .review: return !item.isSettled && (carried || isLate(item))
-        case .reminders: return !carried && hasOpenReminder(item)
-        case .deadlines: return item.hasOpenDeadline
+        case .reminders:
+            return item.visits(day, now: now) ? item.reminds(on: day, now: now) : !carried && hasOpenReminder(item)
+        case .deadlines:
+            return item.visits(day, now: now) ? item.isDue(on: day) : item.hasOpenDeadline
         }
     }
     private func hasOpenReminder(_ item: PlanItem) -> Bool {
@@ -543,7 +557,7 @@ struct DayView: View {
                 .accessibilityLabel(showingDeadlines ? "Show full day" : "Show \(deadlineCount) items with deadlines")
                 .accessibilityValue(showingDeadlines ? "Deadline filter on" : "Deadline filter off")
                 .accessibilityAddTraits(showingDeadlines ? .isSelected : [])
-                .accessibilityHint("Toggles unfinished items with a deadline for this day")
+                .accessibilityHint("Toggles unfinished items with a deadline, including deadlines on other days")
                 .transition(transition)
             }
             if showReminders {
@@ -557,7 +571,7 @@ struct DayView: View {
                 .accessibilityLabel(showingReminders ? "Show full day" : "Show \(reminderCount) items with reminders")
                 .accessibilityValue(showingReminders ? "Reminder filter on" : "Reminder filter off")
                 .accessibilityAddTraits(showingReminders ? .isSelected : [])
-                .accessibilityHint("Toggles unfinished items with a reminder set for this day")
+                .accessibilityHint("Toggles unfinished items with an upcoming reminder, including reminders on other days")
                 .transition(transition)
             }
             if showReview {
@@ -614,19 +628,29 @@ struct DayView: View {
         // Items carried on from this day stay in their place as quiet entries. They count
         // towards completion on their live day, but a filter takes each row that has its dot.
         let moved = Planner.movedItems(from: day, in: store.items, now: now)
-        let filtered = (visible + moved).filter { matches($0, filter, on: day) }
+        // Items from other days whose reminder or deadline falls on this day: mounted like every
+        // row, but shown only under that filter, at that time.
+        let visitors = Planner.visitingItems(on: day, in: store.items, now: now)
+        let visitTimes = Dictionary(uniqueKeysWithValues: visitors.compactMap { item in
+            item.visitTime(on: day, now: now).map { (item.id, Calendar.current.dateComponents([.hour, .minute], from: $0)) }
+        })
+        let filtered = (visible + moved + visitors).filter { matches($0, filter, on: day) }
         // Every row stays mounted and the filter only collapses the others. A row inserted when
         // a filter cleared had no earlier position, so it appeared at its final spot while the
         // rows around it were still sliding back, overlapping them.
         let shown = Set(filtered.map(\.id))
         // A carried item keeps its old time on its scheduled day; elsewhere it is untimed.
         let keepsTime = { (item: PlanItem) in item.minute != nil && (!item.isCarried(now: now) || item.day == day) }
+        // A visitor sorts by when its reminder or deadline falls on this day.
+        let sortMinute = { (item: PlanItem) in
+            visitTimes[item.id].map { ($0.hour ?? 0) * 60 + ($0.minute ?? 0) } ?? item.minute
+        }
         let order = { (a: PlanItem, b: PlanItem) in
-            if a.minute != b.minute { return (a.minute ?? -1) < (b.minute ?? -1) }
+            if sortMinute(a) != sortMinute(b) { return (sortMinute(a) ?? -1) < (sortMinute(b) ?? -1) }
             return a.createdAt < b.createdAt
         }
         let anyTimeItems = (visible + moved).filter { !keepsTime($0) }.sorted(by: order)
-        let timedItems = (visible + moved).filter(keepsTime).sorted(by: order)
+        let timedItems = ((visible + moved).filter(keepsTime) + visitors).sorted(by: order)
         return ScrollViewReader { proxy in ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 16) {
@@ -654,7 +678,7 @@ struct DayView: View {
                 }
                 if !anyTimeItems.isEmpty {
                     sectionHeading("Anytime")
-                        .modifier(FilterCollapse(collapsed: !anyTimeItems.contains { shown.contains($0.id) }))
+                        .modifier(FilterCollapse(collapsed: !anyTimeItems.contains { shown.contains($0.id) }, keepsSpaceInTimeView: true))
                         .transition(sectionRemoval)
                     anytimeItems(items: anyTimeItems, shown: shown, day: day, filter: filter)
                         .padding(.horizontal, 16)
@@ -662,7 +686,7 @@ struct DayView: View {
                 }
                 if !timedItems.isEmpty {
                     sectionHeading("Scheduled")
-                        .modifier(FilterCollapse(collapsed: !timedItems.contains { shown.contains($0.id) }))
+                        .modifier(FilterCollapse(collapsed: !timedItems.contains { shown.contains($0.id) }, keepsSpaceInTimeView: true))
                         .transition(sectionRemoval)
                     scheduledItems(items: timedItems, shown: shown, day: day, filter: filter)
                         .padding(.horizontal, 16)
@@ -683,6 +707,9 @@ struct DayView: View {
         }
         .scrollEdgeEffectHidden(true, for: .vertical)
         .modifier(ScrollsToNowInTimeView(proxy: proxy))
+        .modifier(ScrollsToFilteredItem(proxy: proxy, filter: filter.rawValue, animation: reviewAnimation,
+                                        target: anyTimeItems.first { shown.contains($0.id) }.map { .anytime($0.id) }
+                                            ?? timedItems.first { shown.contains($0.id) }.map { .scheduled($0.id) }))
         .modifier(TimelineOverflowScroll(proxy: proxy))
         }
     }
@@ -701,15 +728,17 @@ struct DayView: View {
         let contentKey = TimelineContentKey(items: items, day: day, order: items.map(\.id),
                                             markers: items.map { item in [DayFilter.review, .reminders, .deadlines].map { hasDot(item, $0, on: day) } },
                                             filter: filter.rawValue, showNow: false, timeNotes: [], typeSize: dynamicTypeSize)
-        return DayTimelineLayout(startMinute: 0, laneCount: 1, contentKey: contentKey, compactOnly: true, progress: 0) {
+        return AnytimeLayout(contentKey: contentKey) {
             // The same rows as Scheduled, with the same pair of List and Time view copies and
             // modifiers; as plain rows they made each filter animation drop frames on a phone.
             ForEach(items) { item in
                 ForEach([false, true], id: \.self) { timedVariant in
                     row(item, filter: filter, day: day, sharedSchedule: true, timeBelowTitle: timedVariant)
-                        .modifier(FilterCollapse(collapsed: !shown.contains(item.id)))
+                        .modifier(FilterCollapse(collapsed: !shown.contains(item.id), keepsSpaceInTimeView: true))
                         .layoutValue(key: TimelineCollapsedKey.self, value: !shown.contains(item.id))
                         .modifier(ModeRowVariant(isTimed: timedVariant, compactSortPriority: 0))
+                        // A target for opening a filter; both copies sit in the same place.
+                        .id(timedVariant ? AnyHashable("anytime-time-\(item.id)") : AnyHashable("anytime-\(item.id)"))
                         .layoutValue(key: TimelineTimedVariantKey.self, value: timedVariant)
                 }
             }
@@ -729,22 +758,35 @@ struct DayView: View {
         let beginning = calendar.startOfDay(for: day.date())
         let end = calendar.date(byAdding: .day, value: 1, to: beginning)!
         let entries = items.compactMap { item -> TimelineEntry? in
-            guard let start = item.start() else { return nil }
             func minute(_ date: Date) -> Double {
                 if date < beginning { return 0 }
                 if date >= end { return 1440 }
                 let parts = calendar.dateComponents([.hour, .minute], from: date)
                 return Double((parts.hour ?? 0) * 60 + (parts.minute ?? 0))
             }
+            func onDay(_ date: Date) -> Bool { date >= beginning && date < end }
+            // A visitor from another day sits at its reminder or deadline here, without a track.
+            if item.visits(day, now: now), let time = item.visitTime(on: day, now: now) {
+                return TimelineEntry(id: item.id, minute: minute(time), endMinute: nil, complete: false,
+                                     reminderMinutes: item.reminders.filter { $0 > now && onDay($0) }.map(minute),
+                                     deadlineMinute: item.isDue(on: day) ? item.deadline.map(minute) : nil,
+                                     visiting: true)
+            }
+            guard let start = item.start() else { return nil }
             // A carried entry is drawn as quietly as a finished item.
-            return TimelineEntry(id: item.id, minute: minute(start), endMinute: item.end.map(minute),
-                                 complete: item.isSettled || item.movedAway(from: day, now: now))
+            let complete = item.isSettled || item.movedAway(from: day, now: now)
+            return TimelineEntry(id: item.id, minute: minute(start), endMinute: item.end.map(minute), complete: complete,
+                                 // Only an open item's reminders and deadline still mean something.
+                                 reminderMinutes: complete ? [] : item.reminders.filter(onDay).map(minute),
+                                 deadlineMinute: complete ? nil : item.deadline.flatMap { onDay($0) ? minute($0) : nil },
+                                 review: matches(item, .review, on: day))
         }.sorted { $0.minute < $1.minute }
         let currentMinute: Double? = day == Day(now) ? Double(calendar.component(.hour, from: now) * 60 + calendar.component(.minute, from: now)) : nil
         let firstMinute = min(entries.map(\.minute).min() ?? 360, currentMinute ?? 360)
         let startMinute = min(360, floor(firstMinute / 60) * 60)
         let lanes = TimelineEntry.durationLanes(for: entries)
         let isToday = day == Day(now)
+        let scaleHeight = DayTimelineLayout.top * 2 + CGFloat(1440 - startMinute) * DayTimelineLayout.pointsPerMinute
         let showNow = filter == .all && isToday
         // The group dividers stay mounted on today and only collapse under a filter.
         let inProgress = isToday ? items.filter { $0.isInProgress(now: now) } : []
@@ -816,10 +858,25 @@ struct DayView: View {
                 }
                 if let entry = entries.first(where: { $0.id == item.id }) {
                     TimelineConnector(complete: entry.complete)
-                        .opacity(shown.contains(item.id) ? 1 : 0)
+                        .opacity(shown.contains(item.id) && !entry.visiting ? 1 : 0)
                         .modifier(ModeFade(visibleInTimeView: true))
                         .layoutValue(key: TimelineConnectorLaneKey.self, value: lanes[item.id] ?? 0)
                         .layoutValue(key: TimelineMinuteKey.self, value: entry.minute)
+                    // The reminder and deadline filters join their dots on the track to the
+                    // item's card, the way its own connector joins its start. They stay laid out
+                    // and only fade, so they move with the rows when a filter opens or closes;
+                    // inserted and removed, a fading one stayed behind while the rows moved.
+                    let marks: [(minute: Double, color: Color, filter: DayFilter)] =
+                        entry.reminderMinutes.map { ($0, Color.blue, .reminders) }
+                        + (entry.deadlineMinute.map { [($0, Color.red, .deadlines)] } ?? [])
+                    ForEach(marks.indices, id: \.self) { index in
+                        TimelineMarkConnector(color: marks[index].color, rising: marks[index].minute > entry.minute)
+                            .opacity(filter == marks[index].filter && shown.contains(item.id) ? 1 : 0)
+                            .modifier(ModeFade(visibleInTimeView: true))
+                            .layoutValue(key: TimelineConnectorLaneKey.self, value: lanes[item.id] ?? 0)
+                            .layoutValue(key: TimelineMarkKey.self, value: true)
+                            .layoutValue(key: TimelineMinuteKey.self, value: marks[index].minute)
+                    }
                 }
             }
         }
@@ -827,9 +884,38 @@ struct DayView: View {
         .compositingGroup()
         .background(alignment: .topLeading) {
             ZStack(alignment: .topLeading) {
-                TimelineScale(entries: entries.filter { shown.contains($0.id) }, startMinute: startMinute, date: beginning, lanes: lanes)
+                // The time passed shades the timeline behind the cards (their opaque backing keeps
+                // them clear of it), so what's behind us reads at a glance. Below the scale, and a
+                // plain view, so the minute tick only resizes it.
+                if let currentMinute, currentMinute >= startMinute {
+                    Rectangle()
+                        .fill(TimelineNowMarker.passedWash)
+                        .frame(height: DayTimelineLayout.top + CGFloat(currentMinute - startMinute) * DayTimelineLayout.pointsPerMinute)
+                        // From the middle of the first track to the screen edge, past the cards'
+                        // 16-point inset: the hour labels stay on the page colour, and the shading
+                        // reads as the timeline filling up rather than a panel.
+                        .padding(.leading, TimelineEntry.laneX(0))
+                        .padding(.trailing, -16)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+                // Given the passed hour and the hour label the current time covers rather than the
+                // minute, so the hour labels only redraw a few times an hour.
+                TimelineScale(startMinute: startMinute, date: beginning,
+                              passedMinute: currentMinute.map { floor($0 / 60) * 60 },
+                              coveredHour: currentMinute.flatMap { minute in
+                                  let nearest = (minute / 60).rounded()
+                                  return abs(nearest * 60 - minute) < TimelineNowMarker.coverMinutes ? Int(nearest) : nil
+                              })
                     .equatable()
-                    .frame(height: DayTimelineLayout.top * 2 + CGFloat(1440 - startMinute) * DayTimelineLayout.pointsPerMinute)
+                    .frame(height: scaleHeight)
+                // Every item's track stays in place and fades with the filter, so tracks a filter
+                // hides or shows crossfade with the rows; the review filter turns its items' orange.
+                ForEach(entries.filter { !$0.visiting }, id: \.id) { entry in
+                    TimelineTrack(entry: entry, lane: lanes[entry.id] ?? 0, startMinute: startMinute,
+                                  orange: filter == .review && entry.review)
+                        .opacity(filter == .all || shown.contains(entry.id) ? 1 : 0)
+                }
                 // The minute tick only moves this small marker, never redrawing the tall scale.
                 if let currentMinute, currentMinute >= startMinute {
                     // Laid out rather than offset, and a view of its own below a spacer: scrolling
@@ -839,19 +925,17 @@ struct DayView: View {
                         Color.clear.frame(width: 1, height: 1).id(TimelineNowMarker.anchorID)
                     }
                     .accessibilityHidden(true)
-                    // The part of the axis already behind us fills in down to the marker's line.
-                    Rectangle()
-                        .fill(TimelineNowMarker.fill)
-                        .frame(width: 1.5, height: CGFloat(currentMinute - startMinute) * DayTimelineLayout.pointsPerMinute)
-                        .offset(x: TimelineNowMarker.axisX - 0.75, y: DayTimelineLayout.top)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                    TimelineNowMarker()
+                    TimelineNowMarker(time: now)
+                        // The line runs on to the screen edge, like the wash above it.
+                        .padding(.trailing, -16)
                         .offset(y: DayTimelineLayout.top + CGFloat(currentMinute - startMinute) * DayTimelineLayout.pointsPerMinute
                                 - TimelineNowMarker.height / 2)
                 }
             }
             .modifier(ModeFade(visibleInTimeView: true))
+            // The page is hosted, so the filter's own transaction doesn't reach in here: without
+            // this the tracks and the review filter's orange swapped in one frame.
+            .animation(reviewAnimation, value: filter)
         }
         .animation(reviewAnimation, value: active.map(\.id))
         .accessibilityElement(children: .contain)
@@ -881,6 +965,7 @@ struct DayView: View {
         let review = hasDot(item, .review, on: day)
         let reminder = hasDot(item, .reminders, on: day)
         let deadline = hasDot(item, .deadlines, on: day)
+        let visiting = item.visits(day, now: now)
         // A carried entry keeps its time on its scheduled day; elsewhere a carried item is untimed.
         let showsTime = carried != nil ? day == item.day : !item.isCarried(now: now)
         return VStack(alignment: .leading, spacing: 0) {
@@ -914,6 +999,11 @@ struct DayView: View {
                                 .fixedSize(horizontal: false, vertical: true)
                             if let carried {
                                 Text("Carried to \(carried)")
+                                    .font(.caption).foregroundStyle(.tertiary)
+                            }
+                            if visiting, item.start() == nil {
+                                // A timed visitor's time already names its day.
+                                Text("Anytime, \(item.day.date().formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))")
                                     .font(.caption).foregroundStyle(.tertiary)
                             }
                             if timeBelowTitle, let start = item.start(), showsTime {
@@ -979,8 +1069,9 @@ struct DayView: View {
         .overlay(alignment: .trailing) {
             rowMarkers(item, filter: filter, day: day)
         }
-        // Every item has the same faint fill: open, ticked, cancelled or carried.
-        .modifier(ItemCard())
+        // Every item has the same faint fill: open, ticked, cancelled or carried. An item from
+        // another day, here for its reminder or deadline, has a dashed outline instead.
+        .modifier(ItemCard(dashed: visiting))
         .modifier(CardBackingWhileSwitching())
         .itemMenuOnHold(item, day: day, isEnabled: { daySwipeInteraction.allowsItemActions }, showsMenu: showsMenu) {
             AnyView(row(item, filter: filter, day: day, showsMenu: false, timeBelowTitle: timeBelowTitle))
@@ -1354,6 +1445,21 @@ private final class FrameRateBoost: NSObject {
     @objc private func tick() {}
 }
 
+/// Anytime's rows in a compact-only `DayTimelineLayout`, remeasured when switching views under
+/// a filter: in Time view the filtered-out rows keep their height (`FilterCollapse`).
+private struct AnytimeLayout<Content: View>: View {
+    var contentKey: TimelineContentKey
+    @ViewBuilder let content: Content
+    @Environment(ViewMode.self) private var mode
+
+    var body: some View {
+        var key = contentKey
+        // Only read under a filter, so switching views without one doesn't update Anytime.
+        key.keepsFilteredSpace = key.filter != 0 && mode.showingTime
+        return DayTimelineLayout(startMinute: 0, laneCount: 1, contentKey: key, compactOnly: true, progress: 0) { content }
+    }
+}
+
 private struct ModeTimelineLayout<Content: View>: View {
     let startMinute: Double
     let laneCount: Int
@@ -1364,7 +1470,7 @@ private struct ModeTimelineLayout<Content: View>: View {
 
     var body: some View {
         let layout = DayTimelineLayout(startMinute: startMinute, laneCount: laneCount, contentKey: contentKey,
-                                       progress: mode.showingTime ? 1 : 0) { content }
+                                       progress: mode.showingTime ? 1 : 0, reservesTimeHeight: mode.showingTime) { content }
         if ViewMode.crossFades(reduceMotion: reduceMotion) {
             // Dissolve between the finished layouts instead of moving rows.
             ZStack { layout.id(mode.showingTime).transition(.opacity) }
@@ -1398,19 +1504,57 @@ private struct ModeRowVariant: ViewModifier {
     }
 }
 
-/// Brings the current time into view whenever Time view opens on today.
+/// Brings the current time into view whenever Time view opens on today, and when today's
+/// page appears in Time view (on launch, or built as a neighbour before it's swiped to).
 private struct ScrollsToNowInTimeView: ViewModifier {
     let proxy: ScrollViewProxy
     @Environment(ViewMode.self) private var mode
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
-        content.onChange(of: mode.showingTime) { _, showingTime in
+        content
+        .onAppear {
+            guard mode.showingTime else { return }
+            // After the first layout, which has to place the marker before it can be scrolled to.
+            Task { @MainActor in proxy.scrollTo(TimelineNowMarker.anchorID, anchor: .center) }
+        }
+        .onChange(of: mode.showingTime) { _, showingTime in
             guard showingTime else { return }
-            // Alongside the rows' move, so the timeline arrives already showing now.
-            withAnimation(ViewMode.animation(reduceMotion: reduceMotion)) {
-                proxy.scrollTo(TimelineNowMarker.anchorID, anchor: .center)
+            // Alongside the rows' move, so the timeline arrives already showing now. A moment
+            // later, once the scroll view has the content's Time view height: issued in the same
+            // update as the switch, or on the next run loop, the scroll was dropped whenever List
+            // view had been scrolled down (it stayed where List view had been).
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(50))
+                withAnimation(ViewMode.animation(reduceMotion: reduceMotion)) {
+                    proxy.scrollTo(TimelineNowMarker.anchorID, anchor: .center)
+                }
             }
+        }
+    }
+}
+
+/// Opening a filter brings its topmost item into view, in the upper part of the screen below
+/// the top controls, alongside the rows collapsing around it.
+private struct ScrollsToFilteredItem: ViewModifier {
+    enum Target: Equatable { case anytime(UUID), scheduled(UUID) }
+    let proxy: ScrollViewProxy
+    /// `DayFilter`'s raw value; 0 is all.
+    let filter: Int
+    let animation: Animation?
+    let target: Target?
+    @Environment(ViewMode.self) private var mode
+
+    func body(content: Content) -> some View {
+        content.onChange(of: filter) { _, filter in
+            guard filter != 0, let target else { return }
+            // The same ids the rows carry: the Time view copy of a scheduled row is the item's
+            // own id, its List view copy "list-…"; Anytime rows are "anytime-…" in both views.
+            let id: AnyHashable = switch target {
+            case .anytime(let id): AnyHashable("anytime-\(id)")
+            case .scheduled(let id): mode.showingTime ? AnyHashable(id) : AnyHashable("list-\(id)")
+            }
+            withAnimation(animation) { proxy.scrollTo(id, anchor: UnitPoint(x: 0.5, y: 0.3)) }
         }
     }
 }
@@ -1826,14 +1970,23 @@ private struct TimelineEntry: Equatable {
     let minute: Double
     let endMinute: Double?
     let complete: Bool
+    var reminderMinutes: [Double] = []
+    var deadlineMinute: Double? = nil
+    /// In the orange review filter; its track lights orange there.
+    var review = false
+    /// From another day, here for a reminder or deadline: no track or lane of its own.
+    var visiting = false
 
     /// Every entry gets a track beside the axis; points move aside like ranges do.
     static func durationLanes(for entries: [TimelineEntry]) -> [UUID: Int] {
-        let assignments = TimelineLanes.assign(starts: entries.map(\.minute), ends: entries.map(\.endMinute))
-        return Dictionary(uniqueKeysWithValues: zip(entries.map(\.id), assignments))
+        // Visitors take no lane, so the full day's layout doesn't change for them; their dot
+        // sits on the first track, where the filter has faded any other item's.
+        let own = entries.filter { !$0.visiting }
+        let assignments = TimelineLanes.assign(starts: own.map(\.minute), ends: own.map(\.endMinute))
+        return Dictionary(uniqueKeysWithValues: zip(own.map(\.id), assignments))
     }
-    /// The axis is kept for the current-time fill, so track 0 sits one spacing to its right.
-    static func laneX(_ lane: Int) -> CGFloat { TimelineNowMarker.axisX + CGFloat(lane + 1) * 6 }
+    /// There's no axis line: the tracks are the timeline, the first one where the axis was.
+    static func laneX(_ lane: Int) -> CGFloat { TimelineNowMarker.axisX + CGFloat(lane) * 6 }
 }
 
 private struct TimelineMinuteKey: LayoutValueKey {
@@ -1970,13 +2123,19 @@ private struct TimelineCollapsedKey: LayoutValueKey {
 /// returns from where it is rather than appearing at its final spot.
 private struct FilterCollapse: ViewModifier {
     let collapsed: Bool
+    /// For what sits above the timeline: in Time view it only fades and keeps its height, so
+    /// the timeline below never moves when a filter opens or closes. Collapsing it moved the
+    /// timeline by its whole height, and leaving a filter pushed what was on screen away.
+    var keepsSpaceInTimeView = false
+    @Environment(ViewMode.self) private var mode: ViewMode?
 
     func body(content: Content) -> some View {
+        let closes = collapsed && !(keepsSpaceInTimeView && mode?.showingTime == true)
         content
             // Keep the contents at their natural height while the outer frame closes.
             // Otherwise shrinking Anytime rows repeatedly compress their buttons/text.
             .fixedSize(horizontal: false, vertical: true)
-            .frame(height: collapsed ? 0 : nil, alignment: .top)
+            .frame(height: closes ? 0 : nil, alignment: .top)
             .clipped()
             .opacity(collapsed ? 0 : 1)
             .allowsHitTesting(!collapsed)
@@ -1986,6 +2145,12 @@ private struct FilterCollapse: ViewModifier {
 
 private struct TimelineSharedTimeInsetKey: LayoutValueKey {
     static let defaultValue: CGFloat? = nil
+}
+
+/// A reminder or deadline connector: it carries its dot, so its frame starts at the track
+/// and spans up or down to the card.
+private struct TimelineMarkKey: LayoutValueKey {
+    static let defaultValue = false
 }
 
 private struct TimelineConnectorLaneKey: LayoutValueKey {
@@ -2032,6 +2197,8 @@ private struct TimelineContentKey: Equatable {
     let showNow: Bool
     let timeNotes: [Bool]
     let typeSize: DynamicTypeSize
+    /// Anytime rows keep their height under a filter in Time view, so their measurements differ.
+    var keepsFilteredSpace = false
 }
 
 // Measure the two endpoint layouts once, then only interpolate positions while
@@ -2042,6 +2209,11 @@ private struct DayTimelineLayout: Layout {
     let contentKey: TimelineContentKey
     var compactOnly = false
     var progress: Double
+    /// Set at once when switching to Time view (it isn't animated): the content takes its full
+    /// Time view height from the first frame, so the scroll to now has room to land. Growing
+    /// with the rows, the content was still List-sized when the scroll began and clamped it,
+    /// which left the timeline where List view had been about every other switch.
+    var reservesTimeHeight = false
     var animatableData: Double {
         get { progress }
         set { progress = newValue }
@@ -2109,9 +2281,15 @@ private struct DayTimelineLayout: Layout {
                 // The preceding timed row supplies a fixed endpoint, its card's leading edge.
                 // Connector bounds never interpolate, so Canvas does not redraw each frame.
                 let row = lastTimedRow
-                let x = TimelineEntry.laneX(lane) + 3
                 let y = Self.top + CGFloat(subview[TimelineMinuteKey.self] - startMinute) * Self.pointsPerMinute
-                let frame = CGRect(x: x, y: y, width: max(1, row.minX - x), height: max(1, row.midY - y + 1))
+                let frame: CGRect
+                if subview[TimelineMarkKey.self] {
+                    let r = TimelineMarkConnector.dotRadius, x = TimelineEntry.laneX(lane) - r
+                    frame = CGRect(x: x, y: min(y, row.midY) - r, width: max(1, row.minX - x), height: abs(row.midY - y) + 2 * r)
+                } else {
+                    let x = TimelineEntry.laneX(lane) + 3
+                    frame = CGRect(x: x, y: y, width: max(1, row.minX - x), height: max(1, row.midY - y + 1))
+                }
                 cache.compact.append(frame)
                 cache.timed.append(frame)
                 cache.proposals.append(ProposedViewSize(width: frame.width, height: frame.height))
@@ -2146,9 +2324,10 @@ private struct DayTimelineLayout: Layout {
             let timeHeight = marker ? 0 : subviews[index + 1].sizeThatFits(ProposedViewSize(width: timeWidth, height: nil)).height
             let timeY = Self.top + CGFloat(subview[TimelineMinuteKey.self] - startMinute) * Self.pointsPerMinute
             let collapsed = subview[TimelineCollapsedKey.self]
-            // A row collapsed by a filter keeps its spot without pushing later rows down.
-            let timeTop = marker ? max(0, timeBottom) : collapsed ? max(0, timeY)
-                : max(0, max(timeY - timeHeight / 2, timeBottom + 8))
+            // A row collapsed by a filter waits where it will appear, after the rows shown above
+            // it, without pushing later rows down. At its bare time it slid across the cards
+            // between there and its place when the filter closed.
+            let timeTop = marker ? max(0, timeBottom) : max(0, max(timeY - timeHeight / 2, timeBottom + 8))
             cache.compact.append(CGRect(x: 0, y: compactBottom, width: width, height: compactHeight))
             cache.timed.append(CGRect(x: gutter, y: timeTop, width: timeWidth, height: timeHeight))
             cache.proposals.append(ProposedViewSize(width: width, height: compactHeight))
@@ -2190,7 +2369,8 @@ private struct DayTimelineLayout: Layout {
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize {
         let width = proposal.width ?? 390
         prepare(width: width, subviews: subviews, cache: &cache)
-        return CGSize(width: width, height: mix(cache.compactHeight, cache.timedHeight))
+        return CGSize(width: width, height: max(mix(cache.compactHeight, cache.timedHeight),
+                                                reservesTimeHeight ? cache.timedHeight : 0))
     }
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) {
         prepare(width: bounds.width, subviews: subviews, cache: &cache)
@@ -2207,6 +2387,7 @@ private struct DayTimelineLayout: Layout {
 
 private struct TimelineConnector: View {
     let complete: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         Canvas(rendersAsynchronously: true) { context, size in
             let endY = max(0, size.height - 1)
@@ -2215,18 +2396,48 @@ private struct TimelineConnector: View {
             connector.addCurve(to: CGPoint(x: size.width, y: endY),
                                control1: CGPoint(x: 9, y: 0),
                                control2: CGPoint(x: size.width - 11, y: endY))
-            context.stroke(connector, with: .color(.primary.opacity(complete ? 0.12 : 0.3)), lineWidth: 0.5)
+            context.stroke(connector, with: .color(.primary.opacity(0.3)), lineWidth: 0.5)
+        }
+        // Dimmed as a view rather than in the drawing (0.12 against the track's 0.3), with the
+        // track's own animation, so a ticked-off item's connector and track grey together.
+        .opacity(complete ? 0.4 : 1)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.35), value: complete)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// A reminder's or deadline's dot on the item's track, with a curve to the card's middle.
+/// `rising` when the mark comes after the item's start, so the card lies above it.
+private struct TimelineMarkConnector: View {
+    static let dotRadius: CGFloat = 3
+    let color: Color
+    let rising: Bool
+    var body: some View {
+        Canvas(rendersAsynchronously: true) { context, size in
+            let r = Self.dotRadius
+            let dot = CGPoint(x: r, y: rising ? size.height - r : r)
+            let card = CGPoint(x: size.width, y: rising ? r : size.height - r)
+            var connector = Path()
+            connector.move(to: dot)
+            connector.addCurve(to: card, control1: CGPoint(x: dot.x + 9, y: dot.y),
+                               control2: CGPoint(x: card.x - 11, y: card.y))
+            context.stroke(connector, with: .color(color.opacity(0.6)), lineWidth: 1)
+            context.fill(Path(ellipseIn: CGRect(x: 0, y: dot.y - r, width: 2 * r, height: 2 * r)), with: .color(color))
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 }
 
+/// The hour labels, tall and drawn off the main thread. The items' tracks are `TimelineTrack`s.
 private struct TimelineScale: View, Equatable {
-    let entries: [TimelineEntry]
     let startMinute: Double
     let date: Date
-    let lanes: [UUID: Int]
+    /// The last whole hour already reached on today; hours up to it draw dimmer.
+    var passedMinute: Double? = nil
+    /// The hour whose label the current-time pill sits on; it's left out rather than peeking out.
+    var coveredHour: Int? = nil
 
     private func y(_ minute: Double) -> CGFloat {
         DayTimelineLayout.top + CGFloat(minute - startMinute) * DayTimelineLayout.pointsPerMinute
@@ -2236,39 +2447,17 @@ private struct TimelineScale: View, Equatable {
         // revealing Time view does not stall the first animation frames.
         Canvas(rendersAsynchronously: true) { context, size in
             let axisX = TimelineNowMarker.axisX
-            var axis = Path()
-            axis.move(to: CGPoint(x: axisX, y: y(startMinute)))
-            axis.addLine(to: CGPoint(x: axisX, y: y(1440)))
-            context.stroke(axis, with: .color(.primary.opacity(0.12)), lineWidth: 0.5)
-
+            // No axis line or ticks: the hour labels and the items' tracks are the timeline.
             for hour in Int(startMinute / 60)...24 {
                 let position = y(Double(hour * 60))
-                var tick = Path()
-                tick.move(to: CGPoint(x: axisX - 3, y: position))
-                tick.addLine(to: CGPoint(x: axisX + 3, y: position))
-                context.stroke(tick, with: .color(.primary.opacity(0.2)), lineWidth: 0.5)
+                let passed = passedMinute.map { Double(hour * 60) <= $0 } ?? false
                 let hourDate = Calendar.current.date(byAdding: .day, value: hour == 24 ? 1 : 0, to: date)!
                 let time = Calendar.current.date(bySettingHour: hour % 24, minute: 0, second: 0, of: hourDate)!
+                guard hour != coveredHour else { continue }
                 let label = Text(time.formatted(date: .omitted, time: .shortened))
-                    .font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary)
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(passed ? HierarchicalShapeStyle.tertiary : .secondary)
                 context.draw(label, at: CGPoint(x: axisX - 8, y: position), anchor: .trailing)
-            }
-            for entry in entries {
-                let timeY = y(entry.minute)
-                let barX = TimelineEntry.laneX(lanes[entry.id] ?? 0)
-                let opacity = entry.complete ? 0.12 : 0.3
-                if let end = entry.endMinute, end > entry.minute {
-                    var duration = Path()
-                    duration.move(to: CGPoint(x: barX, y: timeY))
-                    duration.addLine(to: CGPoint(x: barX, y: y(end)))
-                    context.stroke(duration, with: .color(.primary.opacity(opacity)), style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                    var endTick = Path()
-                    endTick.move(to: CGPoint(x: barX - 3, y: y(end)))
-                    endTick.addLine(to: CGPoint(x: barX + 3, y: y(end)))
-                    context.stroke(endTick, with: .color(.primary.opacity(opacity)), lineWidth: 1)
-                }
-                context.fill(Path(ellipseIn: CGRect(x: barX - 2, y: timeY - 2, width: 4, height: 4)),
-                             with: .color(.primary.opacity(entry.complete ? 0.2 : 0.55)))
             }
         }
         .allowsHitTesting(false)
@@ -2276,20 +2465,68 @@ private struct TimelineScale: View, Equatable {
     }
 }
 
+/// One item's dot and duration bar. Views of their own rather than part of a canvas, so a
+/// change of colour fades: ticking an item off greys its track, and the review filter turns
+/// it orange. A canvas redrew the whole drawing in one frame.
+private struct TimelineTrack: View {
+    let entry: TimelineEntry
+    let lane: Int
+    let startMinute: Double
+    let orange: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private func y(_ minute: Double) -> CGFloat {
+        DayTimelineLayout.top + CGFloat(minute - startMinute) * DayTimelineLayout.pointsPerMinute
+    }
+    var body: some View {
+        let x = TimelineEntry.laneX(lane)
+        let startY = y(entry.minute)
+        let endY = entry.endMinute.map { y(max($0, entry.minute)) } ?? startY
+        ZStack(alignment: .topLeading) {
+            if endY > startY {
+                // As tall as a round-capped stroke from start to end.
+                Capsule()
+                    .fill(orange ? Color.orange : Color.primary.opacity(entry.complete ? 0.12 : 0.3))
+                    .frame(width: 2, height: endY - startY + 2)
+                    .offset(x: x - 1, y: startY - 1)
+            }
+            Circle()
+                .fill(orange ? Color.orange : Color.primary.opacity(entry.complete ? 0.2 : 0.55))
+                .frame(width: 4, height: 4)
+                .offset(x: x - 2, y: startY - 2)
+        }
+        // Completion reaches the store once the row's circle and strike have finished.
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.35), value: entry.complete)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
 private struct TimelineNowMarker: View {
-    static let height: CGFloat = 5
+    static let height: CGFloat = 16
     static let anchorID = "timeline-now"
     static let axisX: CGFloat = 54
-    // A dark grey rather than the black accent, so the filled axis stays quiet.
-    static let fill = Color.primary.opacity(0.45)
+    /// An hour label closer than this to the current time would show beside the pill.
+    static let coverMinutes: Double = 15
+    static let passedWash = Color.primary.opacity(0.025)
+    let time: Date
     var body: some View {
-        Canvas { context, size in
-            let axisX = Self.axisX, middle = size.height / 2
-            var current = Path()
-            current.move(to: CGPoint(x: axisX - 4, y: middle))
-            current.addLine(to: CGPoint(x: size.width, y: middle))
-            context.stroke(current, with: .color(.primary.opacity(0.25)),
-                           style: StrokeStyle(lineWidth: 0.5, dash: [3, 4]))
+        ZStack(alignment: .topLeading) {
+            Canvas { context, size in
+                let axisX = Self.axisX, middle = size.height / 2
+                var current = Path()
+                current.move(to: CGPoint(x: axisX - 4, y: middle))
+                current.addLine(to: CGPoint(x: size.width, y: middle))
+                context.stroke(current, with: .color(.primary.opacity(0.3)), lineWidth: 0.5)
+            }
+            // The current time in a dark pill in the hour column, where the eye looks for times.
+            Text(time.formatted(date: .omitted, time: .shortened))
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .foregroundStyle(Color(.systemBackground))
+                .padding(.horizontal, 5)
+                .frame(height: 14)
+                .background(Color.primary.opacity(0.75), in: Capsule())
+                .frame(width: Self.axisX - 4, height: Self.height, alignment: .trailing)
         }
         .frame(height: Self.height)
         .allowsHitTesting(false)
