@@ -1,0 +1,24 @@
+{
+  "source": "/Users/timovijn/Timo/GitHub/timo/Timo/GuideActivity.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Complete Item",
+        "location": {
+          "startingColumn": 49,
+          "startingLine": 47
+        }
+      },
+      {
+        "comment": "",
+        "key": "Item",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 49
+        }
+      }
+    ]
+  },
+  "version": 1
+}

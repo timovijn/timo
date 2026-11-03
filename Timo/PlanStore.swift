@@ -5,9 +5,12 @@ import UserNotifications
 import WidgetKit
 
 @MainActor final class PlanStore: ObservableObject {
+    /// One store for the app and for intents run from its Live Activities.
+    static let shared = PlanStore()
     @Published private(set) var items: [PlanItem] = []
     let completionPresentation = CompletionPresentation()
     let cloud = CloudSync()
+    private let guide = DayGuideActivities()
     private var series: [RepeatingPlan] = []
     var repeatingPlans: [RepeatingPlan] { series }
     private var displayedDay = Day(Date())
@@ -17,6 +20,11 @@ import WidgetKit
     private weak var deletionUndoManager: UndoManager?
     private let url: URL
     private var canWrite = true
+    /// What this store last read or wrote, so its own saves aren't taken for another device's.
+    private var savedData: Data?
+    #if targetEnvironment(simulator)
+    private var planWatcher: DispatchSourceFileSystemObject?
+    #endif
     private var reminderRevision = 0
     private var reminderWorker: Task<Void, Never>?
     private let notificationCenter = UNUserNotificationCenter.current()
@@ -47,10 +55,12 @@ import WidgetKit
         url = PlanLocation.appURL()
         do {
             if FileManager.default.fileExists(atPath: url.path) {
-                let document = try JSONDecoder().decode(Document.self, from: Data(contentsOf: url))
+                let data = try Data(contentsOf: url)
+                let document = try JSONDecoder().decode(Document.self, from: data)
                 guard (1...8).contains(document.version) else { throw CocoaError(.fileReadCorruptFile) }
                 items = document.items
                 series = document.series
+                savedData = data
             }
         } catch {
             canWrite = false
@@ -61,14 +71,47 @@ import WidgetKit
         refreshReminders()
         // Never sync a plan that couldn't be read, so iCloud can't overwrite or lose it.
         if canWrite { cloud.attach(self) }
+        #if targetEnvironment(simulator)
+        if canWrite { watchPlanFile() }
+        #endif
     }
+    #if targetEnvironment(simulator)
+    /// The simulators share one plan file (`PlanLocation.simulators`), and several can be open at
+    /// once, so a save on one shows on the others straight away. Without this, an open iPad would
+    /// write its older plan back over the iPhone's next change. The folder is watched, since a
+    /// save replaces the file rather than writing into it.
+    private func watchPlanFile() {
+        // A new installation may not have saved anything yet. Watch its folder from
+        // the start, so the first save on the other simulator is picked up too.
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let folder = open(url.deletingLastPathComponent().path, O_EVTONLY)
+        guard folder >= 0 else { return }
+        let watcher = DispatchSource.makeFileSystemObjectSource(fileDescriptor: folder, eventMask: .write, queue: .main)
+        watcher.setEventHandler { [weak self] in MainActor.assumeIsolated { self?.reloadFromOtherDevice() } }
+        watcher.setCancelHandler { close(folder) }
+        watcher.resume()
+        planWatcher = watcher
+    }
+    private func reloadFromOtherDevice() {
+        guard let data = try? Data(contentsOf: url), data != savedData,
+              let document = try? JSONDecoder().decode(Document.self, from: data),
+              (1...8).contains(document.version) else { return }
+        savedData = data
+        items = document.items
+        series = document.series
+        refreshReminders()
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+    #endif
     /// Saves the plan. Changes are also queued for iCloud, except those that came from it.
     private func commit(_ updated: [PlanItem], series updatedSeries: [RepeatingPlan]? = nil, fromCloud: Bool = false) {
         guard canWrite else { errorMessage = "Saving is disabled to protect the existing plan. Please close the app and resolve the saved-file error."; return }
         do {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
-            try encoder.encode(Document(items: updated, series: updatedSeries ?? series)).write(to: url, options: .atomic)
+            let data = try encoder.encode(Document(items: updated, series: updatedSeries ?? series))
+            try data.write(to: url, options: .atomic)
+            savedData = data
             if !fromCloud { cloud.queueChanges(items: items, updated, series: series, updatedSeries ?? series) }
             items = updated
             if let updatedSeries { series = updatedSeries }
@@ -105,11 +148,26 @@ import WidgetKit
         if Planner.mergeDuplicateOccurrences(&folded) { commit(folded) }
         reconcile()
     }
+    /// Generates every repeating item's days through `last`, for a persona page or search that
+    /// shows repeats that far ahead. Days are otherwise generated about 60 days ahead.
+    func generateRepeats(through last: Day) {
+        var updated = items
+        if Planner.materialize(series, in: &updated, from: Day(Date()), through: last) { commit(updated) }
+    }
+    /// Whether a repeating item among `listed` goes on past `day`.
+    func repeats(_ listed: [PlanItem], after day: Day) -> Bool {
+        Planner.repeats(Set(listed.compactMap(\.seriesID)), in: series, after: day)
+    }
     func showDay(_ day: Day) {
         displayedDay = day
         reconcile()
     }
     func reconcile(now: Date = Date()) {
+        #if targetEnvironment(simulator)
+        // Folder events can be missed while suspended; refresh before generating or saving
+        // occurrences on return to the foreground and on the regular day refresh.
+        if canWrite { reloadFromOtherDevice() }
+        #endif
         var updated = items
         let generated = materialize(&updated, series: series, now: now)
         // Plans saved when carrying moved an item's day get their scheduled days back once.
@@ -119,8 +177,10 @@ import WidgetKit
     func requestReminderPermission() async throws -> Bool {
         try await notificationCenter.requestAuthorization(options: [.alert, .sound])
     }
+    /// Brings reminders and the "Guide my day" Live Activities in line with the saved plan.
     func refreshReminders() {
         guard canWrite else { return }
+        guide.refresh(items)
         reminderRevision += 1
         guard reminderWorker == nil else { return }
         // A single worker always finishes with the newest saved state, even when
@@ -140,13 +200,18 @@ import WidgetKit
                 notificationCenter.removeDeliveredNotifications(withIdentifiers: delivered.map(\.request.identifier)
                     .filter { $0.hasPrefix("timo.reminder.") && !activeIDs.contains(String($0.dropFirst("timo.reminder.".count).prefix(36))) })
                 guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else { continue }
+                let announced = DayGuideActivities.announcedStarts(snapshot, now: Date())
                 for reminder in Planner.upcomingReminders(in: snapshot, now: Date()) {
                     let item = reminder.item, date = reminder.date
                     guard date > Date() else { continue }
+                    if announced.contains(item.id) && date == item.start() { continue }
                     let content = UNMutableNotificationContent()
                     content.title = item.title
                     content.body = reminderBody(for: item, at: date)
                     content.sound = .default
+                    // A reminder is something the user asked for at that moment, so it may
+                    // break through a Focus where they allow timo's Time Sensitive notifications.
+                    content.interruptionLevel = .timeSensitive
                     content.userInfo = ["itemID": item.id.uuidString]
                     let components = Calendar.current.dateComponents([.calendar, .timeZone, .year, .month, .day, .hour, .minute, .second], from: date)
                     let request = UNNotificationRequest(identifier: "timo.reminder.\(item.id.uuidString).\(Int(date.timeIntervalSince1970))",
@@ -236,6 +301,11 @@ import WidgetKit
         guard let i = updated.firstIndex(where: { $0.id == item.id }) else { return }
         Planner.setCancelled(cancelled, &updated[i], on: day, now: Date())
         commit(updated)
+    }
+    /// Ticks an item off from its Live Activity, as done today.
+    func complete(itemID: String) {
+        guard let item = items.first(where: { $0.id.uuidString == itemID }), !item.isSettled else { return }
+        toggle(item, on: Day(Date()))
     }
     func dismissSuggestion(_ item: PlanItem) {
         var updated = items

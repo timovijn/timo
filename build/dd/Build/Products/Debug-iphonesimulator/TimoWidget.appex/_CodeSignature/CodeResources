@@ -8,9 +8,17 @@
 		<data>
 		BX3PIcfbir1W703SKeFHySoYOFI=
 		</data>
+		<key>Metadata.appintents/extract.actionsdata</key>
+		<data>
+		l/JWVASGoCXuSYy7aR40rGWLFkY=
+		</data>
+		<key>Metadata.appintents/version.json</key>
+		<data>
+		r36D8Is3IZfsLF1i7tG9VtpTD88=
+		</data>
 		<key>TimoWidget.debug.dylib</key>
 		<data>
-		C2mvDiUTu0RhZgmW5c4zGXkUaNA=
+		nJtLLJ8oiWBRyz/lRRwHVhzJDHQ=
 		</data>
 		<key>__preview.dylib</key>
 		<data>
@@ -19,11 +27,25 @@
 	</dict>
 	<key>files2</key>
 	<dict>
+		<key>Metadata.appintents/extract.actionsdata</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			JCbRyOmm/7wPiveqBVZkG27FJWwcTMjiCe/GMpD9WaE=
+			</data>
+		</dict>
+		<key>Metadata.appintents/version.json</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			lzTVu0LJSVBacZy8p2uqlzb7lnjmOLQ/9SfCANPZ3qE=
+			</data>
+		</dict>
 		<key>TimoWidget.debug.dylib</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			ZiP63lhVBxTAijXmz84Bp/cknyqaxwHsE/k1139iJnY=
+			qt1AoLD64LKBP6Hf51867/IQXpDG3cn5Cli/OGzMIWA=
 			</data>
 		</dict>
 		<key>__preview.dylib</key>

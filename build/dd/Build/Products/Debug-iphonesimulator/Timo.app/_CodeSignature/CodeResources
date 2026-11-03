@@ -6,7 +6,15 @@
 	<dict>
 		<key>Info.plist</key>
 		<data>
-		7hi9Wz7av61+pmdDRrao9+AGV6w=
+		iI0OCjbSlMtYg8XKGD5bAot5Dtw=
+		</data>
+		<key>Metadata.appintents/extract.actionsdata</key>
+		<data>
+		pzaOAEDdLQmiWr1YM9uWltZJC54=
+		</data>
+		<key>Metadata.appintents/version.json</key>
+		<data>
+		r36D8Is3IZfsLF1i7tG9VtpTD88=
 		</data>
 		<key>PkgInfo</key>
 		<data>
@@ -16,17 +24,25 @@
 		<data>
 		BX3PIcfbir1W703SKeFHySoYOFI=
 		</data>
+		<key>PlugIns/TimoWidget.appex/Metadata.appintents/extract.actionsdata</key>
+		<data>
+		l/JWVASGoCXuSYy7aR40rGWLFkY=
+		</data>
+		<key>PlugIns/TimoWidget.appex/Metadata.appintents/version.json</key>
+		<data>
+		r36D8Is3IZfsLF1i7tG9VtpTD88=
+		</data>
 		<key>PlugIns/TimoWidget.appex/TimoWidget</key>
 		<data>
-		eB55R8o05xksA6j6mVVAAjwdgDY=
+		UPi3EbWJveFTYEULaQ7MC4qusAE=
 		</data>
 		<key>PlugIns/TimoWidget.appex/TimoWidget.debug.dylib</key>
 		<data>
-		C2mvDiUTu0RhZgmW5c4zGXkUaNA=
+		nJtLLJ8oiWBRyz/lRRwHVhzJDHQ=
 		</data>
 		<key>PlugIns/TimoWidget.appex/_CodeSignature/CodeResources</key>
 		<data>
-		LYmHGdzqkllIzCK5YRCKw2RGd6s=
+		8ig/AouhsHUS1YQgs7Zjnc/9qiM=
 		</data>
 		<key>PlugIns/TimoWidget.appex/__preview.dylib</key>
 		<data>
@@ -34,7 +50,7 @@
 		</data>
 		<key>Timo.debug.dylib</key>
 		<data>
-		rF3OP+gFcFi5huLNXO4nog34V94=
+		WJPZPJiokmC9jL2UogJ0koIlX5g=
 		</data>
 		<key>__preview.dylib</key>
 		<data>
@@ -43,6 +59,20 @@
 	</dict>
 	<key>files2</key>
 	<dict>
+		<key>Metadata.appintents/extract.actionsdata</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			VBD5UH5XwK844B/JkPlhjxGay0TC0fBsFxiRh3NXzJk=
+			</data>
+		</dict>
+		<key>Metadata.appintents/version.json</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			lzTVu0LJSVBacZy8p2uqlzb7lnjmOLQ/9SfCANPZ3qE=
+			</data>
+		</dict>
 		<key>PlugIns/TimoWidget.appex/Info.plist</key>
 		<dict>
 			<key>hash2</key>
@@ -50,25 +80,39 @@
 			IFRB/WcF6BLsHv9xEIlp0w371KyguECdQ+Cf0aCpgLQ=
 			</data>
 		</dict>
+		<key>PlugIns/TimoWidget.appex/Metadata.appintents/extract.actionsdata</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			JCbRyOmm/7wPiveqBVZkG27FJWwcTMjiCe/GMpD9WaE=
+			</data>
+		</dict>
+		<key>PlugIns/TimoWidget.appex/Metadata.appintents/version.json</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			lzTVu0LJSVBacZy8p2uqlzb7lnjmOLQ/9SfCANPZ3qE=
+			</data>
+		</dict>
 		<key>PlugIns/TimoWidget.appex/TimoWidget</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			8iUqRxBpNCgdGS8eHS42eYevVXXNdWneXT5zGZ9EjPw=
+			Tm1fUUXTd5GZ853lOkj1CJd9cuJyFjuv0MgQXxroJj8=
 			</data>
 		</dict>
 		<key>PlugIns/TimoWidget.appex/TimoWidget.debug.dylib</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			ZiP63lhVBxTAijXmz84Bp/cknyqaxwHsE/k1139iJnY=
+			qt1AoLD64LKBP6Hf51867/IQXpDG3cn5Cli/OGzMIWA=
 			</data>
 		</dict>
 		<key>PlugIns/TimoWidget.appex/_CodeSignature/CodeResources</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			0KZAcBPX/wDvVti2UyWvNOVFwT1N1IgoSNoUOYg4+2w=
+			nMFkg9RFwf8uS4WVjp5Nunon4yVh3/1vmG8THyafXHI=
 			</data>
 		</dict>
 		<key>PlugIns/TimoWidget.appex/__preview.dylib</key>
@@ -82,7 +126,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			gMmJN2WwBJSqsKeJW9uw4MpuoLpAgQApkuG//JvWPx8=
+			2eBsKjbeHiSMHKslKZj2qt/U+WRxaMoDg1QoC2Ot9n8=
 			</data>
 		</dict>
 		<key>__preview.dylib</key>

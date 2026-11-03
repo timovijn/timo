@@ -5,13 +5,15 @@ SwiftUI day planner for iOS 26 with a Liquid Glass look. The README describes ev
 ## Layout
 
 - `Sources/TimoCore/Planner.swift`: the Foundation-only model (`Day`, `PlanItem`, `RepeatingPlan`, `Persona`, `Planner`). It's compiled straight into the app target and is the only code under test.
-- `Tests/TimoCoreTests/`: XCTest suite (`PlannerTests`, `RepeatingTests`, `PersonaTests`, `TimelineLaneTests`, `CancelTests`, `SyncTests`, `DayProgressTests`, `VisitTests`).
+- `Tests/TimoCoreTests/`: XCTest suite (`PlannerTests`, `RepeatingTests`, `PersonaTests`, `TimelineLaneTests`, `CancelTests`, `SyncTests`, `DayProgressTests`, `VisitTests`, `DayGuideTests`, `SearchTests`, `DateSearchTests`).
 - `Timo/DayView.swift`: the main screen (day pager, dock, date control and calendar, list/time views, rows). It's large; search it with grep and read only the part you need.
 - `Timo/ItemEditor.swift`: the item editor (schedule/reminder pills, persona chips, location/people pills, (i) explanations).
 - `Timo/PersonaViews.swift`: persona orb, top-left persona menu, persona history page, long-press delete.
+- `Timo/SearchView.swift`: search: the button beside the persona button that grows into the field in a row under the top controls (`SearchLayer`), the pull that draws it down (`SearchPull`, `PullsToSearch`) and the page-hiding `SearchBackdrop`. Results are the day list's own rows; the persona scopes them and the day's filter buttons count and narrow them (`searchFilter` in `DayView`); matching lives in `Planner.search`, and dates in a query are read by `SearchQuery`.
 - `Timo/PlanStore.swift`: JSON persistence (document version 8, reads 1–8), reminders, sample day.
-- `Timo/PlanLocation.swift`: where the plan file lives (the App Group's shared container when available), compiled into the app and the widget.
+- `Timo/PlanLocation.swift`: where the plan file lives (the App Group's shared container when available; one file on the Mac shared by all simulators), compiled into the app and the widget.
 - `TimoWidget/TimoWidget.swift`: the lock screen widget extension (today's done count); it also compiles `Planner.swift`.
+- `Timo/GuideActivity.swift` (app and widget): Live Activity attributes, persona colours and the Complete intent; `TimoWidget/GuideLiveActivity.swift` draws it; `Timo/DayGuideActivities.swift` starts, schedules and ends the activities ("Guide my day").
 - `Timo/CloudSync.swift`: iCloud sync with `CKSyncEngine` (one JSON record per item and repeating plan); every `PlanStore.commit` queues its changes.
 - A new Swift file in `Timo/` must also be added to `Timo.xcodeproj/project.pbxproj` (PBXBuildFile, PBXFileReference, group child and Sources phase).
 
@@ -28,7 +30,7 @@ xcodebuild -project Timo.xcodeproj -scheme Timo -destination 'id=E9FCCB9D-0F3D-4
 
 ## Simulator data
 
-- The plan lives at `$(xcrun simctl get_app_container <sim> com.timovijn.timo group.com.timovijn.timo)/Timo/plan.json` (the App Group container). The container path changes when the app is reinstalled, so look it up each time.
+- All simulators (iPhone and iPad) share one plan at `~/Library/Application Support/Timo Simulators/plan.json` on the Mac, and running apps reload it when another one saves. Each simulator's own App Group copy (`$(xcrun simctl get_app_container <sim> com.timovijn.timo group.com.timovijn.timo)/Timo/plan.json`) is only read once, to seed that file when it's missing.
 - It holds the user's sample data. Back it up before seeding or saving test items, and restore it afterwards. Opening the app also rewrites old plans to the current format.
 
 ## Model rules worth knowing

@@ -2,7 +2,10 @@ import WidgetKit
 import SwiftUI
 
 @main struct TimoWidgets: WidgetBundle {
-    var body: some Widget { ProgressWidget() }
+    var body: some Widget {
+        ProgressWidget()
+        GuideLiveActivity()
+    }
 }
 
 /// Today's "x/y complete" on the lock screen: a ring, or a line above the clock.

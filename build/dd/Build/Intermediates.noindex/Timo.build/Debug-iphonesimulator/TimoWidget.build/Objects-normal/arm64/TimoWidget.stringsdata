@@ -7,7 +7,7 @@
         "key": "Today",
         "location": {
           "startingColumn": 35,
-          "startingLine": 14
+          "startingLine": 17
         }
       },
       {
@@ -15,7 +15,7 @@
         "key": "How many of today's items are done.",
         "location": {
           "startingColumn": 22,
-          "startingLine": 15
+          "startingLine": 18
         }
       },
       {
@@ -23,7 +23,7 @@
         "key": "Open timo",
         "location": {
           "startingColumn": 22,
-          "startingLine": 78
+          "startingLine": 81
         }
       },
       {
@@ -31,7 +31,7 @@
         "key": "Nothing planned today",
         "location": {
           "startingColumn": 66,
-          "startingLine": 82
+          "startingLine": 85
         }
       },
       {
@@ -39,7 +39,7 @@
         "key": "%lld of %lld done today",
         "location": {
           "startingColumn": 92,
-          "startingLine": 82
+          "startingLine": 85
         }
       },
       {
@@ -47,7 +47,7 @@
         "key": "Open timo to show your day",
         "location": {
           "startingColumn": 32,
-          "startingLine": 83
+          "startingLine": 86
         }
       },
       {
@@ -55,7 +55,7 @@
         "key": "Today",
         "location": {
           "startingColumn": 18,
-          "startingLine": 88
+          "startingLine": 91
         }
       },
       {
@@ -63,7 +63,7 @@
         "key": "%lld/%lld",
         "location": {
           "startingColumn": 22,
-          "startingLine": 93
+          "startingLine": 96
         }
       },
       {
@@ -71,7 +71,7 @@
         "key": "Nothing planned",
         "location": {
           "startingColumn": 40,
-          "startingLine": 102
+          "startingLine": 105
         }
       },
       {
@@ -79,7 +79,7 @@
         "key": "%lld of %lld done",
         "location": {
           "startingColumn": 60,
-          "startingLine": 102
+          "startingLine": 105
         }
       }
     ]

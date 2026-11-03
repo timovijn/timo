@@ -1,24 +1,7 @@
 import SwiftUI
 import UIKit
 
-extension Persona {
-    /// Each persona's own gradient, light to deep, so its orb can be told apart at a glance.
-    var colors: [Color] {
-        switch self {
-        case .health: return [.mint, .green]
-        case .work: return [.cyan, .blue]
-        case .family: return [.yellow, .orange]
-        case .friends: return [.pink, .red]
-        case .personal: return [.purple, .indigo]
-        }
-    }
-}
-
-extension Persona {
-    /// The persona's deeper colour, for text and tints.
-    var color: Color { colors[1] }
-
-}
+// Persona colours live in GuideActivity.swift, which the widget compiles too.
 
 /// A small glowing sphere in a persona's gradient. With no persona, it blends all of them.
 struct PersonaOrb: View {
@@ -183,6 +166,10 @@ struct PersonaPages: View {
     @Binding var persona: Persona?
     let now: Date
     let add: () -> Void
+    @Binding var months: Int
+    /// The top filter buttons' filter, and whether a row is in it on a day.
+    let filter: DayView.DayFilter
+    let matches: (PlanItem, Day) -> Bool
     /// The day list's own row, so a persona page shows each item exactly as the day view does.
     let row: (PlanItem, Day) -> AnyView
     /// The day pager's swipe gate, shared so a sideways swipe never opens the item it started on.
@@ -193,7 +180,8 @@ struct PersonaPages: View {
     var body: some View {
         ZStack {
             if let persona {
-                PersonaHistoryView(persona: persona, now: now, add: add, row: row)
+                PersonaHistoryView(persona: persona, now: now, add: add, months: $months, filter: filter,
+                                   matches: matches, row: row)
                     .id(persona)
                     .transition(.opacity)
                     // Like the day pager: swiping left goes forward.
@@ -214,26 +202,61 @@ struct PersonaHistoryView: View {
     let persona: Persona
     let now: Date
     let add: () -> Void
+    /// How far ahead repeating items are listed; the button at the top adds three months at a time.
+    @Binding var months: Int
+    /// The top filter buttons narrow the list as they narrow a day.
+    let filter: DayView.DayFilter
+    let matches: (PlanItem, Day) -> Bool
     let row: (PlanItem, Day) -> AnyView
     @EnvironmentObject private var store: PlanStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let days = Planner.history(of: persona, in: store.items, now: now)
-        let items = Self.unique(days.flatMap(\.items))
-        ScrollView {
+        let horizon = Self.horizon(months: months, from: now)
+        let all = Planner.history(of: persona, in: store.items, now: now, repeatsThrough: horizon)
+        let items = Self.unique(all.flatMap(\.items))
+        let days = filter == .all ? all : all.compactMap { entry in
+            let kept = entry.items.filter { matches($0, entry.day) }
+            return kept.isEmpty ? nil : PersonaDay(day: entry.day, items: kept)
+        }
+        let filtered = Self.unique(days.flatMap(\.items)).count
+        let more = store.repeats(items, after: horizon)
+        ScrollViewReader { proxy in ScrollView {
             VStack(alignment: .leading, spacing: 0) {
+                // The furthest days are at the top, so more of them come in above.
+                if more {
+                    MoreRepeatsButton {
+                        let top = days.first?.day
+                        months += 3
+                        store.generateRepeats(through: Self.horizon(months: months, from: now))
+                        // Stay where the list was; the new months are above.
+                        if let top {
+                            Task { @MainActor in
+                                // Once the new days are laid out: before, it scrolled to where they'd go.
+                                try? await Task.sleep(for: .milliseconds(60))
+                                proxy.scrollTo(top, anchor: .top)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity).padding(.top, 12)
+                }
                 // The persona itself is named by the glowing button above; like the day view,
-                // the page only adds how much of it is done.
+                // the page only adds how much of it is done, or how many rows a filter keeps.
                 HStack {
                     Spacer(minLength: 0)
-                    if !items.isEmpty {
+                    if filter == .review {
+                        Text("\(filtered) to review").font(.caption).foregroundStyle(.orange)
+                    } else if filter == .reminders {
+                        Text("\(filtered) with reminders").font(.caption).foregroundStyle(.blue)
+                    } else if filter == .deadlines {
+                        Text("\(filtered) with deadlines").font(.caption).foregroundStyle(.red)
+                    } else if !items.isEmpty {
                         Text("\(items.filter(\.isComplete).count)/\(items.filter { !$0.isCancelled }.count) complete")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 .padding(.horizontal, 20).padding(.vertical, 6)
-                if days.isEmpty {
+                if all.isEmpty {
                     ContentUnavailableView {
                         Label("Nothing in \(persona.title) yet", systemImage: "circle.dashed")
                     } description: {
@@ -244,11 +267,12 @@ struct PersonaHistoryView: View {
                     .frame(minHeight: 280)
                 }
                 ForEach(days) { entry in
-                    Text(heading(entry.day))
+                    Text(Self.heading(entry.day, now: now))
                         .font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 8)
                         .accessibilityAddTraits(.isHeader)
+                        .id(entry.day)
                     ForEach(entry.items) { item in
                         row(item, entry.day)
                             .padding(.horizontal, 16)
@@ -258,16 +282,37 @@ struct PersonaHistoryView: View {
                     .frame(maxWidth: .infinity).padding(.vertical, 28)
             }
             .readableWidth()
-            .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: items.map(\.id))
+            .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: days.flatMap(\.items).map(\.id))
         }
         .scrollEdgeEffectHidden(true, for: .vertical)
+        .modifier(PullsToSearch())
+        // Opens on today, with what's ahead above it: once the days generated for the list are in,
+        // as they come in above today and would push it out of view.
+        .task {
+            store.generateRepeats(through: horizon)
+            await Task.yield()
+            let days = Planner.history(of: persona, in: store.items, now: now, repeatsThrough: horizon)
+            if let target = Self.todayAnchor(days, now: now) { proxy.scrollTo(target, anchor: .top) }
+        }
+        }
+    }
+    /// The last day repeating items are listed on, `months` ahead.
+    static func horizon(months: Int, from now: Date) -> Day {
+        Day(Calendar.current.date(byAdding: .month, value: months, to: now) ?? now)
+    }
+    /// Where a newest-first list of days opens: today, or the nearest day before it, or failing
+    /// that the nearest one ahead.
+    static func todayAnchor(_ days: [PersonaDay], now: Date) -> Day? {
+        let today = Day(now)
+        return days.first { $0.day <= today }?.day ?? days.last?.day
     }
     /// A running range is listed on its own day and on today, but counted once.
     private static func unique(_ items: [PlanItem]) -> [PlanItem] {
         var seen = Set<UUID>()
         return items.filter { seen.insert($0.id).inserted }
     }
-    private func heading(_ day: Day) -> String {
+    /// Also titles the days of search results.
+    static func heading(_ day: Day, now: Date) -> String {
         let calendar = Calendar.current
         let date = day.date()
         if calendar.isDateInToday(date) { return "Today" }
@@ -276,6 +321,21 @@ struct PersonaHistoryView: View {
         let sameYear = calendar.isDate(date, equalTo: now, toGranularity: .year)
         return sameYear ? date.formatted(.dateTime.weekday(.wide).day().month(.wide))
             : date.formatted(.dateTime.weekday(.wide).day().month(.wide).year())
+    }
+}
+
+/// Above a list of days whose repeating items stop a few months ahead: shows three more months.
+struct MoreRepeatsButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label("Show 3 more months of repeating items", systemImage: "arrow.up")
+                .font(.subheadline)
+                .padding(.horizontal, 6)
+        }
+        .buttonStyle(.glass)
+        .accessibilityHint("Lists repeating items three months further ahead")
     }
 }
 
@@ -606,6 +666,9 @@ private struct ItemMenuOnHold<Preview: View>: ViewModifier {
             Text(item.history)
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                // 3 points under the row's last line, as a filter's coloured line sits, rather
+                // than below the row's 8-point padding.
+                .padding(.top, 3 - 8)
                 .padding(.leading, 52).padding(.trailing, ItemCard.trailingInset)
                 .padding(.bottom, 12)
                 .frame(maxWidth: .infinity, alignment: .leading)

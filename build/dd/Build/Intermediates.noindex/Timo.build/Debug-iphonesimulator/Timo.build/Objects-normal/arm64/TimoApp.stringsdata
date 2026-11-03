@@ -7,7 +7,7 @@
         "key": "Your plan",
         "location": {
           "startingColumn": 24,
-          "startingLine": 12
+          "startingLine": 13
         }
       },
       {
@@ -15,7 +15,7 @@
         "key": "OK",
         "location": {
           "startingColumn": 28,
-          "startingLine": 13
+          "startingLine": 14
         }
       },
       {
@@ -23,7 +23,7 @@
         "key": "Settings",
         "location": {
           "startingColumn": 29,
-          "startingLine": 68
+          "startingLine": 76
         }
       },
       {
@@ -31,7 +31,7 @@
         "key": "timo",
         "location": {
           "startingColumn": 22,
-          "startingLine": 57
+          "startingLine": 65
         }
       },
       {
@@ -39,7 +39,7 @@
         "key": "Settings",
         "location": {
           "startingColumn": 23,
-          "startingLine": 60
+          "startingLine": 68
         }
       },
       {
@@ -47,7 +47,7 @@
         "key": "Settings",
         "location": {
           "startingColumn": 30,
-          "startingLine": 111
+          "startingLine": 120
         }
       },
       {
@@ -55,7 +55,7 @@
         "key": "Appearance",
         "location": {
           "startingColumn": 26,
-          "startingLine": 106
+          "startingLine": 115
         }
       },
       {
@@ -63,7 +63,7 @@
         "key": "System follows your device’s Light and Dark appearance.",
         "location": {
           "startingColumn": 26,
-          "startingLine": 108
+          "startingLine": 117
         }
       },
       {
@@ -71,7 +71,7 @@
         "key": "Done",
         "location": {
           "startingColumn": 28,
-          "startingLine": 115
+          "startingLine": 124
         }
       },
       {
@@ -79,7 +79,7 @@
         "key": "Open Settings",
         "location": {
           "startingColumn": 24,
-          "startingLine": 145
+          "startingLine": 155
         }
       },
       {
@@ -87,7 +87,7 @@
         "key": "Sync with iCloud",
         "location": {
           "startingColumn": 26,
-          "startingLine": 135
+          "startingLine": 144
         }
       },
       {
@@ -95,7 +95,7 @@
         "key": "iCloud",
         "location": {
           "startingColumn": 18,
-          "startingLine": 148
+          "startingLine": 158
         }
       },
       {
@@ -103,7 +103,39 @@
         "key": "Your plan is kept in your private iCloud, so it’s backed up and the same on each of your devices. Turning this off keeps the plan on this %@.",
         "location": {
           "startingColumn": 18,
-          "startingLine": 150
+          "startingLine": 160
+        }
+      },
+      {
+        "comment": "",
+        "key": "Live Activities are turned off for timo.",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 206
+        }
+      },
+      {
+        "comment": "",
+        "key": "Open Settings",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 210
+        }
+      },
+      {
+        "comment": "",
+        "key": "Guide my day",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 199
+        }
+      },
+      {
+        "comment": "",
+        "key": "When a timed item starts, it appears on the Lock Screen and in the Dynamic Island with the time left and what’s next, so you can tick it off from there.",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 214
         }
       }
     ]

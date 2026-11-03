@@ -3,7 +3,6 @@ import SwiftUI
 struct ItemEditor: View {
     @EnvironmentObject private var store: PlanStore
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openURL) private var openURL
     @State var item: PlanItem
     /// The entry's displayed day distinguishes the original from later carried entries.
@@ -153,9 +152,7 @@ struct ItemEditor: View {
                         item.movesToNextDay = $0
                         carryChosen = true
                     }))
-                    // The native thumb stays white, so a white track in Dark appearance
-                    // hides the enabled state. Keep this switch neutral with a grey track.
-                    .tint(colorScheme == .dark ? Color(.systemGray) : .primary)
+                    .tint(.switchOn)
                 } header: {
                     InfoHeader("Carry over", isExpanded: infoBinding("carryOver"))
                 } footer: {
@@ -539,6 +536,7 @@ struct ItemEditor: View {
                             if selected { item.repeatWeekdays.append(weekday) }
                             else { item.repeatWeekdays.removeAll { $0 == weekday } }
                         }))
+                        .tint(.switchOn)
                 }
             }
             if item.repeatRule == .weekly {

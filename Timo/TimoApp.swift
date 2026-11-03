@@ -1,8 +1,9 @@
 import SwiftUI
 import UIKit
+import ActivityKit
 
 @main struct TimoApp: App {
-    @StateObject private var store = PlanStore()
+    @StateObject private var store = PlanStore.shared
     @AppStorage("appearance") private var appearance: AppAppearance = .system
     init() { DestructiveSubmenu.install() }
     var body: some Scene {
@@ -14,6 +15,13 @@ import UIKit
                 } message: { Text(store.errorMessage ?? "") }
         }
     }
+}
+
+extension Color {
+    /// Every switch's track when on. The native thumb stays white, so the app's label-coloured
+    /// tint gave a white track in Dark appearance that hid the thumb and the on state; there
+    /// it is grey instead.
+    static let switchOn = Color(UIColor { $0.userInterfaceStyle == .dark ? .systemGray : .label })
 }
 
 /// Stored as a stable value so the choice survives app launches.
@@ -79,6 +87,7 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 if CloudSync.isAvailable { ICloudSection(cloud: store.cloud) }
+                GuideSection()
                 Section {
                     ForEach(AppAppearance.allCases) { option in
                         Button {
@@ -136,6 +145,7 @@ private struct ICloudSection: View {
                 }
                 .frame(minHeight: 32)
             }
+            .tint(.switchOn)
             if let detail {
                 Text(detail)
                     .font(.footnote)
@@ -168,6 +178,40 @@ private struct ICloudSection: View {
         case .syncing: "Syncing…"
         case .upToDate: cloud.lastSynced.map { "Up to date · synced \($0.formatted(.relative(presentation: .named)))" } ?? "Up to date"
         case .failed(let message): message
+        }
+    }
+}
+
+/// "Guide my day": Live Activities for the timed items of today.
+private struct GuideSection: View {
+    @AppStorage(DayGuideActivities.settingKey) private var isOn = false
+    @EnvironmentObject private var store: PlanStore
+    @Environment(\.openURL) private var openURL
+    private let activitiesEnabled = ActivityAuthorizationInfo().areActivitiesEnabled
+
+    var body: some View {
+        Section {
+            Toggle(isOn: $isOn) {
+                HStack(spacing: 12) {
+                    Image(systemName: "timer")
+                        .frame(width: 22)
+                        .foregroundStyle(.secondary)
+                    Text("Guide my day")
+                }
+                .frame(minHeight: 32)
+            }
+            .tint(.switchOn)
+            .onChange(of: isOn) { _, _ in store.refreshReminders() }
+            if isOn && !activitiesEnabled {
+                Text("Live Activities are turned off for timo.")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    Button("Open Settings") { openURL(url) }
+                }
+            }
+        } footer: {
+            Text("When a timed item starts, it appears on the Lock Screen and in the Dynamic Island with the time left and what’s next, so you can tick it off from there.")
         }
     }
 }

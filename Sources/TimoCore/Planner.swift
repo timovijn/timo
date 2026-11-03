@@ -742,10 +742,14 @@ public enum Planner {
     /// day lists what that day's list shows of the persona, in the same order: an item on its own
     /// (live) day, a "Carried to" entry on every day it was carried on from, and today for anything
     /// today's list shows, such as a range that is still running. Every generated linked item of a
-    /// repeating item is listed, including those ahead of today.
-    public static func history(of persona: Persona, in items: [PlanItem], now: Date, calendar: Calendar = .current) -> [PersonaDay] {
+    /// repeating item is listed, including those ahead of today up to `repeatsThrough`.
+    public static func history(of persona: Persona, in items: [PlanItem], now: Date, repeatsThrough: Day? = nil,
+                               calendar: Calendar = .current) -> [PersonaDay] {
         let today = Day(now, calendar: calendar)
-        let matching = items.filter { $0.personas.contains(persona) }
+        let matching = items.filter {
+            guard $0.personas.contains(persona) else { return false }
+            return within(repeatsThrough, $0, now: now, calendar: calendar)
+        }
         var days = Set<Day>()
         for item in matching {
             let live = item.liveDay(now: now, calendar: calendar)
@@ -771,6 +775,69 @@ public enum Planner {
                 if $0.minute != $1.minute { return ($0.minute ?? -1) < ($1.minute ?? -1) }
                 return $0.createdAt < $1.createdAt
             })
+        }
+    }
+    /// Items matching `query`, grouped by the day each is shown as itself, newest day first (like
+    /// a persona's history, but each item once). Every plain word has to appear in the title, notes,
+    /// a location or a person, ignoring case and accents, and every date the query names (see
+    /// `SearchQuery`) has to fall on a day the item is listed on (its own, or one it was carried on
+    /// from, as a "Carried to" entry), or its words appear in that text. Such an item is listed
+    /// under the day the date matched, preferring its own. A repeating item lists its days up to
+    /// `repeatsThrough`, unless the query names a date, when every generated day of it in that date
+    /// is listed. With a persona, only items in it are found.
+    public static func search(_ query: String, in items: [PlanItem], now: Date, persona: Persona? = nil,
+                              repeatsThrough: Day? = nil, calendar: Calendar = .current, locale: Locale = .current) -> [PersonaDay] {
+        let parsed = SearchQuery(query, now: now, calendar: calendar, locale: locale)
+        guard !parsed.isEmpty else { return [] }
+        /// The days an item is listed on, its own first: then every day it was carried on from.
+        func listedDays(_ item: PlanItem) -> [Day] {
+            let live = item.liveDay(now: now, calendar: calendar)
+            var days = [live], day = item.day
+            while day < live, let next = calendar.date(byAdding: .day, value: 1, to: day.date(calendar: calendar)) {
+                days.append(day)
+                day = Day(next, calendar: calendar)
+            }
+            return days
+        }
+        /// Where each found item is listed: the first of its days every date matches.
+        var listing: [UUID: Day] = [:]
+        let found = items.filter { item in
+            if let persona, !item.personas.contains(persona) { return false }
+            let fields = [item.title, item.notes] + item.locations + item.people
+            let mentions = { (word: String) in
+                fields.contains { $0.range(of: word, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+            }
+            guard parsed.words.allSatisfy(mentions) else { return false }
+            let days = listedDays(item)
+            // The dates not met by the item's text have to share one of its days.
+            let byDay = parsed.dates.filter { !$0.words.allSatisfy(mentions) }
+            guard !byDay.isEmpty else { listing[item.id] = days[0]; return true }
+            guard let day = days.first(where: { day in byDay.allSatisfy { $0.contains(day, calendar: calendar) } }) else { return false }
+            listing[item.id] = day
+            return true
+        }
+        let listed = parsed.dates.isEmpty ? found.filter { within(repeatsThrough, $0, now: now, calendar: calendar) } : found
+        return Dictionary(grouping: listed) { listing[$0.id] ?? $0.liveDay(now: now, calendar: calendar) }
+            .sorted { $0.key > $1.key }
+            .map { day, items in
+                PersonaDay(day: day, items: items.sorted {
+                    if $0.minute != $1.minute { return ($0.minute ?? -1) < ($1.minute ?? -1) }
+                    return $0.createdAt < $1.createdAt
+                })
+            }
+    }
+    /// Whether a list that shows repeating items up to `last` shows `item`: anything that doesn't
+    /// repeat, and a repeating item's days up to then.
+    static func within(_ last: Day?, _ item: PlanItem, now: Date, calendar: Calendar) -> Bool {
+        guard let last, item.seriesID != nil else { return true }
+        return item.liveDay(now: now, calendar: calendar) <= last
+    }
+    /// Whether any of `seriesIDs` goes on past `day`, so a list cut off there can offer more.
+    public static func repeats(_ seriesIDs: Set<UUID>, in series: [RepeatingPlan], after day: Day, calendar: Calendar = .current) -> Bool {
+        series.contains { plan in
+            guard seriesIDs.contains(plan.id) else { return false }
+            guard let end = plan.endBefore else { return true }
+            return calendar.dateComponents([.day], from: day.date(calendar: calendar), to: end.date(calendar: calendar)).day ?? 0 > 1
         }
     }
     /// The nearest future reminders of unfinished, uncancelled items, one entry per reminder.
@@ -860,3 +927,233 @@ public struct DayProgress: Equatable {
         total = shown.filter { !$0.isCancelled }.count
     }
 }
+
+/// A time range the day guide follows on the lock screen, from its start to its end, with the
+/// timed item that comes after it.
+public struct GuideStop: Equatable {
+    public let item: PlanItem
+    public let start: Date
+    public let end: Date
+    /// The next timed item to start after this one today, shown as "Next" beneath it.
+    public let next: PlanItem?
+    public let nextStart: Date?
+}
+
+public enum DayGuide {
+    /// Today's unfinished time ranges in order of their start: those running or still to come, and
+    /// those whose time ended today without being ticked off, so they can still be completed.
+    /// Anytime items, single moments and carried items aren't followed; their reminders cover them.
+    /// Neither are ranges that began before yesterday, like a trip of several days: they're the
+    /// backdrop of the day rather than something under way in it.
+    public static func stops(in items: [PlanItem], now: Date, calendar: Calendar = .current) -> [GuideStop] {
+        let today = calendar.startOfDay(for: now)
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
+        let midnight = calendar.date(byAdding: .day, value: 1, to: today)!
+        let open = items.filter { !$0.isSettled && !$0.isCarried(now: now, calendar: calendar) }
+        let timed = open.compactMap { item in item.start(calendar: calendar).map { (item: item, start: $0) } }
+            .filter { $0.start < midnight && $0.start >= yesterday }
+            .sorted {
+                if $0.start != $1.start { return $0.start < $1.start }
+                return $0.item.createdAt < $1.item.createdAt
+            }
+        return timed.compactMap { entry in
+            guard let end = entry.item.end, end > entry.start, end > today else { return nil }
+            let next = timed.first { $0.start > entry.start && $0.item.id != entry.item.id }
+            return GuideStop(item: entry.item, start: entry.start, end: end, next: next?.item, nextStart: next?.start)
+        }
+    }
+}
+
+/// A search split into plain words and the dates it names. Dates are read in English and in the
+/// locale's language: month names ("november", "nov"), a month with a day or year in either order
+/// ("november 14", "14th of nov", "nov 14, 2027", "2027 november"), numeric dates in the locale's
+/// order ("14/11", "2027-11-14"; an impossible month is read the other way round), a year
+/// ("2027"), an ordinal day ("14th"), and relative words ("today", "tomorrow", "yesterday",
+/// "friday", "next week", "last month", "this year", "next friday").
+public struct SearchQuery: Equatable {
+    public struct DateTerm: Equatable {
+        public enum Kind: Equatable {
+            /// Every day with the fields given; a field left out matches any.
+            case pattern(year: Int?, month: Int?, day: Int?)
+            /// The days from one to another, both included.
+            case span(Day, Day)
+        }
+        public var kind: Kind
+        /// The words that named it, so an item whose text says them is found too: "may" is also
+        /// a word, and "friday drinks" a title.
+        public var words: [String]
+        public func contains(_ day: Day, calendar: Calendar = .current) -> Bool {
+            switch kind {
+            case let .pattern(year, month, dayOfMonth):
+                return (year.map { $0 == day.year } ?? true) && (month.map { $0 == day.month } ?? true)
+                    && (dayOfMonth.map { $0 == day.day } ?? true)
+            case let .span(start, end):
+                return start <= day && day <= end
+            }
+        }
+    }
+    public var words: [String] = []
+    public var dates: [DateTerm] = []
+    public var isEmpty: Bool { words.isEmpty && dates.isEmpty }
+
+    public init(_ text: String, now: Date, calendar: Calendar = .current, locale: Locale = .current) {
+        let names = Names(calendar: calendar, locale: locale)
+        let today = Day(now, calendar: calendar)
+        let tokens = text.split(whereSeparator: \.isWhitespace).map(String.init)
+        let keys = tokens.map(Self.key)
+        // Words not (yet) part of a date, with their place, so a month can take the day or year before it.
+        var plain: [(index: Int, word: String)] = []
+        func shifted(_ day: Day, by value: Int, _ unit: Calendar.Component) -> Day {
+            Day(calendar.date(byAdding: unit, value: value, to: day.date(calendar: calendar)) ?? day.date(calendar: calendar), calendar: calendar)
+        }
+        func span(of unit: Calendar.Component, around day: Day) -> DateTerm.Kind {
+            guard let interval = calendar.dateInterval(of: unit, for: day.date(calendar: calendar)) else { return .span(day, day) }
+            return .span(Day(interval.start, calendar: calendar), Day(interval.end.addingTimeInterval(-1), calendar: calendar))
+        }
+        /// The coming day with that weekday, today included unless `excludingToday`; or the last one before today.
+        func weekday(_ value: Int, past: Bool = false, excludingToday: Bool = false) -> Day {
+            var day = past ? shifted(today, by: -1, .day) : (excludingToday ? shifted(today, by: 1, .day) : today)
+            while calendar.component(.weekday, from: day.date(calendar: calendar)) != value {
+                day = shifted(day, by: past ? -1 : 1, .day)
+            }
+            return day
+        }
+        var i = 0
+        while i < tokens.count {
+            let key = keys[i]
+            let next = i + 1 < keys.count ? keys[i + 1] : nil
+            if let offset = ["yesterday": -1, "today": 0, "tomorrow": 1][key] {
+                let day = shifted(today, by: offset, .day)
+                dates.append(DateTerm(kind: .span(day, day), words: [tokens[i]]))
+                i += 1
+            } else if let step = ["last": -1, "this": 0, "next": 1][key], let next,
+                      let unit = ["week": Calendar.Component.weekOfYear, "month": .month, "year": .year][next] {
+                dates.append(DateTerm(kind: span(of: unit, around: shifted(today, by: step, unit)), words: [tokens[i], tokens[i + 1]]))
+                i += 2
+            } else if let step = ["last": -1, "this": 0, "next": 1][key], let next, let value = names.weekdays[next] {
+                let day = weekday(value, past: step < 0, excludingToday: step > 0)
+                dates.append(DateTerm(kind: .span(day, day), words: [tokens[i], tokens[i + 1]]))
+                i += 2
+            } else if let value = names.weekdays[key] {
+                let day = weekday(value)
+                dates.append(DateTerm(kind: .span(day, day), words: [tokens[i]]))
+                i += 1
+            } else if let month = names.months[key] {
+                var used = [tokens[i]], dayOfMonth: Int?, year: Int?
+                // Before it: "14 november", "14th of november", "2027 november".
+                if let last = plain.last, last.index == i - 1, Self.year(keys[last.index]) != nil {
+                    year = Self.year(keys[last.index]); used.insert(last.word, at: 0); plain.removeLast()
+                } else if let last = plain.last, last.index == i - 1, keys[last.index] == "of",
+                          plain.count >= 2, plain[plain.count - 2].index == i - 2, let value = Self.dayOfMonth(keys[i - 2]) {
+                    dayOfMonth = value; used.insert(contentsOf: [plain[plain.count - 2].word, last.word], at: 0); plain.removeLast(2)
+                } else if let last = plain.last, last.index == i - 1, let value = Self.dayOfMonth(keys[last.index]) {
+                    dayOfMonth = value; used.insert(last.word, at: 0); plain.removeLast()
+                }
+                i += 1
+                // After it: "november 14", "november 14, 2027", "november 2027".
+                if dayOfMonth == nil, i < keys.count, Self.year(keys[i]) == nil, let value = Self.dayOfMonth(keys[i]) {
+                    dayOfMonth = value; used.append(tokens[i]); i += 1
+                }
+                if year == nil, i < keys.count, let value = Self.year(keys[i]) {
+                    year = value; used.append(tokens[i]); i += 1
+                }
+                dates.append(DateTerm(kind: .pattern(year: year, month: month, day: dayOfMonth), words: used))
+            } else if let kind = Self.numericDate(key, dayFirst: names.dayFirst) {
+                dates.append(DateTerm(kind: kind, words: [tokens[i]]))
+                i += 1
+            } else {
+                plain.append((i, tokens[i]))
+                i += 1
+            }
+        }
+        // What no month took: a year on its own, or an ordinal day such as "14th".
+        for (index, word) in plain {
+            if let year = Self.year(keys[index]) {
+                dates.append(DateTerm(kind: .pattern(year: year, month: nil, day: nil), words: [word]))
+            } else if keys[index].last?.isLetter == true, let value = Self.dayOfMonth(keys[index]) {
+                dates.append(DateTerm(kind: .pattern(year: nil, month: nil, day: value), words: [word]))
+            } else {
+                words.append(word)
+            }
+        }
+    }
+
+    /// Lowercased, without accents and the punctuation around a word, so "Nov," and "nov" agree.
+    static func key(_ token: String) -> String {
+        token.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+            .trimmingCharacters(in: CharacterSet(charactersIn: ",.;:!?()'\""))
+    }
+    static func year(_ key: String) -> Int? {
+        guard key.count == 4, let value = Int(key), (1900...2200).contains(value) else { return nil }
+        return value
+    }
+    /// "14", "14th", "1st", "22nd", "3rd": a day of the month.
+    static func dayOfMonth(_ key: String) -> Int? {
+        var digits = key
+        for suffix in ["st", "nd", "rd", "th", "e"] where digits.hasSuffix(suffix) && digits.count > suffix.count {
+            digits.removeLast(suffix.count)
+            break
+        }
+        guard digits.count <= 2, let value = Int(digits), (1...31).contains(value) else { return nil }
+        return value
+    }
+    /// "14/11", "14-11-2027", "14.11.27", "2027-11-14", "2027-11".
+    static func numericDate(_ key: String, dayFirst: Bool) -> DateTerm.Kind? {
+        let parts = key.split(whereSeparator: { "/-.".contains($0) }).map(String.init)
+        guard (2...3).contains(parts.count), parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy(\.isNumber) }),
+              key.allSatisfy({ $0.isNumber || "/-.".contains($0) }) else { return nil }
+        let numbers = parts.compactMap { Int($0) }
+        if parts[0].count == 4 {
+            // Year first, as in ISO dates.
+            guard (1...12).contains(numbers[1]) else { return nil }
+            let dayOfMonth = numbers.count == 3 ? numbers[2] : nil
+            if let dayOfMonth, !(1...31).contains(dayOfMonth) { return nil }
+            return .pattern(year: numbers[0], month: numbers[1], day: dayOfMonth)
+        }
+        guard parts[0].count <= 2, parts[1].count <= 2 else { return nil }
+        var (dayOfMonth, month) = dayFirst ? (numbers[0], numbers[1]) : (numbers[1], numbers[0])
+        // An impossible month is the other way round: 11/14 is the 14th of November anywhere.
+        if !(1...12).contains(month), (1...12).contains(dayOfMonth) { swap(&dayOfMonth, &month) }
+        guard (1...12).contains(month), (1...31).contains(dayOfMonth) else { return nil }
+        var year: Int?
+        if numbers.count == 3 {
+            guard parts[2].count == 2 || parts[2].count == 4 else { return nil }
+            year = parts[2].count == 2 ? 2000 + numbers[2] : numbers[2]
+        }
+        return .pattern(year: year, month: month, day: dayOfMonth)
+    }
+
+    /// Month and weekday names in English and the locale's language, by key, and the locale's
+    /// order for numeric dates.
+    struct Names {
+        var months: [String: Int] = [:]
+        var weekdays: [String: Int] = [:]
+        var dayFirst = true
+        /// Short forms that are also everyday words; full names still count.
+        private static let ambiguous: Set<String> = ["sun", "sat", "wed", "mar"]
+
+        init(calendar: Calendar, locale: Locale) {
+            for identifier in [locale.identifier, "en_US_POSIX"] {
+                var named = calendar
+                named.locale = Locale(identifier: identifier)
+                for list in [named.monthSymbols, named.standaloneMonthSymbols] { add(list, to: &months) }
+                for list in [named.shortMonthSymbols, named.shortStandaloneMonthSymbols] { add(list, short: true, to: &months) }
+                for list in [named.weekdaySymbols, named.standaloneWeekdaySymbols] { add(list, to: &weekdays) }
+                for list in [named.shortWeekdaySymbols, named.shortStandaloneWeekdaySymbols] { add(list, short: true, to: &weekdays) }
+            }
+            months["sept"] = 9
+            for (name, value) in ["tues": 3, "thur": 5, "thurs": 5] { weekdays[name] = value }
+            let format = DateFormatter.dateFormat(fromTemplate: "dM", options: 0, locale: locale) ?? "d/M"
+            if let d = format.firstIndex(of: "d"), let m = format.firstIndex(of: "M") { dayFirst = d < m }
+        }
+        /// Names in order, so a name's place is its number: January is 1, and Sunday is 1 as in `Calendar`.
+        private func add(_ list: [String], short: Bool = false, to names: inout [String: Int]) {
+            for (index, name) in list.enumerated() {
+                let key = SearchQuery.key(name)
+                guard key.count >= 3, !(short && Self.ambiguous.contains(key)) else { continue }
+                names[key] = index + 1
+            }
+        }
+    }
+}
+

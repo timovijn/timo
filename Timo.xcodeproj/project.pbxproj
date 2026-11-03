@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0376400FDE1030E0FE917C4D /* Timo/TimoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC6864D4F6482CA3DEF937AD /* Timo/TimoApp.swift */; };
 		5E7A0C3D9F1B4A2E8C6D0F11 /* Timo/PersonaViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E7A0C3D9F1B4A2E8C6D0F12 /* Timo/PersonaViews.swift */; };
+		7A1C5E9B3D2F4A6C8E0B1D21 /* Timo/SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1C5E9B3D2F4A6C8E0B1D22 /* Timo/SearchView.swift */; };
 		7A1D3E5F9B2C4D6E8F0A1B31 /* Timo/CloudSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1D3E5F9B2C4D6E8F0A1B32 /* Timo/CloudSync.swift */; };
 		7A1D3E5F9B2C4D6E8F0A1B21 /* Timo/DestructiveSubmenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1D3E5F9B2C4D6E8F0A1B22 /* Timo/DestructiveSubmenu.swift */; };
 		124C42E500BB571FA1B41FA8 /* Timo/ItemEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D817EF2461BD1202B03023E /* Timo/ItemEditor.swift */; };
@@ -20,6 +21,10 @@
 		B1D0A0010000000000000003 /* Timo/PlanLocation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1D0A0010000000000000011 /* Timo/PlanLocation.swift */; };
 		B1D0A0010000000000000004 /* TimoWidget/TimoWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1D0A0010000000000000012 /* TimoWidget/TimoWidget.swift */; };
 		B1D0A0010000000000000005 /* TimoWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B1D0A0010000000000000013 /* TimoWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		B1D0A0010000000000000006 /* Timo/GuideActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1D0A0010000000000000014 /* Timo/GuideActivity.swift */; };
+		B1D0A0010000000000000007 /* Timo/GuideActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1D0A0010000000000000014 /* Timo/GuideActivity.swift */; };
+		B1D0A0010000000000000008 /* TimoWidget/GuideLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1D0A0010000000000000015 /* TimoWidget/GuideLiveActivity.swift */; };
+		B1D0A0010000000000000009 /* Timo/DayGuideActivities.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1D0A0010000000000000016 /* Timo/DayGuideActivities.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -48,6 +53,7 @@
 
 /* Begin PBXFileReference section */
 		5E7A0C3D9F1B4A2E8C6D0F12 /* Timo/PersonaViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/PersonaViews.swift; sourceTree = "<group>"; };
+		7A1C5E9B3D2F4A6C8E0B1D22 /* Timo/SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/SearchView.swift; sourceTree = "<group>"; };
 		7A1D3E5F9B2C4D6E8F0A1B32 /* Timo/CloudSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/CloudSync.swift; sourceTree = "<group>"; };
 		7A1D3E5F9B2C4D6E8F0A1B22 /* Timo/DestructiveSubmenu.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/DestructiveSubmenu.swift; sourceTree = "<group>"; };
 		2D817EF2461BD1202B03023E /* Timo/ItemEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/ItemEditor.swift; sourceTree = "<group>"; };
@@ -59,6 +65,9 @@
 		B1D0A0010000000000000011 /* Timo/PlanLocation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/PlanLocation.swift; sourceTree = "<group>"; };
 		B1D0A0010000000000000012 /* TimoWidget/TimoWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimoWidget/TimoWidget.swift; sourceTree = "<group>"; };
 		B1D0A0010000000000000013 /* TimoWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TimoWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		B1D0A0010000000000000014 /* Timo/GuideActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/GuideActivity.swift; sourceTree = "<group>"; };
+		B1D0A0010000000000000015 /* TimoWidget/GuideLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimoWidget/GuideLiveActivity.swift; sourceTree = "<group>"; };
+		B1D0A0010000000000000016 /* Timo/DayGuideActivities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/DayGuideActivities.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -84,6 +93,7 @@
 			children = (
 				83DD306496F70F3A81ED3AB1 /* Sources/TimoCore/Planner.swift */,
 				5E7A0C3D9F1B4A2E8C6D0F12 /* Timo/PersonaViews.swift */,
+				7A1C5E9B3D2F4A6C8E0B1D22 /* Timo/SearchView.swift */,
 				7A1D3E5F9B2C4D6E8F0A1B22 /* Timo/DestructiveSubmenu.swift */,
 				7A1D3E5F9B2C4D6E8F0A1B32 /* Timo/CloudSync.swift */,
 				4CEA8AA3E9EF380055DA8E77 /* Timo/PlanStore.swift */,
@@ -92,6 +102,9 @@
 				2D817EF2461BD1202B03023E /* Timo/ItemEditor.swift */,
 				B1D0A0010000000000000011 /* Timo/PlanLocation.swift */,
 				B1D0A0010000000000000012 /* TimoWidget/TimoWidget.swift */,
+				B1D0A0010000000000000014 /* Timo/GuideActivity.swift */,
+				B1D0A0010000000000000016 /* Timo/DayGuideActivities.swift */,
+				B1D0A0010000000000000015 /* TimoWidget/GuideLiveActivity.swift */,
 				FBDC4F23F93125BBEEAE800C /* Products */,
 			);
 			sourceTree = "<group>";
@@ -208,9 +221,12 @@
 				23A958BBB730D3775CE701BE /* Timo/DayView.swift in Sources */,
 				124C42E500BB571FA1B41FA8 /* Timo/ItemEditor.swift in Sources */,
 				5E7A0C3D9F1B4A2E8C6D0F11 /* Timo/PersonaViews.swift in Sources */,
+				7A1C5E9B3D2F4A6C8E0B1D21 /* Timo/SearchView.swift in Sources */,
 				7A1D3E5F9B2C4D6E8F0A1B21 /* Timo/DestructiveSubmenu.swift in Sources */,
 				7A1D3E5F9B2C4D6E8F0A1B31 /* Timo/CloudSync.swift in Sources */,
 				B1D0A0010000000000000002 /* Timo/PlanLocation.swift in Sources */,
+				B1D0A0010000000000000006 /* Timo/GuideActivity.swift in Sources */,
+				B1D0A0010000000000000009 /* Timo/DayGuideActivities.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -221,6 +237,8 @@
 				B1D0A0010000000000000001 /* Sources/TimoCore/Planner.swift in Sources */,
 				B1D0A0010000000000000003 /* Timo/PlanLocation.swift in Sources */,
 				B1D0A0010000000000000004 /* TimoWidget/TimoWidget.swift in Sources */,
+				B1D0A0010000000000000007 /* Timo/GuideActivity.swift in Sources */,
+				B1D0A0010000000000000008 /* TimoWidget/GuideLiveActivity.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -246,6 +264,7 @@
 				INFOPLIST_FILE = Timo/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = timo;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -273,6 +292,7 @@
 				INFOPLIST_FILE = Timo/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = timo;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -393,6 +413,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) TIMO_WIDGET";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TIMO_ICLOUD = NO;
@@ -420,6 +441,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) TIMO_WIDGET";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TIMO_ICLOUD = NO;
