@@ -4,6 +4,19 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>CKSharingSupported</key>
+	<true/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.timovijn.timo</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>timo</string>
+			</array>
+		</dict>
+	</array>
 	<key>TimoICloud</key>
 	<string>$(TIMO_ICLOUD)</string>
 	<key>UIBackgroundModes</key>

@@ -100,42 +100,10 @@
       },
       {
         "comment": "",
-        "key": "Uncancel",
-        "location": {
-          "startingColumn": 23,
-          "startingLine": 688
-        }
-      },
-      {
-        "comment": "",
-        "key": "Cancel",
-        "location": {
-          "startingColumn": 23,
-          "startingLine": 690
-        }
-      },
-      {
-        "comment": "",
-        "key": "Delete",
-        "location": {
-          "startingColumn": 30,
-          "startingLine": 698
-        }
-      },
-      {
-        "comment": "",
-        "key": "Delete",
-        "location": {
-          "startingColumn": 30,
-          "startingLine": 710
-        }
-      },
-      {
-        "comment": "",
         "key": "Original item only",
         "location": {
           "startingColumn": 20,
-          "startingLine": 761
+          "startingLine": 650
         }
       },
       {
@@ -143,7 +111,7 @@
         "key": "This linked item only",
         "location": {
           "startingColumn": 20,
-          "startingLine": 763
+          "startingLine": 652
         }
       },
       {
@@ -151,7 +119,7 @@
         "key": "This and following linked items",
         "location": {
           "startingColumn": 20,
-          "startingLine": 764
+          "startingLine": 653
         }
       },
       {
@@ -159,7 +127,7 @@
         "key": "Original and all linked items",
         "location": {
           "startingColumn": 16,
-          "startingLine": 766
+          "startingLine": 655
         }
       },
       {
@@ -167,7 +135,7 @@
         "key": "Deleted “%@”",
         "location": {
           "startingColumn": 22,
-          "startingLine": 781
+          "startingLine": 670
         }
       },
       {
@@ -175,7 +143,7 @@
         "key": "Undo",
         "location": {
           "startingColumn": 24,
-          "startingLine": 784
+          "startingLine": 673
         }
       },
       {
@@ -183,7 +151,7 @@
         "key": "Puts back what was deleted",
         "location": {
           "startingColumn": 36,
-          "startingLine": 788
+          "startingLine": 677
         }
       }
     ]

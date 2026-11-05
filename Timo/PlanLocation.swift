@@ -1,6 +1,6 @@
 import Foundation
 
-/// Where the plan is saved. With the App Group (the simulator for now, like iCloud) it lives in
+/// Where the plan is saved. With the App Group (`TIMO_ICLOUD`, like iCloud) it lives in
 /// the group's shared container so the lock screen widget can read it; without one, the widget
 /// has nothing to read and the plan stays in the app's own Application Support.
 ///

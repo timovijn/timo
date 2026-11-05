@@ -339,8 +339,7 @@ struct MoreRepeatsButton: View {
     }
 }
 
-/// Commit completion only after the circle has filled and the title's strikethrough has
-/// finished. Tapping again at any point, during that sequence or after, unticks the item.
+/// Completion and reopening update immediately, with one shared circle/title/layout animation.
 struct CompletionButton<Icon: View>: View {
     let item: PlanItem
     let day: Day
@@ -349,95 +348,46 @@ struct CompletionButton<Icon: View>: View {
     @ViewBuilder let icon: () -> Icon
     @EnvironmentObject private var store: PlanStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// Identifies the running tick-off, so callbacks of one that was undone do nothing.
-    @State private var completion: UUID?
 
-    private var completing: Bool { completion != nil }
-    private var showsCheck: Bool { completing || (item.isComplete && !keepsCarriedArrow) }
+    private var showsCheck: Bool { item.isComplete && !keepsCarriedArrow }
+    private var showsCross: Bool { item.isCancelled && !keepsCarriedArrow }
 
     var body: some View {
-        Button(action: toggle) {
+        Button {
+            guard isEnabled(), let current = store.item(item.id) else { return }
+            if !current.isSettled { UIImpactFeedbackGenerator(style: .light).impactOccurred(intensity: 0.65) }
+            if !reduceMotion { FrameRateBoost.shared.request(for: .milliseconds(500)) }
+            withAnimation(ItemStatusMotion.animation(reduceMotion: reduceMotion)) {
+                store.toggle(current, on: day)
+            }
+        } label: {
             ZStack {
                 icon().opacity(showsCheck ? 0 : 1)
+                // Keep the cross outside the changing progress/outline icon, so restoring
+                // a timed item cannot remove it before its erase animation finishes.
+                CrossMark(progress: showsCross ? 1 : 0)
+                    .stroke(style: StrokeStyle(lineWidth: CompletionCircle.lineWidth, lineCap: .round))
+                    .foregroundStyle(.tertiary)
+                    .padding(CompletionCircle.diameter * 0.32)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: showsCross)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
                 CheckedCompletionCircle(filled: showsCheck)
                     .allowsHitTesting(false)
             }
+            .animation(ItemStatusMotion.animation(reduceMotion: reduceMotion), value: showsCheck)
             .frame(width: CompletionCircle.diameter, height: CompletionCircle.diameter)
             .frame(width: 44, height: 44)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(item.completionActionLabel)
-        // The store publishes the completed item a moment after the presentation flags change.
-        // Clearing them before the row has it showed the title unstruck for a frame, so the
-        // strike ran back and forth at the end.
-        .onChange(of: item.isSettled) { _, settled in
-            if settled, let completion { finishCompleting(completion) }
-        }
-        .onDisappear {
-            // An intentional tap still completes if navigation takes its row off screen.
-            guard let completion else { return }
-            if let latest = store.item(item.id), !latest.isSettled { store.toggle(latest, on: day) }
-            finishCompleting(completion)
-        }
     }
+}
 
-    private func toggle() {
-        guard isEnabled(), let current = store.item(item.id) else { return }
-        let animation: Animation? = reduceMotion ? nil : .smooth(duration: 0.25)
-        if current.isSettled {
-            withAnimation(animation) {
-                clearPresentation()
-                store.toggle(current, on: day)
-            }
-            return
-        }
-        // A second tap before the tick-off was committed takes it back.
-        guard !completing else {
-            withAnimation(animation) { clearPresentation() }
-            return
-        }
-        UIImpactFeedbackGenerator(style: .light).impactOccurred(intensity: 0.65)
-        guard !reduceMotion else { store.toggle(current, on: day); return }
-        let id = UUID()
-        store.completionPresentation.pending.insert(item.id)
-        withAnimation(.smooth(duration: 0.3)) { completion = id }
-        // Start the strike while the disc is still growing: waiting for the spring to report
-        // completion left a noticeable pause after the disc already looked filled.
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(100))
-            strikeTitle(id)
-        }
-    }
-
-    private func strikeTitle(_ id: UUID) {
-        guard completion == id else { return }
-        withAnimation(.easeInOut(duration: 0.2), completionCriteria: .removed) {
-            _ = store.completionPresentation.striking.insert(item.id)
-        } completion: {
-            Task { @MainActor in
-                // Let the filled circle and full strikethrough register before moving.
-                try? await Task.sleep(for: .milliseconds(60))
-                guard completion == id else { return }
-                withAnimation(.smooth(duration: 0.25)) {
-                    if let latest = store.item(item.id), !latest.isSettled { store.toggle(latest, on: day) }
-                }
-                // A fallback in case the row never hears of it (the change normally arrives at once).
-                try? await Task.sleep(for: .seconds(1))
-                finishCompleting(id)
-            }
-        }
-    }
-
-    private func finishCompleting(_ id: UUID) {
-        guard completion == id else { return }
-        clearPresentation()
-    }
-
-    private func clearPresentation() {
-        store.completionPresentation.striking.remove(item.id)
-        store.completionPresentation.pending.remove(item.id)
-        completion = nil
+enum ItemStatusMotion {
+    static func animation(reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : .smooth(duration: 0.35)
     }
 }
 
@@ -452,45 +402,49 @@ enum CompletionCircle {
 
 /// An outlined completion circle, empty, with a cancelled ✘ or with a carried chevron.
 struct OutlinedCompletionCircle: View {
-    enum Glyph { case none, cross, chevron }
+    enum Glyph: Equatable { case none, cross, chevron }
     var glyph: Glyph = .none
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
             Circle().strokeBorder(lineWidth: CompletionCircle.lineWidth)
-            switch glyph {
-            case .none:
-                EmptyView()
-            case .cross:
-                CrossMark()
-                    .stroke(style: StrokeStyle(lineWidth: CompletionCircle.lineWidth, lineCap: .round))
-                    .padding(CompletionCircle.diameter * 0.32)
-            case .chevron:
-                // Drawn with the same stroke as the circle and the ✘, rather than a symbol.
-                ChevronMark()
-                    .stroke(style: StrokeStyle(lineWidth: CompletionCircle.lineWidth, lineCap: .round, lineJoin: .round))
-                    .frame(width: CompletionCircle.diameter * 0.18, height: CompletionCircle.diameter * 0.36)
-                    .offset(x: CompletionCircle.diameter * 0.03)
-            }
+            CrossMark(progress: glyph == .cross ? 1 : 0)
+                .stroke(style: StrokeStyle(lineWidth: CompletionCircle.lineWidth, lineCap: .round))
+                .padding(CompletionCircle.diameter * 0.32)
+            ChevronMark()
+                .trim(from: 0, to: glyph == .chevron ? 1 : 0)
+                .stroke(style: StrokeStyle(lineWidth: CompletionCircle.lineWidth, lineCap: .round, lineJoin: .round))
+                .frame(width: CompletionCircle.diameter * 0.18, height: CompletionCircle.diameter * 0.36)
+                .offset(x: CompletionCircle.diameter * 0.03)
         }
         .frame(width: CompletionCircle.diameter, height: CompletionCircle.diameter)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: glyph)
     }
 }
 
-/// The ticked circle: a filled disc with the tick cut out, so the card shows through as it did
-/// with the system symbol. Filling grows the disc and draws the tick in one animation.
-private struct CheckedCompletionCircle: View {
-    let filled: Bool
+/// One reversible progress value: fill first, then draw; erase first, then unfill.
+private struct CheckedCompletionCircle: View, Animatable {
+    var progress: CGFloat
+
+    init(filled: Bool) { progress = filled ? 1 : 0 }
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
 
     var body: some View {
+        let disc = min(1, max(0, progress / 0.2))
+        let tick = min(1, max(0, (progress - 0.2) / 0.8))
         ZStack {
-            // The same light grey as a done item's title.
             Circle()
                 .fill(Color(.tertiaryLabel))
-                .scaleEffect(filled ? 1 : 0.6)
-                .opacity(filled ? 1 : 0)
+                // An opaque backing keeps the returning outline from tinting the disc.
+                .background(Color(.systemBackground), in: Circle())
+                .scaleEffect(disc)
             TickMark()
-                .trim(from: 0, to: filled ? 1 : 0)
+                .trim(from: 0, to: tick)
                 .stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
                 .blendMode(.destinationOut)
         }
@@ -521,12 +475,25 @@ private struct ChevronMark: Shape {
 }
 
 private struct CrossMark: Shape {
+    var progress: CGFloat = 1
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
     func path(in rect: CGRect) -> Path {
-        Path { path in
-            path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-            path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        let first = min(1, max(0, progress * 2))
+        let second = min(1, max(0, progress * 2 - 1))
+        // One continuous progress value draws in order and erases in reverse order.
+        return Path { path in
+            if first > 0 {
+                path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+                path.addLine(to: CGPoint(x: rect.minX + rect.width * first, y: rect.minY + rect.height * first))
+            }
+            if second > 0 {
+                path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
+                path.addLine(to: CGPoint(x: rect.maxX - rect.width * second, y: rect.minY + rect.height * second))
+            }
         }
     }
 }
@@ -547,14 +514,11 @@ struct ItemCard: ViewModifier {
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// Set inside the lifted card, which draws one card around the row and its dates.
-    @Environment(\.itemCardPlain) private var plain
-    @Environment(\.itemCardUnbacked) private var unbacked
     @State private var pressed = false
 
     static func tint(_ contrast: ColorSchemeContrast, colorScheme: ColorScheme) -> Color {
         // The faint light-mode tint disappears against black. Give dark cards enough
-        // lift to read as separate surfaces, including in the context-menu preview.
+        // lift to read as separate surfaces, including in the focussed state.
         let opacity: Double = colorScheme == .dark
             ? (contrast == .increased ? 0.14 : 0.08)
             : (contrast == .increased ? 0.07 : 0.022)
@@ -572,16 +536,14 @@ struct ItemCard: ViewModifier {
             .environment(\.itemCardPressed, $pressed)
             // Fade between the fill and the outline; the list reconfigures a completed row
             // without the caller's transaction, which used to swap them in a single frame.
-            .background(Self.tint(contrast, colorScheme: colorScheme).opacity(plain || outlined || dashed ? 0 : 1), in: Self.shape)
-            // Keep an opaque base for the system's initial lift snapshot before
-            // the expanded preview appears.
-            .background(plain || unbacked ? .clear : Color(.systemBackground), in: Self.shape)
+            .background(Self.tint(contrast, colorScheme: colorScheme).opacity(outlined || dashed ? 0 : 1), in: Self.shape)
+            // Keep the existing card opaque throughout layout and mode animations.
+            .background(Color(.systemBackground), in: Self.shape)
             .overlay {
                 // Filled cards get a hairline edge so they read as surfaces; outlined
                 // (carried) cards keep their fuller stroke in place of the fill.
                 Self.shape.strokeBorder(Self.outline(contrast, colorScheme: colorScheme).opacity(dashed ? 2.5 : 1),
                                         style: StrokeStyle(lineWidth: outlined || dashed ? 1 : 0.5, dash: dashed ? [4, 3] : []))
-                    .opacity(plain ? 0 : 1)
                     .allowsHitTesting(false)
             }
             .animation(reduceMotion ? nil : .smooth(duration: 0.35), value: outlined)
@@ -595,11 +557,6 @@ struct ItemCard: ViewModifier {
 extension EnvironmentValues {
     /// The press state of the enclosing item card, set by `ItemCardPressStyle`.
     @Entry var itemCardPressed: Binding<Bool>? = nil
-    /// Set by `ItemMenuOnHold` for the copy of the row inside the lifted card.
-    @Entry var itemCardPlain = false
-    /// Set on day-view rows while List and Time view switch: the List and Time copies of a
-    /// row sit apart mid-move, and their opaque backings painted white over the timeline.
-    @Entry var itemCardUnbacked = false
 }
 
 /// For the button that opens an item: its press is shown by the whole card rather than by
@@ -610,125 +567,13 @@ struct ItemCardPressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .onChange(of: configuration.isPressed) { _, isPressed in cardPressed?.wrappedValue = isPressed }
-            // A hold lifts the item into its menu while the button stays pressed; the card
-            // behind lets go by then rather than staying pressed in under the dimmed screen.
+            // Let the card settle as the hold reveals its details.
             .task(id: configuration.isPressed) {
                 guard configuration.isPressed else { return }
                 try? await Task.sleep(for: .seconds(0.35))
                 guard !Task.isCancelled else { return }
                 cardPressed?.wrappedValue = false
             }
-    }
-}
-
-/// Holding an item lifts it, the native way: the rest of the screen dims, so it's clear which
-/// item is held, and the item rises as its own card grown to show its history (created, and
-/// completed or cancelled) under its details, with Cancel (or Uncancel) and Delete in the Liquid
-/// Glass menu beneath. The lifted card is a copy of the row drawn by `preview` at the row's
-/// width, with the history added. Cancelling acts on this item only, or this one occurrence of a repeating
-/// item, on the day it is viewed from. Delete is the same for every item: a single item goes
-/// straight away, and for a repeating one Delete opens, within the same menu, which occurrences
-/// to delete. Either way an Undo button follows.
-private struct ItemMenuOnHold<Preview: View>: ViewModifier {
-    let item: PlanItem
-    let day: Day
-    let isEnabled: () -> Bool
-    /// Off for the lifted copy of the row itself.
-    let showsMenu: Bool
-    @ViewBuilder let preview: () -> Preview
-    @EnvironmentObject private var store: PlanStore
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.colorSchemeContrast) private var contrast
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.undoManager) private var undoManager
-    @State private var width: CGFloat = 0
-
-    func body(content: Content) -> some View {
-        if showsMenu {
-            content
-                .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
-                .contentShape(.contextMenuPreview, ItemCard.shape)
-                .contextMenu {
-                    menuItems
-                } preview: {
-                    liftedPreview
-                }
-                // The gap between cards stays outside what is lifted.
-                .padding(.vertical, 3)
-        } else {
-            content
-        }
-    }
-    private var liftedPreview: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            preview()
-                .environment(\.itemCardPlain, true)
-            Text(item.history)
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                // 3 points under the row's last line, as a filter's coloured line sits, rather
-                // than below the row's 8-point padding.
-                .padding(.top, 3 - 8)
-                .padding(.leading, 52).padding(.trailing, ItemCard.trailingInset)
-                .padding(.bottom, 12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .frame(width: width)
-        .background(ItemCard.tint(contrast, colorScheme: colorScheme), in: ItemCard.shape)
-        .background(Color(.systemBackground), in: ItemCard.shape)
-        // The preview is hosted apart from the row and doesn't inherit its environment objects.
-        .environmentObject(store)
-    }
-    @ViewBuilder private var menuItems: some View {
-        Button {
-            guard isEnabled() else { return }
-            withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.setCancelled(item, !item.isCancelled, on: day) }
-        } label: {
-            if item.isCancelled {
-                Label("Uncancel", systemImage: "arrow.uturn.backward.circle")
-            } else {
-                Label("Cancel", systemImage: "xmark.circle")
-            }
-        }
-        if item.seriesID == nil {
-            Button(role: .destructive) {
-                guard isEnabled() else { return }
-                delete(.all)
-            } label: {
-                Label { Text("Delete") } icon: { Image.redTrash }
-            }
-        } else {
-            // A submenu, shown with the system's chevron, so the choices open in place.
-            Menu {
-                RepeatDeletionButtons(item: item) { scope in
-                    guard isEnabled() else { return }
-                    delete(scope)
-                }
-            } label: {
-                // A submenu can't take the destructive role in SwiftUI: the bin is drawn red
-                // here, and DestructiveSubmenu reddens the title and chevron.
-                Label { Text("Delete") } icon: { Image.redTrash }
-            }
-        }
-    }
-    private func delete(_ scope: RepeatDeletion) {
-        withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) {
-            store.delete(item, children: false, scope: scope, undoManager: undoManager)
-        }
-    }
-}
-
-extension Image {
-    /// The bin in system red, kept red by menus that would otherwise draw icons in black.
-    static var redTrash: Image {
-        Image(uiImage: UIImage(systemName: "trash")?.withTintColor(.systemRed, renderingMode: .alwaysOriginal) ?? UIImage())
-    }
-}
-
-extension View {
-    func itemMenuOnHold<Preview: View>(_ item: PlanItem, day: Day, isEnabled: @escaping () -> Bool = { true },
-                                       showsMenu: Bool = true, @ViewBuilder preview: @escaping () -> Preview) -> some View {
-        modifier(ItemMenuOnHold(item: item, day: day, isEnabled: isEnabled, showsMenu: showsMenu, preview: preview))
     }
 }
 
@@ -812,29 +657,27 @@ extension View {
 private struct SettledTitleStyle: ViewModifier {
     let item: PlanItem
     let isCarriedEntry: Bool
-    @EnvironmentObject private var store: PlanStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
-        let striking = store.completionPresentation.striking.contains(item.id)
-        let struck = item.isSettled || striking
         content
-            // Concrete colours rather than hierarchical styles, so the title greys in step with
-            // the strike instead of snapping at the end and hiding the line behind dark glyphs.
-            // Done and cancelled share one light grey, the same as the row's small text. A carried
-            // entry keeps the normal colour while the item is still open.
-            .foregroundStyle(item.isSettled || striking ? Color(.tertiaryLabel) : Color(.label))
+            .foregroundStyle(item.isSettled ? Color(.tertiaryLabel) : Color(.label))
+            .animation(ItemStatusMotion.animation(reduceMotion: reduceMotion), value: item.isSettled)
             .overlay {
-                // Let Text position the strike through each wrapped line, then reveal it
-                // gradually. The clear glyphs leave only the native strikethrough visible.
+                // Native text draws a strike on every wrapped line. Only its mask animates,
+                // so revealing the strike cannot change row measurement or its transaction.
                 content
                     .foregroundStyle(Color.clear)
                     .strikethrough(true, pattern: .solid, color: Color.secondary.opacity(0.45))
-                    .mask(Rectangle().scaleEffect(x: struck ? 1 : 0, anchor: .leading))
+                    .mask {
+                        Rectangle()
+                            .animation(ItemStatusMotion.animation(reduceMotion: reduceMotion)) { mask in
+                                mask.scaleEffect(x: item.isSettled ? 1 : 0, anchor: .leading)
+                            }
+                    }
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: struck)
     }
 }
 

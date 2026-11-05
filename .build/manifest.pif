@@ -5,11 +5,11 @@
       "name" : "TimoCore",
       "path" : "/Users/timovijn/Timo/GitHub/timo",
       "projects" : [
-        "544da5b9164194a59791b1362ac016e92241a35d77603114faa412356a8a6672",
+        "7b8fb03b2f435e957a9c6278392e77218546a528f0349ba827c4438412a0e198",
         "72dd102170f9e5f6463e92fabcfbfdf52c97afba9cf7d1d03272b32cdafd0d0a"
       ]
     },
-    "signature" : "1da8d19816df5700d017ae36f121cde721b26ecd483d69c4860318d8bcf84351",
+    "signature" : "e70c1134a82bdef055601c67aa15dadc9632f23b82112705a5d117f1f7387e52",
     "type" : "workspace"
   },
   {
@@ -243,14 +243,6 @@
               {
                 "fileType" : "sourcecode.swift",
                 "guid" : "PACKAGE:timo::MAINGROUP::REF_2::REF_6",
-                "name" : "ProbeTests.swift",
-                "path" : "ProbeTests.swift",
-                "sourceTree" : "<group>",
-                "type" : "file"
-              },
-              {
-                "fileType" : "sourcecode.swift",
-                "guid" : "PACKAGE:timo::MAINGROUP::REF_2::REF_7",
                 "name" : "RepeatingTests.swift",
                 "path" : "RepeatingTests.swift",
                 "sourceTree" : "<group>",
@@ -258,7 +250,7 @@
               },
               {
                 "fileType" : "sourcecode.swift",
-                "guid" : "PACKAGE:timo::MAINGROUP::REF_2::REF_8",
+                "guid" : "PACKAGE:timo::MAINGROUP::REF_2::REF_7",
                 "name" : "SearchTests.swift",
                 "path" : "SearchTests.swift",
                 "sourceTree" : "<group>",
@@ -266,7 +258,7 @@
               },
               {
                 "fileType" : "sourcecode.swift",
-                "guid" : "PACKAGE:timo::MAINGROUP::REF_2::REF_9",
+                "guid" : "PACKAGE:timo::MAINGROUP::REF_2::REF_8",
                 "name" : "SyncTests.swift",
                 "path" : "SyncTests.swift",
                 "sourceTree" : "<group>",
@@ -274,7 +266,7 @@
               },
               {
                 "fileType" : "sourcecode.swift",
-                "guid" : "PACKAGE:timo::MAINGROUP::REF_2::REF_10",
+                "guid" : "PACKAGE:timo::MAINGROUP::REF_2::REF_9",
                 "name" : "TimelineLaneTests.swift",
                 "path" : "TimelineLaneTests.swift",
                 "sourceTree" : "<group>",
@@ -282,7 +274,7 @@
               },
               {
                 "fileType" : "sourcecode.swift",
-                "guid" : "PACKAGE:timo::MAINGROUP::REF_2::REF_11",
+                "guid" : "PACKAGE:timo::MAINGROUP::REF_2::REF_10",
                 "name" : "VisitTests.swift",
                 "path" : "VisitTests.swift",
                 "sourceTree" : "<group>",
@@ -342,7 +334,7 @@
       "projectIsPackage" : "true",
       "projectName" : "TimoCore",
       "targets" : [
-        "64ff8e668b380a1916b942a96b12415ab3bf53687ef3af3660ea8b5fd60f680e",
+        "ff4c95021ab2a8f9ee73b2f8dc3e46dad9d54332bbb5a4e3b095a5c0df268c1d",
         "0068c00f7338aed27ef9a9f25b62fb791678c8383ffa1d1f4e7dc0f70d938c77",
         "acebaae97ab0d454827717af16db4772865f117deaef14883a0ef6eeb50f1a54",
         "9e893def52649ca53901515a81fe18a63b0b604f89e2cca17fb9bd5471fbbcfd",
@@ -350,7 +342,7 @@
         "f9c53bae774d88d6841e3b66001eac691af3e9e60174290ca7100ad6f77b67d5"
       ]
     },
-    "signature" : "544da5b9164194a59791b1362ac016e92241a35d77603114faa412356a8a6672",
+    "signature" : "7b8fb03b2f435e957a9c6278392e77218546a528f0349ba827c4438412a0e198",
     "type" : "project"
   },
   {
@@ -623,15 +615,6 @@
 
               ],
               "removeHeadersOnCopy" : "false"
-            },
-            {
-              "codeSignOnCopy" : "false",
-              "fileReference" : "PACKAGE:timo::MAINGROUP::REF_2::REF_11",
-              "guid" : "PACKAGE-PRODUCT:timo_TimoCoreTests.TimoCoreTests::BUILDPHASE_0::11",
-              "platformFilters" : [
-
-              ],
-              "removeHeadersOnCopy" : "false"
             }
           ],
           "guid" : "PACKAGE-PRODUCT:timo_TimoCoreTests.TimoCoreTests::BUILDPHASE_0",
@@ -675,7 +658,7 @@
       "productTypeIdentifier" : "com.apple.product-type.bundle.unit-test",
       "type" : "standard"
     },
-    "signature" : "64ff8e668b380a1916b942a96b12415ab3bf53687ef3af3660ea8b5fd60f680e",
+    "signature" : "ff4c95021ab2a8f9ee73b2f8dc3e46dad9d54332bbb5a4e3b095a5c0df268c1d",
     "type" : "target"
   },
   {

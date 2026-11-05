@@ -3,9 +3,9 @@ import UIKit
 import ActivityKit
 
 @main struct TimoApp: App {
+    @UIApplicationDelegateAdaptor(TimoAppDelegate.self) private var appDelegate
     @StateObject private var store = PlanStore.shared
     @AppStorage("appearance") private var appearance: AppAppearance = .system
-    init() { DestructiveSubmenu.install() }
     var body: some Scene {
         WindowGroup {
             DayView().environmentObject(store)
@@ -62,7 +62,7 @@ struct SettingsLink: View {
             showingSettings = true
         } label: {
             VStack(spacing: 5) {
-                Text("timo")
+                Text("Timo")
                     .font(.system(.footnote, design: .rounded).weight(.medium))
                     .foregroundStyle(.tertiary)
                 Label("Settings", systemImage: "gearshape")
@@ -159,6 +159,25 @@ private struct ICloudSection: View {
         } footer: {
             Text("Your plan is kept in your private iCloud, so it’s backed up and the same on each of your devices. Turning this off keeps the plan on this \(UIDevice.current.model).")
         }
+        if cloud.isEnabled && !cloud.devices.isEmpty {
+            Section("Devices") {
+                ForEach(cloud.devices) { device in
+                    HStack(spacing: 12) {
+                        Image(systemName: device.model.hasPrefix("iPad") ? "ipad" : "iphone")
+                            .frame(width: 22)
+                            .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(device.isThisDevice ? "This \(device.model)" : device.model)
+                            Text(device.isThisDevice ? "iOS \(device.system)" : "iOS \(device.system) · seen \(device.lastSeen.formatted(.relative(presentation: .named)))")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+            }
+        }
     }
 
     private var isProblem: Bool {
@@ -203,7 +222,7 @@ private struct GuideSection: View {
             .tint(.switchOn)
             .onChange(of: isOn) { _, _ in store.refreshReminders() }
             if isOn && !activitiesEnabled {
-                Text("Live Activities are turned off for timo.")
+                Text("Live Activities are turned off for Timo.")
                     .font(.footnote)
                     .foregroundStyle(.orange)
                 if let url = URL(string: UIApplication.openSettingsURLString) {

@@ -69,28 +69,48 @@ private struct SearchGlassPath<Content: View>: View, Animatable {
 struct PullsToSearch: ViewModifier {
     @Environment(SearchPull.self) private var pull: SearchPull?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var holding = false
-    @State private var overscroll: CGFloat = 0
+    private final class Tracking {
+        var holding = false
+        var overscroll: CGFloat = 0
+        var release: Task<Void, Never>?
+    }
+    @State private var tracking = Tracking()
 
     func body(content: Content) -> some View {
         content
             .onScrollGeometryChange(for: CGFloat.self) { geometry in
                 max(0, -(geometry.contentOffset.y + geometry.contentInsets.top))
             } action: { _, value in
-                overscroll = value
-                if holding, let pull, !pull.isOpen, pull.isEnabled() { pull.distance = value }
-            }
-            .onScrollPhaseChange { old, phase in
-                if phase == .interacting { holding = true; return }
-                guard old == .interacting else { return }
-                holding = false
-                guard let pull, !pull.isOpen else { return }
-                if overscroll >= SearchPull.threshold, pull.isEnabled() {
-                    pull.open(reduceMotion: reduceMotion)
-                } else if pull.distance > 0 {
-                    withAnimation(.smooth(duration: 0.25)) { pull.distance = 0 }
+                tracking.overscroll = value
+                if tracking.holding, let pull, !pull.isOpen, pull.isEnabled(), pull.distance != value {
+                    pull.distance = value
                 }
             }
+            .onScrollPhaseChange { old, phase in
+                if phase == .interacting {
+                    tracking.release?.cancel()
+                    tracking.holding = true
+                    return
+                }
+                guard old == .interacting else { return }
+                tracking.holding = false
+                guard let pull, !pull.isOpen else { return }
+                let opens = tracking.overscroll >= SearchPull.threshold && pull.isEnabled()
+                guard opens || pull.distance > 0 else { return }
+                tracking.release?.cancel()
+                tracking.release = Task { @MainActor in
+                    // Changing the search layout inside the scroll callback re-entered it.
+                    await Task.yield()
+                    guard !Task.isCancelled, !tracking.holding, !pull.isOpen else { return }
+                    if opens, pull.isEnabled() {
+                        pull.open(reduceMotion: reduceMotion)
+                    } else if pull.distance > 0 {
+                        withAnimation(.smooth(duration: 0.25)) { pull.distance = 0 }
+                    }
+                    tracking.release = nil
+                }
+            }
+            .onDisappear { tracking.release?.cancel() }
     }
 }
 

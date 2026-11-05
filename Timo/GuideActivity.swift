@@ -31,6 +31,8 @@ struct GuideAttributes: ActivityAttributes, Hashable {
         var nextStart: Date?
     }
     var itemID: String
+    /// Where tapping the activity goes: iOS always opens the app, so at least it opens this item.
+    var itemURL: URL? { URL(string: "timo://item/\(itemID)") }
     /// Part of the activity's identity, so moving an item starts a new one at the new time.
     var start: Date
 }

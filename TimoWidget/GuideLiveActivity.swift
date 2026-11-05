@@ -11,22 +11,25 @@ struct GuideLiveActivity: Widget {
         ActivityConfiguration(for: GuideAttributes.self) { context in
             GuideLockScreenView(context: context)
                 .activityBackgroundTint(nil)
+                .widgetURL(context.attributes.itemURL)
         } dynamicIsland: { context in
             let state = context.state
             return DynamicIsland {
+                // The corners hold what the compact island shows. "48 minutes left" wrapped into
+                // fragments in a corner, so it sits on the range's line below the bar.
                 DynamicIslandExpandedRegion(.leading) {
                     PersonaDot(personas: state.personas).padding(.leading, 6).padding(.top, 6)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    TimeLeft(state: state, isStale: context.isStale)
-                        .font(.callout.monospacedDigit().weight(.semibold))
+                    TimeRing(state: state, isStale: context.isStale)
+                        .frame(width: 22, height: 22)
                         .padding(.trailing, 6)
                 }
                 DynamicIslandExpandedRegion(.center) {
                     Text(state.title).font(.headline).lineLimit(1)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    GuideDetails(context: context).padding(.horizontal, 6)
+                    GuideDetails(context: context, showsTimeLeft: true).padding(.horizontal, 6)
                 }
             } compactLeading: {
                 PersonaDot(personas: state.personas)
@@ -36,6 +39,7 @@ struct GuideLiveActivity: Widget {
             } minimal: {
                 TimeRing(state: state, isStale: context.isStale)
             }
+            .widgetURL(context.attributes.itemURL)
             .keylineTint(state.personas.first?.color)
         }
     }
@@ -63,17 +67,33 @@ private struct GuideLockScreenView: View {
 /// and the expanded Dynamic Island.
 private struct GuideDetails: View {
     let context: ActivityViewContext<GuideAttributes>
+    /// For the island, whose title row has no room for it. A live count takes all the width
+    /// it's offered and `fixedSize` stops it drawing at all, so it fills the rest of a line.
+    var showsTimeLeft = false
     var body: some View {
         let state = context.state
+        let range = Text("\(state.start.formatted(date: .omitted, time: .shortened))–\(state.end.formatted(date: .omitted, time: .shortened))")
         VStack(alignment: .leading, spacing: 8) {
             if !context.isStale {
                 ProgressView(timerInterval: state.start...state.end, countsDown: false) { EmptyView() } currentValueLabel: { EmptyView() }
                     .tint(state.personas.first?.color ?? .primary)
                     .accessibilityHidden(true)
             }
+            if showsTimeLeft {
+                HStack(spacing: 8) {
+                    range
+                    TimeLeft(state: state, isStale: context.isStale)
+                        .fontWeight(.semibold)
+                        .monospacedDigit()
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            }
             HStack(alignment: .center, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(state.start.formatted(date: .omitted, time: .shortened))–\(state.end.formatted(date: .omitted, time: .shortened))")
+                    if !showsTimeLeft { range }
                     if let next = state.nextTitle, let start = state.nextStart {
                         Text("Next: \(next) · \(start.formatted(date: .omitted, time: .shortened))").lineLimit(1)
                     }

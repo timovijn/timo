@@ -309,6 +309,12 @@ extension PlanItem {
         get { PersonalDetails(reminders: reminders, personas: personas, suggestionDismissed: suggestionDismissed) }
         set { reminders = newValue.reminders; personas = Persona.ordered(newValue.personas); suggestionDismissed = newValue.suggestionDismissed }
     }
+    /// The item as other people get it: without what each person keeps for themselves.
+    public var forSharing: PlanItem {
+        var shared = self
+        shared.personal = PersonalDetails()
+        return shared
+    }
     /// Combines two edits of one item made apart from each other, from the version both started
     /// from: whatever `mine` changed wins, everything else comes from `theirs`. Fields that only
     /// make sense together (the schedule, completion and cancelling, the repeat pattern) are
@@ -333,6 +339,15 @@ extension PlanItem {
             result.seriesID = mine.seriesID; result.occurrenceDay = mine.occurrenceDay
         }
         return result
+    }
+}
+
+extension RepeatingPlan {
+    /// The plan as other people get it, so a shared series generates no one else's reminders.
+    public var forSharing: RepeatingPlan {
+        var shared = self
+        shared.template.personal = PersonalDetails()
+        return shared
     }
 }
 

@@ -1,0 +1,16 @@
+{
+  "source": "/Users/timovijn/Timo/GitHub/timo/Timo/PlanStore.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Delete",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 334
+        }
+      }
+    ]
+  },
+  "version": 1
+}

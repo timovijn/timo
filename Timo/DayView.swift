@@ -41,6 +41,44 @@ struct DayView: View {
     @State private var previewMode = ViewMode(persisted: false)
     /// Counts the days picked in the calendar, so the relative date shows once it has folded.
     @State private var calendarPicks = 0
+    /// The item in its focussed state, from holding it or tapping its Live Activity.
+    @State private var focused: Focused?
+    private enum FocusSource { case day, persona, search }
+    private struct Focused {
+        /// This time in focus, so a card still closing can't clear the next one.
+        let token = UUID()
+        let id: UUID
+        let day: Day
+        let source: FocusSource
+        let filter: DayFilter
+        let timeBelowTitle: Bool
+        var detailsRevision = 0
+        /// The card goes back to its place.
+        var ending = false
+    }
+    private var focusedItemIsGone: Bool { focused.map { store.item($0.id) == nil } ?? false }
+    /// Actions and search changes can remove a row without deleting its underlying item.
+    private var focusedInlineItemIsHidden: Bool {
+        guard let focused, let item = store.item(focused.id) else { return false }
+        switch focused.source {
+        case .day:
+            guard !search.isOpen, persona == nil, focused.day == day else { return true }
+            guard focused.filter != .all else { return false }
+            let appears = item.shows(on: focused.day, now: now) || item.movedAway(from: focused.day, now: now)
+                || item.visits(focused.day, now: now)
+            return !appears || !matches(item, filter, on: focused.day)
+        case .search:
+            guard search.isOpen, !search.query.trimmingCharacters(in: .whitespaces).isEmpty else { return true }
+            return !filteredSearchResults.contains { entry in
+                entry.day == focused.day && entry.items.contains { $0.id == focused.id }
+            }
+        case .persona:
+            guard persona != nil, !search.isOpen else { return true }
+            return !matches(item, personaFilter, on: focused.day) || !personaDays.contains { entry in
+                entry.day == focused.day && entry.items.contains { $0.id == focused.id }
+            }
+        }
+    }
     @State private var pickedFromCalendar = false
     enum DayFilter: Int { case all, review, reminders, deadlines }
     @State private var filter: DayFilter = .all
@@ -134,9 +172,9 @@ struct DayView: View {
                              adjacentContent: { adjacentDay in
                                  pageContent(for: adjacentDay.date(), filter: .all, mode: previewMode, insets: viewport.safeAreaInsets)
                              },
-                             revision: DayPageRevision(items: store.items, filter: filter.rawValue, panelFilter: panelFilter.rawValue,
+                             revision: DayPageRevision(items: store.items, sharedZones: store.cloud.sharedZones, filter: filter.rawValue, panelFilter: panelFilter.rawValue,
                                                        minute: Int(now.timeIntervalSinceReferenceDate / 60), typeSize: dynamicTypeSize,
-                                                       insets: viewport.safeAreaInsets, reduceMotion: reduceMotion),
+                                                       insets: viewport.safeAreaInsets, reduceMotion: reduceMotion, focusedID: focused?.id, focusEnding: focused?.ending ?? false, focusDetailsRevision: focused?.detailsRevision ?? 0),
                              reduceMotion: reduceMotion,
                              onSwipe: { move($0) },
                              interaction: daySwipeInteraction)
@@ -164,7 +202,7 @@ struct DayView: View {
                     ZStack(alignment: .bottomTrailing) {
                         PersonaPages(persona: $persona, now: now, add: add, months: $personaMonths, filter: personaFilter,
                                      matches: { matches($0, personaFilter, on: $1) },
-                                     row: { AnyView(row($0, filter: personaFilter, day: $1)) },
+                                     row: { AnyView(row($0, filter: personaFilter, day: $1, source: .persona)) },
                                      swipeBegan: daySwipeInteraction.begin, swipeEnded: daySwipeInteraction.end)
                             .contentMargins(.bottom, 94 - DayDockLayout.lowering(for: viewport.safeAreaInsets.bottom), for: .scrollContent)
                             .environment(search)
@@ -211,8 +249,36 @@ struct DayView: View {
             .sheet(item: $changingReminder) { item in
                 ReminderTimeEditor(item: item).environmentObject(store)
             }
-            .onChange(of: date) { _, _ in filter = .all; store.showDay(day); timelineOverflow.day = day }
+            .onChange(of: date) { _, _ in
+                if focused?.source == .day { focused = nil }
+                filter = .all; store.showDay(day); timelineOverflow.day = day
+            }
+            // The card stays focussed under the editor, as ending it there showed the plain row
+            // for a moment as the sheet came up, and goes back once the editor closes.
+            .onChange(of: editing?.id) { _, id in if id == nil { closeFocus() } }
+            // Deleted, here or on another device: nothing is left to close, and the page waits.
+            .onChange(of: focusedItemIsGone) { _, gone in if gone { focused = nil } }
+            .onChange(of: focusedInlineItemIsHidden) { _, hidden in
+                if hidden { withAnimation(reviewAnimation) { focused = nil } }
+            }
+            .onChange(of: focused?.ending) { _, ending in
+                if ending != false { FocusedCardAnchor.cancelPendingReveal() }
+            }
             .onAppear { timelineOverflow.day = day }
+            // A tapped Live Activity. It follows today's items, some of which began on an earlier day.
+            .onOpenURL { url in
+                guard url.scheme == "timo", url.host == "item", let id = UUID(uuidString: url.lastPathComponent),
+                      let item = store.item(id) else { return }
+                focusOnToday(item)
+            }
+            .onChange(of: store.reminderItemToFocus, initial: true) { _, id in
+                guard let id else { return }
+                store.reminderItemToFocus = nil
+                guard let item = store.item(id) else { return }
+                let today = Day(Date())
+                let target = item.shows(on: today, now: Date()) ? today : item.liveDay(now: Date())
+                focusOnDay(item, on: target)
+            }
             // Resolving the last item in a filter returns to the full day rather than an empty list.
             .onChange(of: activeFilterCount) { _, count in
                 if count == 0 { setFilter(.all) }
@@ -226,7 +292,10 @@ struct DayView: View {
                 if count == 0 { withAnimation(reviewAnimation) { searchFilter = .all } }
             }
             // Each persona's page starts on all its items; resolving the last in a filter returns there.
-            .onChange(of: persona) { _, _ in personaFilter = .all; personaMonths = 3 }
+            .onChange(of: persona) { _, _ in
+                if focused?.source == .persona { focused = nil }
+                personaFilter = .all; personaMonths = 3
+            }
             .onChange(of: personaFilter == .all || search.isOpen ? nil : filterCount(personaFilter, in: personaDays)) { _, count in
                 if count == 0 { withAnimation(reviewAnimation) { personaFilter = .all } }
             }
@@ -242,7 +311,7 @@ struct DayView: View {
         }
         // Above the top controls too: the field takes their row.
         .overlay {
-            // The day list's own rows, so results complete, open and lift as they do there, and
+            // The day list's own rows, so results complete, open and take focus as they do there, and
             // open the same status panel under a filter.
             SearchLayer(pull: search, now: now, results: filteredSearchResults, persona: persona,
                         showsMore: store.repeats(searchResults.flatMap(\.items), after: searchHorizon),
@@ -250,8 +319,14 @@ struct DayView: View {
                             searchMonths += 3
                             store.generateRepeats(through: searchHorizon)
                         },
-                        row: { AnyView(row($0, filter: searchFilter, day: $1)) })
+                        row: { AnyView(row($0, filter: searchFilter, day: $1, source: .search)) })
         }
+        // Observe outside taps without intercepting buttons, long presses or scrolling.
+        .simultaneousGesture(SpatialTapGesture(coordinateSpace: .global).onEnded { tap in
+            guard let focused, !FocusedCardAnchor.isHolding,
+                  !FocusedCardAnchor.contains(tap.location, id: focused.id, day: focused.day) else { return }
+            closeFocus()
+        })
         .background {
             // ⌘F, without a button on screen.
             Button("Search") { search.open(reduceMotion: reduceMotion) }
@@ -545,16 +620,60 @@ struct DayView: View {
             date = next
         }
     }
-    /// Closes the open editor, moves the day view to `item`'s day and opens the item there, so
-    /// Go to original item shows where the original is rather than only its details.
-    private func openOnItsDay(_ item: PlanItem) {
+    private func closeFocus() {
+        guard let focused, !focused.ending else { return }
+        withAnimation(FocusedItemMotion.animation(reduceMotion: reduceMotion)) {
+            self.focused?.ending = true
+        }
+        if reduceMotion { finishInlineFocus(focused.token) }
+    }
+
+    private func finishInlineFocus(_ token: UUID) {
+        guard focused?.token == token, focused?.ending == true else { return }
+        focused = nil
+    }
+
+    private func inlineFocusPhase(on day: Day) -> InlineFocusPhase {
+        guard let focused, focused.source == .day, focused.day == day else { return InlineFocusPhase() }
+        return InlineFocusPhase(id: focused.id, ending: focused.ending, revision: focused.detailsRevision)
+    }
+
+    /// Today's page with the item in its focussed state.
+    private func focusOnToday(_ item: PlanItem) {
+        focusOnDay(item, on: Day(Date()))
+    }
+    /// Reminders can arrive before the scheduled day, or be opened on a later day.
+    private func focusOnDay(_ item: PlanItem, on target: Day) {
+        let editorWasOpen = editing != nil
+        let pageChanges = persona != nil || search.isOpen || day != target
+        focused = nil
+        editing = nil
+        Task { @MainActor in
+            // Only what's in the way is waited for: a tap on a Live Activity should land at once.
+            // Let a sheet finish closing before the day changes under it.
+            if editorWasOpen { try? await Task.sleep(for: .milliseconds(450)) }
+            if persona != nil { persona = nil }
+            if search.isOpen { search.close(reduceMotion: reduceMotion) }
+            navigate(to: target.date())
+            // Another day's page can hold the same item (a range over several days).
+            if pageChanges { try? await Task.sleep(for: .milliseconds(reduceMotion ? 50 : 250)) }
+            // A frame at a time, as the rows can take a moment when this opened the app.
+            for _ in 0..<180 {
+                if FocusedCardAnchor.focusCentred(item.id) { return }
+                try? await Task.sleep(for: .milliseconds(16))
+            }
+            editing = store.item(item.id) ?? item
+        }
+    }
+    private func openOnItsDay(_ item: PlanItem) { openOnItsDay(item, on: item.day.date()) }
+    private func openOnItsDay(_ item: PlanItem, on shownDay: Date) {
         editing = nil
         Task { @MainActor in
             // Let the sheet finish closing before the day changes under it.
             try? await Task.sleep(for: .milliseconds(450))
             if persona != nil { persona = nil }
             if search.isOpen { search.close(reduceMotion: reduceMotion) }
-            navigate(to: item.day.date())
+            navigate(to: shownDay)
             try? await Task.sleep(for: .milliseconds(reduceMotion ? 100 : 450))
             editing = store.item(item.id) ?? item
         }
@@ -749,6 +868,7 @@ struct DayView: View {
                     }
                 }
                 .padding(.horizontal, 20).padding(.vertical, 6)
+                .id(DayScrollTarget.top)
                 if filter == .all && visible.isEmpty && moved.isEmpty {
                     // Just a quiet line: the add button below already starts the day.
                     Text("Nothing planned")
@@ -759,7 +879,7 @@ struct DayView: View {
                 }
                 if !anyTimeItems.isEmpty {
                     sectionHeading("Anytime")
-                        .modifier(FilterCollapse(collapsed: !anyTimeItems.contains { shown.contains($0.id) }, keepsSpaceInTimeView: true))
+                        .modifier(FilterCollapse(collapsed: !anyTimeItems.contains { shown.contains($0.id) }))
                         .transition(sectionRemoval)
                     anytimeItems(items: anyTimeItems, shown: shown, day: day, filter: filter)
                         .padding(.horizontal, 16)
@@ -775,13 +895,15 @@ struct DayView: View {
                 }
                 SettingsLink(isEnabled: { daySwipeInteraction.allowsItemActions })
                     .frame(maxWidth: .infinity).padding(.vertical, 28)
+                FilterScrollRoom(filtered: filter != .all)
             }
             .readableWidth()
             // One SwiftUI scroll surface resizes continuously with the rows.
             // A UIKit List cell used to resize separately and interrupt the morph.
             // The view-mode animation lives on the mode-reading views below.
             .animation(reviewAnimation, value: filter)
-            .animation(reviewAnimation, value: filtered.map(\.id))
+            .animation(filter == .all ? ItemStatusMotion.animation(reduceMotion: reduceMotion) : reviewAnimation,
+                       value: filtered.map(\.id))
             .transaction { transaction in
                 if reduceMotion && !ViewMode.crossFades(reduceMotion: true) { transaction.animation = nil }
             }
@@ -807,18 +929,20 @@ struct DayView: View {
     }
     /// Use the same measured-row layout as Scheduled, without the clock-axis placement.
     private func anytimeItems(items: [PlanItem], shown: Set<UUID>, day: Day, filter: DayFilter) -> some View {
-        let contentKey = TimelineContentKey(items: items, day: day, order: items.map(\.id),
+        let contentKey = TimelineContentKey(items: items, sharedZones: store.cloud.sharedZones, day: day, order: items.map(\.id),
                                             markers: items.map { item in [DayFilter.review, .reminders, .deadlines].map { hasDot(item, $0, on: day) } },
-                                            filter: filter.rawValue, showNow: false, timeNotes: [], typeSize: dynamicTypeSize)
+                                            filter: filter.rawValue, showNow: false, timeNotes: [], typeSize: dynamicTypeSize, inlineFocus: inlineFocusPhase(on: day))
         return AnytimeLayout(contentKey: contentKey) {
             // The same rows as Scheduled, with the same pair of List and Time view copies and
             // modifiers; as plain rows they made each filter animation drop frames on a phone.
             ForEach(items) { item in
                 ForEach([false, true], id: \.self) { timedVariant in
                     row(item, filter: filter, day: day, sharedSchedule: true, timeBelowTitle: timedVariant)
-                        .modifier(FilterCollapse(collapsed: !shown.contains(item.id), keepsSpaceInTimeView: true))
+                        .modifier(FilterCollapse(collapsed: !shown.contains(item.id)))
+
                         .layoutValue(key: TimelineCollapsedKey.self, value: !shown.contains(item.id))
                         .modifier(ModeRowVariant(isTimed: timedVariant, compactSortPriority: 0))
+                        .animation(FocusedItemMotion.animation(reduceMotion: reduceMotion), value: inlineFocusPhase(on: day))
                         // A target for opening a filter; both copies sit in the same place.
                         .id(timedVariant ? AnyHashable("anytime-time-\(item.id)") : AnyHashable("anytime-\(item.id)"))
                         .layoutValue(key: TimelineTimedVariantKey.self, value: timedVariant)
@@ -832,6 +956,11 @@ struct DayView: View {
         // dropped a frame several times a second on a phone, while Scheduled stayed smooth.
         .background { Canvas(rendersAsynchronously: true) { _, _ in }.allowsHitTesting(false).accessibilityHidden(true) }
         .accessibilityElement(children: .contain)
+        // Drive the measured layout itself, including its first filter change.
+        .animation(reviewAnimation, value: filter)
+        .animation(ItemStatusMotion.animation(reduceMotion: reduceMotion), value: contentKey.markers)
+        .animation(ItemStatusMotion.animation(reduceMotion: reduceMotion), value: items.map(\.isSettled))
+        .animation(FocusedItemMotion.animation(reduceMotion: reduceMotion), value: inlineFocusPhase(on: day))
     }
 
     /// All of the day's timed items; those not in `shown` are collapsed by the filter.
@@ -883,23 +1012,25 @@ struct DayView: View {
         let activeTop = active.first.flatMap { compactOrder[$0.id] }.map { $0 - 1 } ?? 0
         // Keep both text layouts at fixed endpoint widths. Only their positions
         // and opacity animate, so wrapping never changes in the middle of a frame.
-        let contentKey = TimelineContentKey(items: items, day: day, order: compactItems.map(\.id),
+        let contentKey = TimelineContentKey(items: items, sharedZones: store.cloud.sharedZones, day: day, order: compactItems.map(\.id),
                                             markers: items.map { item in [DayFilter.review, .reminders, .deadlines].map { hasDot(item, $0, on: day) } },
                                             filter: filter.rawValue, showNow: showNow,
                                             timeNotes: items.map { timeNote($0, day: day) != nil },
-                                            typeSize: dynamicTypeSize)
+                                            typeSize: dynamicTypeSize, inlineFocus: inlineFocusPhase(on: day))
         return ModeTimelineLayout(startMinute: startMinute, laneCount: (lanes.values.max() ?? 0) + 1,
                                   contentKey: contentKey) {
             if isToday, let first = past.first(where: { item in !inProgress.contains { $0.id == item.id } }) {
                 let order = (compactOrder[first.id] ?? 0) - 1
                 compactSectionDivider("Past")
                     .modifier(FilterCollapse(collapsed: !showNow))
+                    .animation(FocusedItemMotion.animation(reduceMotion: reduceMotion), value: inlineFocusPhase(on: day))
                     .layoutValue(key: TimelineCompactOrderKey.self, value: order)
                     .accessibilitySortPriority(-Double(order))
             }
             if !inProgress.isEmpty {
                 compactSectionDivider("In progress")
                     .modifier(FilterCollapse(collapsed: !showNow))
+                    .animation(FocusedItemMotion.animation(reduceMotion: reduceMotion), value: inlineFocusPhase(on: day))
                     .layoutValue(key: TimelineCompactOrderKey.self, value: activeTop)
                     .accessibilitySortPriority(-Double(activeTop))
             }
@@ -907,6 +1038,7 @@ struct DayView: View {
                 let order = (compactOrder[first.id] ?? 0) - 1
                 compactSectionDivider("Upcoming")
                     .modifier(FilterCollapse(collapsed: !showNow))
+                    .animation(FocusedItemMotion.animation(reduceMotion: reduceMotion), value: inlineFocusPhase(on: day))
                     .layoutValue(key: TimelineCompactOrderKey.self, value: order)
                     .accessibilitySortPriority(-Double(order))
             }
@@ -918,18 +1050,22 @@ struct DayView: View {
                         // Each copy has its own id, so opening a filter scrolls to the one the mode shows.
                         .id(timedVariant ? AnyHashable(item.id) : AnyHashable("list-\(item.id)"))
                         .modifier(FilterCollapse(collapsed: !shown.contains(item.id)))
+
                         .layoutValue(key: TimelineCollapsedKey.self, value: !shown.contains(item.id))
                         .modifier(ModeRowVariant(isTimed: timedVariant,
                                                  compactSortPriority: showNow ? -Double(compactOrder[item.id] ?? 0) : 0))
+                        .animation(FocusedItemMotion.animation(reduceMotion: reduceMotion), value: inlineFocusPhase(on: day))
                         .layoutValue(key: TimelineCompactOrderKey.self, value: compactOrder[item.id] ?? 0)
                         .layoutValue(key: TimelineTimedVariantKey.self, value: timedVariant)
                         .layoutValue(key: TimelineMinuteKey.self, value: entries.first(where: { $0.id == item.id })?.minute ?? 0)
+
                 }
                 if let start = item.start() {
                     // Keep one visible time label across both modes. The rows
                     // reserve its measured space but never crossfade its text, also
                     // when a filter opens a panel below the row.
                     ModeScheduleLabel(label: scheduleLabel(item, start: start, day: day))
+                        .geometryGroup()
                         .multilineTextAlignment(.trailing)
                         .modifier(ModeScheduleColumn(width: scheduleColumnWidth))
                         .fixedSize(horizontal: false, vertical: true)
@@ -939,7 +1075,7 @@ struct DayView: View {
                         .layoutValue(key: TimelineSharedTimeInsetKey.self, value: ItemCard.trailingInset)
                 }
                 if let entry = entries.first(where: { $0.id == item.id }) {
-                    TimelineConnector(complete: entry.complete)
+                    TimelineConnector(complete: entry.complete, focused: focused?.id == item.id && focused?.day == day && focused?.ending == false)
                         .opacity(shown.contains(item.id) && !entry.visiting ? 1 : 0)
                         .modifier(ModeFade(visibleInTimeView: true))
                         .layoutValue(key: TimelineConnectorLaneKey.self, value: lanes[item.id] ?? 0)
@@ -997,7 +1133,7 @@ struct DayView: View {
                 // hides or shows crossfade with the rows; the review filter turns its items' orange.
                 ForEach(entries.filter { !$0.visiting }, id: \.id) { entry in
                     TimelineTrack(entry: entry, lane: lanes[entry.id] ?? 0, startMinute: startMinute,
-                                  orange: filter == .review && entry.review)
+                                  orange: filter == .review && entry.review, focused: focused?.id == entry.id && focused?.day == day && focused?.ending == false)
                         .opacity(filter == .all || shown.contains(entry.id) ? 1 : 0)
                 }
                 // The minute tick only moves this small marker, never redrawing the tall scale.
@@ -1021,8 +1157,13 @@ struct DayView: View {
             // this the tracks and the review filter's orange swapped in one frame.
             .animation(reviewAnimation, value: filter)
         }
-        .animation(reviewAnimation, value: active.map(\.id))
+        .animation(ItemStatusMotion.animation(reduceMotion: reduceMotion), value: active.map(\.id))
         .accessibilityElement(children: .contain)
+        // Drive the measured layout itself, including its first filter change.
+        .animation(reviewAnimation, value: filter)
+        .animation(ItemStatusMotion.animation(reduceMotion: reduceMotion), value: contentKey.markers)
+        .animation(ItemStatusMotion.animation(reduceMotion: reduceMotion), value: items.map(\.isSettled))
+        .animation(FocusedItemMotion.animation(reduceMotion: reduceMotion), value: inlineFocusPhase(on: day))
     }
     private func compactSectionDivider(_ title: String) -> some View {
         HStack(spacing: 10) {
@@ -1039,8 +1180,8 @@ struct DayView: View {
         .allowsHitTesting(false)
         .layoutValue(key: TimelineMarkerKey.self, value: true)
     }
-    private func row(_ item: PlanItem, filter: DayFilter, day: Day, sharedSchedule: Bool = false,
-                     showsMenu: Bool = true, timeBelowTitle: Bool = false) -> some View {
+    private func row(_ item: PlanItem, filter: DayFilter, day: Day, sharedSchedule: Bool = false, source: FocusSource = .day,
+                     timeBelowTitle: Bool = false) -> some View {
         // On the days an item was carried on from, it stays in its place as a quiet entry pointing
         // to where it went. It is the same item as on its live day, so completing or opening it
         // here acts on that copy; it isn't counted, reviewed or reminded about here, but keeps an
@@ -1052,9 +1193,16 @@ struct DayView: View {
         let visiting = item.visits(day, now: now)
         // A carried entry keeps its time on its scheduled day; elsewhere a carried item is untimed.
         let showsTime = carried != nil ? day == item.day : !item.isCarried(now: now)
+        let isFocusSource = focused?.id == item.id && focused?.day == day && focused?.source == source
+        // Both measured endpoints include the details, like filter panels. Anytime measures
+        // its List copy even in Time view, so expanding only the visible copy leaves no space.
+        let inlineExpanded = isFocusSource && focused?.ending == false
+        let inlineToken = isFocusSource && focused?.timeBelowTitle == timeBelowTitle ? focused?.token : nil
+        let markerInset: CGFloat = filter != .all ? 0 : (review ? 14 : 0) + (reminder ? 14 : 0) + (deadline ? 14 : 0)
+        let canUseHeader = { !FocusedCardAnchor.isHolding }
         return VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 8) {
-                CompletionButton(item: item, day: day, isEnabled: { daySwipeInteraction.allowsItemActions },
+                CompletionButton(item: item, day: day, isEnabled: { daySwipeInteraction.allowsItemActions && canUseHeader() },
                                  keepsCarriedArrow: carried != nil) {
                     Group {
                         if carried != nil {
@@ -1063,8 +1211,8 @@ struct DayView: View {
                         } else if let progress = timeProgress(item) {
                             ProgressCircle(progress: progress)
                         } else {
-                            // A completed item's tick is drawn by the button over this.
-                            OutlinedCompletionCircle(glyph: item.isCancelled ? .cross : .none)
+                            // The button draws and erases the check/cross above this stable outline.
+                            OutlinedCompletionCircle()
                                 .foregroundStyle(item.isCancelled ? .tertiary : .primary)
                         }
                     }
@@ -1072,9 +1220,9 @@ struct DayView: View {
                 .accessibilityValue([carried.map { "Carried to \($0)" }, item.isCancelled ? "Cancelled" : nil,
                                      carried == nil ? timeProgress(item).flatMap { $0 >= 1 ? "Time passed" : $0 > 0 ? "\(Int($0 * 100))% of the time passed" : nil } : nil,
                                      review ? (item.suggestionDismissed ? "Left open" : "Needs review") : nil, reminder ? "Reminder set" : nil,
-                                     deadline ? item.deadline.map { "Due \($0.formatted(date: .abbreviated, time: .shortened))" } : nil].compactMap { $0 }.joined(separator: ", "))
+                                     deadline ? item.deadline.map { "Deadline \($0.formatted(date: .abbreviated, time: .shortened))" } : nil].compactMap { $0 }.joined(separator: ", "))
                 Button {
-                    guard daySwipeInteraction.allowsItemActions else { return }
+                    guard daySwipeInteraction.allowsItemActions, canUseHeader() else { return }
                     editing = item
                 } label: {
                     HStack(alignment: .center, spacing: 12) {
@@ -1101,7 +1249,7 @@ struct DayView: View {
                                     .alignmentGuide(.scheduleLeading) { $0[.leading] }
                                     .alignmentGuide(.scheduleTop) { $0[.top] }
                             }
-                            if !item.people.isEmpty || !item.locations.isEmpty {
+                            if !item.people.isEmpty || !item.locations.isEmpty || store.cloud.isShared(item) {
                                 itemDetailsLine(item)
                             }
                         }
@@ -1132,6 +1280,12 @@ struct DayView: View {
                     .accessibilityHint((review && !item.suggestionDismissed ? "Needs review. " : "") + (reminder ? "Reminder set. " : "") + "Open details and edit")
                     .accessibilityAction(named: item.isCancelled ? "Uncancel" : "Cancel") { setCancelled(item, !item.isCancelled, on: day) }
             }
+            .overlay(alignment: .trailing) {
+                rowMarkers(item, filter: filter, day: day).offset(x: markerInset)
+            }
+            // Isolate only header content; the filter panel must keep its own
+            // expansion geometry rather than joining the dot/time motion group.
+            .geometryGroup()
             // Always present, collapsed outside a filter, so it opens and moves with its row in
             // the filter's one animation. A panel inserted only when filtering started had no
             // earlier position: the timeline layout put it straight at its final spot, ahead of
@@ -1151,18 +1305,37 @@ struct DayView: View {
                 .opacity(showsPanel ? 1 : 0)
                 .allowsHitTesting(showsPanel)
                 .accessibilityHidden(!showsPanel)
+            InlineFocusedDetails(item: item, day: day, expanded: inlineExpanded, token: inlineToken,
+                                 close: closeFocus, collapsed: finishInlineFocus,
+                                 contentChanged: {
+                if isFocusSource { focused?.detailsRevision += 1 }
+            }, heightChanged: { height in
+                guard inlineExpanded, focused?.ending == false, focused?.token == inlineToken else { return }
+                FocusedCardAnchor.revealInline(item.id, extraHeight: max(0, height - 5), animated: !reduceMotion)
+            })
         }
         // Dots show only in the full day; a filtered row's panel already says why it is there.
-        .padding(.trailing, filter != .all ? 0 : (review ? 14.0 : 0) + (reminder ? 14.0 : 0) + (deadline ? 14.0 : 0))
-        .overlay(alignment: .trailing) {
-            rowMarkers(item, filter: filter, day: day)
-        }
+        .padding(.trailing, markerInset)
+        .animation(ItemStatusMotion.animation(reduceMotion: reduceMotion), value: [item.isComplete, item.isCancelled, review, reminder, deadline])
         // Every item has the same faint fill: open, ticked, cancelled or carried. An item from
         // another day, here for its reminder or deadline, has a dashed outline instead.
         .modifier(ItemCard(dashed: visiting))
-        .modifier(CardBackingWhileSwitching())
-        .itemMenuOnHold(item, day: day, isEnabled: { daySwipeInteraction.allowsItemActions }, showsMenu: showsMenu) {
-            AnyView(row(item, filter: filter, day: day, showsMenu: false, timeBelowTitle: timeBelowTitle))
+        .itemFocus(item.id, day: day, isEnabled: {
+            guard daySwipeInteraction.allowsItemActions,
+                  focused?.ending != false || focused?.id != item.id || focused?.day != day
+                    || focused?.source != source else { return false }
+            // The day and persona rows stay mounted behind search. Only the visible surface
+            // can supply a marker, including when a notification asks to focus an item.
+            switch source {
+            case .day: return !search.isOpen && persona == nil
+            case .persona: return !search.isOpen && persona != nil
+            case .search: return search.isOpen
+            }
+        }) {
+            withAnimation(FocusedItemMotion.animation(reduceMotion: reduceMotion)) {
+                focused = Focused(id: item.id, day: day, source: source, filter: filter,
+                                  timeBelowTitle: timeBelowTitle)
+            }
         }
         .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 20))
         .listRowSeparatorTint(Color.primary.opacity(0.07))
@@ -1175,19 +1348,29 @@ struct DayView: View {
     }
     /// The dots of every filter the row is in, in the full day only.
     private func rowMarkers(_ item: PlanItem, filter: DayFilter, day: Day) -> some View {
-        HStack(spacing: 8) {
-            if filter == .all && hasDot(item, .review, on: day) {
-                Circle().fill(reviewTint).frame(width: 6, height: 6)
-            }
-            if filter == .all && hasDot(item, .reminders, on: day) {
-                Circle().fill(.blue).frame(width: 6, height: 6)
-            }
-            if filter == .all && hasDot(item, .deadlines, on: day) {
-                Circle().fill(.red).frame(width: 6, height: 6)
-            }
+        let review = hasDot(item, .review, on: day)
+        let reminder = hasDot(item, .reminders, on: day)
+        let deadline = hasDot(item, .deadlines, on: day)
+        return HStack(spacing: 0) {
+            marker(reviewTint, visible: review)
+            marker(.blue, visible: reminder)
+                .padding(.leading, reminder && review ? 8 : 0)
+            marker(.red, visible: deadline)
+                .padding(.leading, deadline && (review || reminder) ? 8 : 0)
         }
+        .opacity(filter == .all ? 1 : 0)
+        .animation(.easeInOut(duration: 0.25), value: filter)
+        .animation(ItemStatusMotion.animation(reduceMotion: reduceMotion), value: [review, reminder, deadline])
         .accessibilityHidden(true)
         .allowsHitTesting(false)
+    }
+    private func marker(_ color: Color, visible: Bool) -> some View {
+        // Mounted even when hidden: removing a conditional dot could drop its exit fade
+        // when the hosted page replaced its content during completion.
+        Circle().fill(color).frame(width: 6, height: 6)
+            .opacity(visible ? 1 : 0)
+            .animation(.easeInOut(duration: 0.25), value: visible)
+            .frame(width: visible ? 6 : 0, alignment: .trailing)
     }
     private func itemDetailsLine(_ item: PlanItem) -> some View {
         HStack(spacing: 5) {
@@ -1203,6 +1386,15 @@ struct DayView: View {
             if !item.locations.isEmpty {
                 Text(item.locations.joined(separator: ", "))
             }
+            if store.cloud.isShared(item) {
+                if !item.people.isEmpty || !item.locations.isEmpty {
+                    Circle()
+                        .fill(.tertiary)
+                        .frame(width: 2, height: 2)
+                        .accessibilityHidden(true)
+                }
+                Text("Shared").layoutPriority(1)
+            }
         }
         // The size of every small line in a row: carried, time, and the filters' blue, red and orange.
         .font(.caption).foregroundStyle(.tertiary)
@@ -1210,7 +1402,8 @@ struct DayView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel([
             item.people.isEmpty ? nil : "People: " + item.people.joined(separator: ", "),
-            item.locations.isEmpty ? nil : "Locations: " + item.locations.joined(separator: ", ")
+            item.locations.isEmpty ? nil : "Locations: " + item.locations.joined(separator: ", "),
+            store.cloud.isShared(item) ? "Shared" : nil
         ].compactMap { $0 }.joined(separator: ". "))
     }
     // Retained for a future use; review and reminder status currently use row dots.
@@ -1235,12 +1428,12 @@ struct DayView: View {
         .frame(width: 44, height: 44)
         .contentShape(Rectangle())
     }
-    private var reviewAnimation: Animation? {
-        reduceMotion ? nil : .smooth(duration: 0.5)
-    }
+    // Filter timing is independent of the focussed card's expansion implementation.
+    private var reviewAnimation: Animation? { reduceMotion ? nil : .smooth(duration: 0.5) }
     private func setCancelled(_ item: PlanItem, _ cancelled: Bool, on day: Day) {
         guard daySwipeInteraction.allowsItemActions else { return }
-        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { store.setCancelled(item, cancelled, on: day) }
+        if !reduceMotion { FrameRateBoost.shared.request(for: .milliseconds(500)) }
+        withAnimation(ItemStatusMotion.animation(reduceMotion: reduceMotion)) { store.setCancelled(item, cancelled, on: day) }
     }
     private func setReviewing(_ value: Bool) {
         setFilter(value ? .review : .all)
@@ -1265,13 +1458,13 @@ struct DayView: View {
         let deadline = filter == .deadlines
         let message: String
         if reminder, let time = item.displayedReminder(now: now) {
-            message = time.formatted(date: Day(time) == day ? .omitted : .abbreviated, time: .shortened)
+            message = "Reminder " + time.formatted(date: Day(time) == day ? .omitted : .abbreviated, time: .shortened)
                 + (item.reminders.count > 1 ? " · \(item.reminders.count) reminders" : "")
         } else if deadline, let due = item.deadline {
             // The reminder panel's format: a custom pattern is built on first use, which stalled the
             // filter's opening animation the first time.
             let when = due.formatted(date: Day(due) == day ? .omitted : .abbreviated, time: .shortened)
-            message = due <= now ? "Was due \(when)" : "Due \(when)"
+            message = due <= now ? "Deadline passed · \(when)" : "Deadline \(when)"
         } else if let carried = carriedDestination(item, from: day) {
             message = "Unfinished, carried to \(carried)"
         } else {
@@ -1313,6 +1506,10 @@ struct DayView: View {
                 action.action()
             }
         })
+        // Replace a filter’s contents atomically inside the persistent reveal frame.
+        // Reusing its symbols animated deadline glyphs over review labels on first opening.
+        .id(filter)
+        .transition(.identity)
     }
     private func itemTitle(_ item: PlanItem, isCarriedEntry: Bool = false) -> some View {
         Text(item.title).font(.body.weight(.medium))
@@ -1392,7 +1589,7 @@ private struct FilteredItemPanel: View {
             }
             .foregroundStyle(tint)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel((symbol == "alarm" ? "Reminder: " : "Warning: ") + message)
+            .accessibilityLabel(symbol == "alarm" || symbol == "flag" ? message : "Warning: " + message)
             Group {
                 if dynamicTypeSize.isAccessibilitySize {
                     VStack(spacing: 0) { actionButtons }
@@ -1534,18 +1731,13 @@ final class FrameRateBoost: NSObject {
     @objc private func tick() {}
 }
 
-/// Anytime's rows in a compact-only `DayTimelineLayout`, remeasured when switching views under
-/// a filter: in Time view the filtered-out rows keep their height (`FilterCollapse`).
+/// Anytime uses the same compact row measurements and filter collapse in both modes.
 private struct AnytimeLayout<Content: View>: View {
-    var contentKey: TimelineContentKey
+    let contentKey: TimelineContentKey
     @ViewBuilder let content: Content
-    @Environment(ViewMode.self) private var mode
 
     var body: some View {
-        var key = contentKey
-        // Only read under a filter, so switching views without one doesn't update Anytime.
-        key.keepsFilteredSpace = key.filter != 0 && mode.showingTime
-        return DayTimelineLayout(startMinute: 0, laneCount: 1, contentKey: key, compactOnly: true, progress: 0) { content }
+        DayTimelineLayout(startMinute: 0, laneCount: 1, contentKey: contentKey, compactOnly: true, progress: 0) { content }
     }
 }
 
@@ -1579,14 +1771,9 @@ private struct ModeRowVariant: ViewModifier {
     func body(content: Content) -> some View {
         let active = mode.showingTime == isTimed
         content
-            .opacity(active ? 1 : 0)
-            // Both variants share a position, so additive blending keeps
-            // identical pixels fully opaque instead of dipping to 75%
-            // halfway through a normal crossfade. Only while switching: a row
-            // blended this way that moved in from off screen (a filter
-            // closing up the list above) stayed undrawn until the move ended.
-            .blendMode(mode.switching ? .plusLighter : .normal)
-            .animation(ViewMode.animation(reduceMotion: reduceMotion), value: mode.showingTime)
+            // Switch the visible endpoint copy immediately; animate its position rather
+            // than crossfading opaque cards and exposing the now line beneath them.
+            .animation(nil) { $0.opacity(active ? 1 : 0) }
             .allowsHitTesting(active)
             .accessibilityHidden(!active)
             .accessibilitySortPriority(mode.showingTime ? 0 : compactSortPriority)
@@ -1623,8 +1810,9 @@ private struct ScrollsToNowInTimeView: ViewModifier {
     }
 }
 
-/// Opening a filter brings its topmost item into view, in the upper part of the screen below
-/// the top controls, alongside the rows collapsing around it.
+private enum DayScrollTarget: Hashable { case top }
+
+/// Native scroll targets participate in the same transaction as the filter layout.
 private struct ScrollsToFilteredItem: ViewModifier {
     enum Target: Equatable { case anytime(UUID), scheduled(UUID) }
     let proxy: ScrollViewProxy
@@ -1635,16 +1823,34 @@ private struct ScrollsToFilteredItem: ViewModifier {
     @Environment(ViewMode.self) private var mode
 
     func body(content: Content) -> some View {
-        content.onChange(of: filter) { _, filter in
-            guard filter != 0, let target else { return }
-            // The same ids the rows carry: the Time view copy of a scheduled row is the item's
-            // own id, its List view copy "list-…"; Anytime rows are "anytime-…" in both views.
-            let id: AnyHashable = switch target {
-            case .anytime(let id): AnyHashable("anytime-\(id)")
-            case .scheduled(let id): mode.showingTime ? AnyHashable(id) : AnyHashable("list-\(id)")
+        content.onChange(of: filter) { _, current in
+            // List’s collapsing rows already bring the first match up.
+            guard mode.showingTime else { return }
+            let id: AnyHashable
+            if current == 0 {
+                id = AnyHashable(DayScrollTarget.top)
+            } else {
+                guard let target else { return }
+                switch target {
+                case .anytime(let itemID): id = AnyHashable("anytime-time-\(itemID)")
+                case .scheduled(let itemID): id = AnyHashable(itemID)
+                }
             }
-            withAnimation(animation) { proxy.scrollTo(id, anchor: UnitPoint(x: 0.5, y: 0.3)) }
+            withAnimation(animation) { proxy.scrollTo(id, anchor: .top) }
         }
+    }
+}
+
+/// Allow even a late final item to reach the top, without adding anything to each row.
+private struct FilterScrollRoom: View {
+    let filtered: Bool
+    @Environment(ViewMode.self) private var mode
+
+    var body: some View {
+        Color.clear
+            .containerRelativeFrame(.vertical) { height, _ in filtered && mode.showingTime ? height : 0 }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }
 
@@ -1815,7 +2021,9 @@ private struct TimelineOverflowReport: ViewModifier {
         let edge: TimelineOverflow.Edge?
         let centre: CGFloat
     }
-    @State private var position: Position?
+    // Updating measured coordinates must not invalidate the row on every animation frame.
+    private final class Measurement { var position: Position? }
+    @State private var measurement = Measurement()
 
     func body(content: Content) -> some View {
         let active = isTimed && shown && mode.showingTime
@@ -1832,10 +2040,15 @@ private struct TimelineOverflowReport: ViewModifier {
                 else if page.maxY + overflow.reach.bottom <= 0 { edge = .below }
                 else { edge = nil }
                 return Position(edge: edge, centre: centre)
-            } action: { position = $0 }
-            // Also publish when a cached neighbouring page gains the tracker.
-            .onChange(of: overflow.map { _ in active ? position : nil }, initial: true) { _, report in
-                let position = report ?? nil
+            } action: { position in
+                measurement.position = position
+                if active {
+                    overflow?.set(position.edge, for: id, on: day, minute: minute, centre: position.centre)
+                }
+            }
+            // Also publish when the row becomes visible or a cached page gains the tracker.
+            .onChange(of: overflow.map { _ in active }, initial: true) { _, tracking in
+                let position = tracking == true ? measurement.position : nil
                 overflow?.set(position?.edge, for: id, on: day, minute: minute, centre: position?.centre)
             }
             .onDisappear { overflow?.set(nil, for: id, on: day, minute: minute) }
@@ -1863,13 +2076,18 @@ private struct TimelineOverflowScroll: ViewModifier {
 
 /// The dock's glass ends 12 points above its safe-area anchor. Lower it towards a
 /// 24-point screen-edge margin, without raising it on screens with a small bottom inset.
-private enum DayDockLayout {
+enum DayDockLayout {
     static func lowering(for bottomSafeArea: CGFloat) -> CGFloat {
         max(0, bottomSafeArea - 12)
     }
 
     static func contentInset(for bottomSafeArea: CGFloat) -> CGFloat {
         bottomSafeArea + 94 - lowering(for: bottomSafeArea)
+    }
+
+    /// How far above the screen's bottom the dock's glass starts.
+    static func glassTop(for bottomSafeArea: CGFloat) -> CGFloat {
+        contentInset(for: bottomSafeArea) - 26
     }
 }
 
@@ -2225,8 +2443,8 @@ private struct TimelineEntry: Equatable {
         let assignments = TimelineLanes.assign(starts: own.map(\.minute), ends: own.map(\.endMinute))
         return Dictionary(uniqueKeysWithValues: zip(own.map(\.id), assignments))
     }
-    /// There's no axis line: the tracks are the timeline, the first one where the axis was.
-    static func laneX(_ lane: Int) -> CGFloat { TimelineNowMarker.axisX + CGFloat(lane) * laneSpacing }
+    /// Leave breathing room between the time labels and the first track.
+    static func laneX(_ lane: Int) -> CGFloat { TimelineNowMarker.axisX + 8 + CGFloat(lane) * laneSpacing }
     /// Wide enough that parallel tracks read as separate bars rather than one thick one.
     static let laneSpacing: CGFloat = 10
 }
@@ -2365,9 +2583,8 @@ private struct TimelineCollapsedKey: LayoutValueKey {
 /// returns from where it is rather than appearing at its final spot.
 private struct FilterCollapse: ViewModifier {
     let collapsed: Bool
-    /// For what sits above the timeline: in Time view it only fades and keeps its height, so
-    /// the timeline below never moves when a filter opens or closes. Collapsing it moved the
-    /// timeline by its whole height, and leaving a filter pushed what was on screen away.
+    /// The Scheduled heading keeps its own space in Time view so its axis stays below the
+    /// heading. Anytime rows and their heading collapse identically in both modes.
     var keepsSpaceInTimeView = false
     @Environment(ViewMode.self) private var mode: ViewMode?
 
@@ -2410,16 +2627,6 @@ private struct SharedScheduleVisibility: ViewModifier {
     }
 }
 
-/// Cards drop their opaque backing while List and Time switch, so the row copies moving
-/// between them don't cover the timeline scale with white.
-private struct CardBackingWhileSwitching: ViewModifier {
-    @Environment(ViewMode.self) private var mode: ViewMode?
-
-    func body(content: Content) -> some View {
-        content.environment(\.itemCardUnbacked, mode?.switching == true)
-    }
-}
-
 /// The shared time label, shown only while List and Time view switch.
 private struct SharedLabelVisibility: ViewModifier {
     let shown: Bool
@@ -2430,8 +2637,16 @@ private struct SharedLabelVisibility: ViewModifier {
     }
 }
 
+private struct InlineFocusPhase: Equatable {
+    var id: UUID? = nil
+    var ending = false
+    var revision = 0
+}
+
 private struct TimelineContentKey: Equatable {
     let items: [PlanItem]
+    /// "Shared" can add a line to a row.
+    var sharedZones: Set<String> = []
     let day: Day
     let order: [UUID]
     let markers: [[Bool]]
@@ -2439,8 +2654,8 @@ private struct TimelineContentKey: Equatable {
     let showNow: Bool
     let timeNotes: [Bool]
     let typeSize: DynamicTypeSize
-    /// Anytime rows keep their height under a filter in Time view, so their measurements differ.
-    var keepsFilteredSpace = false
+    var inlineFocus = InlineFocusPhase()
+
 }
 
 // Measure the two endpoint layouts once, then only interpolate positions while
@@ -2627,32 +2842,50 @@ private struct DayTimelineLayout: Layout {
     }
 }
 
-private struct TimelineConnector: View {
-    let complete: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private func curve(_ color: Color) -> some View {
-        Canvas(rendersAsynchronously: true) { context, size in
-            let endY = max(0, size.height - 1)
-            var connector = Path()
-            connector.move(to: .zero)
-            connector.addCurve(to: CGPoint(x: size.width, y: endY),
-                               control1: CGPoint(x: 9, y: 0),
-                               control2: CGPoint(x: size.width - 11, y: endY))
-            context.stroke(connector, with: .color(color), lineWidth: 1)
+
+/// A vector curve, so its stroke colour interpolates with the dot and bar. Canvas
+/// colours switched immediately even when the surrounding view had an animation.
+private struct TimelineConnectorCurve: Shape {
+    func path(in rect: CGRect) -> Path {
+        let inset: CGFloat = 0.5
+        let start = CGPoint(x: inset, y: inset)
+        let end = CGPoint(x: max(inset, rect.width - inset), y: max(inset, rect.height - inset))
+        // Symmetric handles scale with the gap, keeping a horizontal tangent at both
+        // ends instead of the tight, uneven bends from fixed 9/11-point handles.
+        let handle = (end.x - start.x) * 0.5
+        return Path { path in
+            path.move(to: start)
+            path.addCurve(to: end,
+                          control1: CGPoint(x: start.x + handle, y: start.y),
+                          control2: CGPoint(x: end.x - handle, y: end.y))
         }
     }
+}
+
+/// Both parts use the same animation policy, including when focus or completion ends.
+private struct TimelineTrackTransition: ViewModifier {
+    let complete: Bool
+    let focused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.35), value: complete)
+            .animation(FocusedItemMotion.animation(reduceMotion: reduceMotion), value: focused)
+    }
+}
+
+private struct TimelineConnector: View {
+    let complete: Bool
+    let focused: Bool
+
     var body: some View {
-        // The open curve fades over the finished one, with the track's own animation, so a
-        // ticked-off item's connector and track grey together. A colour change inside one
-        // canvas switched in one frame; dimming the whole view left it see-through.
-        ZStack {
-            curve(TimelineTrack.finishedBar)
-            curve(TimelineTrack.openBar)
-                .opacity(complete ? 0 : 1)
-                .animation(reduceMotion ? nil : .easeInOut(duration: 0.35), value: complete)
-        }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        TimelineConnectorCurve()
+            .stroke(focused ? TimelineTrack.focusedBar : complete ? TimelineTrack.finishedBar : TimelineTrack.openBar,
+                    style: StrokeStyle(lineWidth: 1, lineCap: .round, lineJoin: .round))
+            .modifier(TimelineTrackTransition(complete: complete, focused: focused))
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }
 
@@ -2714,20 +2947,29 @@ private struct TimelineScale: View, Equatable {
     }
 }
 
+/// Dimensions shared by timeline layout and tracks.
+enum TimelineTrackSize {
+    static let width: CGFloat = 4
+    static let dot: CGFloat = 8
+}
+
 /// One item's dot and duration bar. Views of their own rather than part of a canvas, so a
 /// change of colour fades: ticking an item off greys its track, and the review filter turns
 /// it orange. A canvas redrew the whole drawing in one frame.
 private struct TimelineTrack: View {
     /// Cards sit wherever there's room, so their size and place don't show an item's time; the
     /// track does, and has to be bold enough to read at a glance and to follow to its card.
-    static let width: CGFloat = 4
-    static let dotSize: CGFloat = 8
+    static let width = TimelineTrackSize.width
+    static let dotSize = TimelineTrackSize.dot
     /// Solid greys rather than translucent ones: where a dot, bar or connector crossed another,
     /// or the passed-time wash, a translucent one showed through as a darker patch.
     static let openBar = grey(light: 0.75, dark: 0.3)
     static let openDot = grey(light: 0.4, dark: 0.62)
     static let finishedBar = grey(light: 0.9, dark: 0.16)
     static let finishedDot = grey(light: 0.8, dark: 0.24)
+    static let focusedBar = grey(light: 0.38, dark: 0.72)
+    // Keep the review dot distinct without translucent overlaps along the track.
+    static let reviewBar = Color.orange.mix(with: Color(uiColor: .systemBackground), by: 0.4)
     private static func grey(light: CGFloat, dark: CGFloat) -> Color {
         Color(UIColor { UIColor(white: $0.userInterfaceStyle == .dark ? dark : light, alpha: 1) })
     }
@@ -2735,7 +2977,7 @@ private struct TimelineTrack: View {
     let lane: Int
     let startMinute: Double
     let orange: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let focused: Bool
 
     private func y(_ minute: Double) -> CGFloat {
         DayTimelineLayout.top + CGFloat(minute - startMinute) * DayTimelineLayout.pointsPerMinute
@@ -2749,18 +2991,18 @@ private struct TimelineTrack: View {
                 // As tall as a round-capped stroke from start to end.
                 let w = Self.width
                 Capsule()
-                    .fill(orange ? Color.orange : entry.complete ? Self.finishedBar : Self.openBar)
+                    .fill(focused ? Self.focusedBar : orange ? Self.reviewBar : entry.complete ? Self.finishedBar : Self.openBar)
                     .frame(width: w, height: endY - startY + w)
                     .offset(x: x - w / 2, y: startY - w / 2)
             }
             let d = Self.dotSize
             Circle()
-                .fill(orange ? Color.orange : entry.complete ? Self.finishedDot : Self.openDot)
+                .fill(focused ? Color.primary : orange ? Color.orange : entry.complete ? Self.finishedDot : Self.openDot)
                 .frame(width: d, height: d)
                 .offset(x: x - d / 2, y: startY - d / 2)
         }
-        // Completion reaches the store once the row's circle and strike have finished.
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.35), value: entry.complete)
+        // Track colours share the item’s completion update.
+        .modifier(TimelineTrackTransition(complete: entry.complete, focused: focused))
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
@@ -2867,17 +3109,22 @@ private final class DaySwipeInteraction: ObservableObject {
 // label updates must not rebuild three pages during a horizontal animation.
 private struct DayPageRevision: Equatable {
     let items: [PlanItem]
+    let sharedZones: Set<String>
     let filter: Int
     let panelFilter: Int
     let minute: Int
     let typeSize: DynamicTypeSize
     let insets: EdgeInsets
     let reduceMotion: Bool
+    // Focus recolours the visible page's existing tracks without rebuilding its neighbours.
+    let focusedID: UUID?
+    let focusEnding: Bool
+    let focusDetailsRevision: Int
 
     func hasSameUnfilteredContent(as other: Self) -> Bool {
         // The two neighbouring pages always show All. Filter and status-panel changes
         // belong to the visible page and must not invalidate those neighbours.
-        items == other.items && minute == other.minute && typeSize == other.typeSize
+        items == other.items && sharedZones == other.sharedZones && minute == other.minute && typeSize == other.typeSize
             && insets == other.insets && reduceMotion == other.reduceMotion
     }
 }
@@ -3006,6 +3253,7 @@ private struct DayPager: UIViewControllerRepresentable {
         private var settlingDay: Day?
         private var notifyOnSettle = false
         private var warmTask: Task<Void, Never>?
+        private var previewWarmAfter: ContinuousClock.Instant?
         private var size: CGSize = .zero
         private var dragging = false
         private var dragOrigin: CGFloat = 0
@@ -3046,11 +3294,33 @@ private struct DayPager: UIViewControllerRepresentable {
                 }
             }
         }
-        /// `animation` is that of the update being shown now; a deferred refresh shows it unanimated.
         func refreshIfIdle(animation: Animation? = nil) {
             guard !dragging, animator == nil, requestedDay == day, !interaction.holdsPageWork else { return }
             if displayedRevision != latestRevision {
-                host.setContent(latestContent, animation: animation)
+                let filterChanged = displayedRevision.map { $0.filter != latestRevision.filter } ?? false
+                let statusChanged = displayedRevision.map {
+                    $0.items.map(\.isSettled) != latestRevision.items.map(\.isSettled)
+                } ?? false
+                if statusChanged && !reduceMotion {
+                    // Measuring two offscreen days competes with the visible tick/strike.
+                    // Restart the quiet period on another toggle, without delaying the item.
+                    previewWarmAfter = .now.advanced(by: .milliseconds(450))
+                    warmTask?.cancel()
+                    warmTask = nil
+                }
+                // The first hosted update can arrive without its originating transaction.
+                // Measure the outgoing page and derive filter motion from displayed state,
+                // including when a refresh was deferred while the calendar or pager moved.
+                if filterChanged { host.view.layoutIfNeeded() }
+                let pageAnimation: Animation?
+                if filterChanged {
+                    pageAnimation = reduceMotion ? nil : .smooth(duration: 0.5)
+                } else if statusChanged {
+                    pageAnimation = ItemStatusMotion.animation(reduceMotion: reduceMotion)
+                } else {
+                    pageAnimation = animation
+                }
+                host.setContent(latestContent, animation: pageAnimation)
                 displayedRevision = latestRevision
             }
             scheduleWarm()
@@ -3058,8 +3328,14 @@ private struct DayPager: UIViewControllerRepresentable {
         private func scheduleWarm() {
             guard warmTask == nil, !dragging, animator == nil, requestedDay == day, size.width > 0,
                   !interaction.isFiltering else { return }
+            let warmAfter = previewWarmAfter
             warmTask = Task { [weak self] in
-                await Task.yield()
+                if let warmAfter, warmAfter > .now {
+                    do { try await ContinuousClock().sleep(until: warmAfter) }
+                    catch { return }
+                } else {
+                    await Task.yield()
+                }
                 guard !Task.isCancelled, let self else { return }
                 self.warmTask = nil
                 guard !self.dragging, self.animator == nil, self.requestedDay == self.day,

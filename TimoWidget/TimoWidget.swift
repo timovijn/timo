@@ -78,12 +78,12 @@ struct TodayView: View {
                 default: ring(progress)
                 }
             } else {
-                Text("Open timo")
+                Text("Open Timo")
             }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(entry.progress.map { $0.total == 0 ? "Nothing planned today" : "\($0.done) of \($0.total) done today" }
-                            ?? "Open timo to show your day")
+                            ?? "Open Timo to show your day")
     }
 
     private func ring(_ progress: DayProgress) -> some View {

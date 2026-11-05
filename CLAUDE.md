@@ -7,6 +7,7 @@ SwiftUI day planner for iOS 26 with a Liquid Glass look. The README describes ev
 - `Sources/TimoCore/Planner.swift`: the Foundation-only model (`Day`, `PlanItem`, `RepeatingPlan`, `Persona`, `Planner`). It's compiled straight into the app target and is the only code under test.
 - `Tests/TimoCoreTests/`: XCTest suite (`PlannerTests`, `RepeatingTests`, `PersonaTests`, `TimelineLaneTests`, `CancelTests`, `SyncTests`, `DayProgressTests`, `VisitTests`, `DayGuideTests`, `SearchTests`, `DateSearchTests`).
 - `Timo/DayView.swift`: the main screen (day pager, dock, date control and calendar, list/time views, rows). It's large; search it with grep and read only the part you need.
+- `Timo/FocusedItem.swift`: the **focussed state**, Timo's name for the long-pressed state: the card expands in place with its history and Cancel and Delete. Holding an item or tapping its Live Activity brings it up.
 - `Timo/ItemEditor.swift`: the item editor (schedule/reminder pills, persona chips, location/people pills, (i) explanations).
 - `Timo/PersonaViews.swift`: persona orb, top-left persona menu, persona history page, long-press delete.
 - `Timo/SearchView.swift`: search: the button beside the persona button that grows into the field in a row under the top controls (`SearchLayer`), the pull that draws it down (`SearchPull`, `PullsToSearch`) and the page-hiding `SearchBackdrop`. Results are the day list's own rows; the persona scopes them and the day's filter buttons count and narrow them (`searchFilter` in `DayView`); matching lives in `Planner.search`, and dates in a query are read by `SearchQuery`.
@@ -14,7 +15,7 @@ SwiftUI day planner for iOS 26 with a Liquid Glass look. The README describes ev
 - `Timo/PlanLocation.swift`: where the plan file lives (the App Group's shared container when available; one file on the Mac shared by all simulators), compiled into the app and the widget.
 - `TimoWidget/TimoWidget.swift`: the lock screen widget extension (today's done count); it also compiles `Planner.swift`.
 - `Timo/GuideActivity.swift` (app and widget): Live Activity attributes, persona colours and the Complete intent; `TimoWidget/GuideLiveActivity.swift` draws it; `Timo/DayGuideActivities.swift` starts, schedules and ends the activities ("Guide my day").
-- `Timo/CloudSync.swift`: iCloud sync with `CKSyncEngine` (one JSON record per item and repeating plan); every `PlanStore.commit` queues its changes.
+- `Timo/CloudSync.swift`: iCloud sync with `CKSyncEngine` (one JSON record per item and repeating plan); every `PlanStore.commit` queues its changes. Sharing is here too (a zone per shared item, a second engine for the shared database); `Timo/CloudSharing.swift` has the app and scene delegates that receive links and the system sharing sheet.
 - A new Swift file in `Timo/` must also be added to `Timo.xcodeproj/project.pbxproj` (PBXBuildFile, PBXFileReference, group child and Sources phase).
 
 ## Commands

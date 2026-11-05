@@ -74,6 +74,19 @@ final class SyncTests: XCTestCase {
         Planner.mergeDuplicateOccurrences(&items)
         XCTAssertEqual(items.map(\.id), [derived.id])
     }
+    func testSharingLeavesOutPersonalDetails() {
+        var item = PlanItem(title: "Dinner", notes: "Book a table", day: Day(date(26)))
+        item.personal = PersonalDetails(reminders: [date(26)], personas: [.work], suggestionDismissed: true)
+        item.completedAt = date(26, hour: 21)
+        let shared = item.forSharing
+        XCTAssertEqual(shared.personal, PersonalDetails())
+        XCTAssertEqual(shared.title, "Dinner")
+        XCTAssertEqual(shared.completedAt, item.completedAt, "One person's tick completes it for everyone")
+        var repainted = item
+        repainted.personal = PersonalDetails(personas: [.family])
+        XCTAssertEqual(repainted.forSharing, shared, "A personal change leaves the shared item as it was")
+    }
+
     func testPersonalDetailsRoundTrip() {
         var item = PlanItem(title: "Call", day: day(26))
         item.personal = PersonalDetails(reminders: [date(26)], personas: [.work, .family], suggestionDismissed: true)

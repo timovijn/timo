@@ -1,5 +1,4 @@
 import Foundation
-import Observation
 import Combine
 import UserNotifications
 import WidgetKit
@@ -8,13 +7,14 @@ import WidgetKit
     /// One store for the app and for intents run from its Live Activities.
     static let shared = PlanStore()
     @Published private(set) var items: [PlanItem] = []
-    let completionPresentation = CompletionPresentation()
     let cloud = CloudSync()
     private let guide = DayGuideActivities()
     private var series: [RepeatingPlan] = []
     var repeatingPlans: [RepeatingPlan] { series }
     private var displayedDay = Day(Date())
     @Published var errorMessage: String?
+    /// Kept until the day view is ready, including when a reminder launches the app.
+    @Published var reminderItemToFocus: UUID?
     /// The most recent deletion, offered for undoing until it is undone or dismissed.
     @Published var lastDeletion: PlanDeletion?
     private weak var deletionUndoManager: UndoManager?
@@ -402,14 +402,14 @@ import WidgetKit
 private final class ReminderNotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
     static let shared = ReminderNotificationDelegate()
     func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse) async {
+        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+              let value = response.notification.request.content.userInfo["itemID"] as? String,
+              let id = UUID(uuidString: value) else { return }
+        await MainActor.run { PlanStore.shared.reminderItemToFocus = id }
+    }
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         [.banner, .sound]
     }
-}
-
-/// Transient feedback stays separate from saved completion, so drawing a tick or
-/// striking a title cannot reorder or remove the item before the animation finishes.
-@Observable @MainActor final class CompletionPresentation {
-    var pending: Set<UUID> = []
-    var striking: Set<UUID> = []
 }

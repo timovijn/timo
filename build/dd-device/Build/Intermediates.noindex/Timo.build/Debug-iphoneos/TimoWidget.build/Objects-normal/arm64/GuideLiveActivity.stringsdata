@@ -1,0 +1,80 @@
+{
+  "source": "/Users/timovijn/Timo/GitHub/timo/TimoWidget/GuideLiveActivity.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "%@–%@",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 75
+        }
+      },
+      {
+        "comment": "",
+        "key": "Complete %@",
+        "location": {
+          "startingColumn": 37,
+          "startingLine": 111
+        }
+      },
+      {
+        "comment": "",
+        "key": "Next: %@ · %@",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 98
+        }
+      },
+      {
+        "comment": "",
+        "key": "Complete",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 105
+        }
+      },
+      {
+        "comment": "",
+        "key": "Ends at %@",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 130
+        }
+      },
+      {
+        "comment": "",
+        "key": "Time’s up",
+        "location": {
+          "startingColumn": 37,
+          "startingLine": 125
+        }
+      },
+      {
+        "comment": "",
+        "key": "Time’s up",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 141
+        }
+      },
+      {
+        "comment": "",
+        "key": "Ends at %@",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 152
+        }
+      },
+      {
+        "comment": "",
+        "key": "left",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 149
+        }
+      }
+    ]
+  },
+  "version": 1
+}

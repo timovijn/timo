@@ -235,8 +235,15 @@ struct ItemEditor: View {
                         .id("people")
                 }
                 Section("Notes") { TextField("Anything to remember", text: $item.notes, axis: .vertical).lineLimit(3...8) }
+                if existing && CloudSync.isAvailable { sharingSection }
                 if existing {
                     Section {
+                        Button {
+                            Planner.setCancelled(!item.isCancelled, &item, on: viewingDay, now: Date())
+                        } label: {
+                            Label(item.isCancelled ? "Uncancel item" : "Cancel item",
+                                  systemImage: item.isCancelled ? "arrow.uturn.backward.circle" : "xmark.circle")
+                        }
                         if item.seriesID == nil {
                             // No confirmation: the Undo that follows a deletion covers a mistaken tap.
                             Button(role: .destructive) {
@@ -285,7 +292,13 @@ struct ItemEditor: View {
             }
             // Popovers let the editor behind them be used, so close one once the form is dragged.
             .environment(\.popoverShown, PopoverShownAction { popoverShown = $0 })
-            .onScrollPhaseChange { _, phase in if phase == .interacting { editingField = nil } }
+            .onScrollPhaseChange { _, phase in
+                guard phase == .interacting, let field = editingField else { return }
+                Task { @MainActor in
+                    await Task.yield()
+                    if editingField == field { editingField = nil }
+                }
+            }
             }
             .navigationTitle(existing ? "Your item" : "New item").navigationBarTitleDisplayMode(.inline)
             // A quiet note under the title once an existing item differs from what was opened.
@@ -520,6 +533,15 @@ struct ItemEditor: View {
     private var orderedWeekdays: [Int] {
         let first = Calendar.current.firstWeekday
         return (0..<7).map { (first - 1 + $0) % 7 + 1 }
+    }
+    private var sharingSection: some View {
+        Section {
+            Button {
+                SharingSheet.present(for: item, cloud: store.cloud)
+            } label: {
+                Label("Share item", systemImage: "person.2")
+            }
+        }
     }
     private var repeatSection: some View {
         Section {

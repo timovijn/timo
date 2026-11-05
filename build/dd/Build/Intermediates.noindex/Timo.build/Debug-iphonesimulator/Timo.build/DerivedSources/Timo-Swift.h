@@ -347,6 +347,7 @@ extern "C" {
 #pragma clang diagnostic ignored "-Watimport-in-framework-header"
 #endif
 @import ObjectiveC;
+@import UIKit;
 #endif
 
 #endif // defined(__OBJC__)
@@ -372,6 +373,44 @@ extern "C" {
 
 SWIFT_CLASS("_TtC4Timo14FrameRateBoost")
 @interface FrameRateBoost : NSObject
+- (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
+@end
+
+@class UICloudSharingController;
+@class NSString;
+/// The system’s sheet for inviting people to a share and seeing who’s in it. Presented from
+/// UIKit: inside a SwiftUI sheet it’s a sheet within a sheet and comes up blank.
+SWIFT_CLASS("_TtC4Timo12SharingSheet")
+@interface SharingSheet : NSObject <UICloudSharingControllerDelegate>
+- (NSString * _Nullable)itemTitleForCloudSharingController:(UICloudSharingController * _Nonnull)csc SWIFT_WARN_UNUSED_RESULT;
+- (void)cloudSharingController:(UICloudSharingController * _Nonnull)csc failedToSaveShareWithError:(NSError * _Nonnull)error;
+- (void)cloudSharingControllerDidSaveShare:(UICloudSharingController * _Nonnull)csc;
+- (void)cloudSharingControllerDidStopSharing:(UICloudSharingController * _Nonnull)csc;
+- (nonnull instancetype)init SWIFT_UNAVAILABLE;
++ (nonnull instancetype)new SWIFT_UNAVAILABLE_MSG("-init is unavailable");
+@end
+
+@class UIApplication;
+@class UISceneSession;
+@class UISceneConnectionOptions;
+@class UISceneConfiguration;
+/// Receives share links. An app without a scene delegate of its own never hears of one.
+SWIFT_CLASS("_TtC4Timo15TimoAppDelegate")
+@interface TimoAppDelegate : NSObject <UIApplicationDelegate>
+- (UISceneConfiguration * _Nonnull)application:(UIApplication * _Nonnull)application configurationForConnectingSceneSession:(UISceneSession * _Nonnull)session options:(UISceneConnectionOptions * _Nonnull)options SWIFT_WARN_UNUSED_RESULT;
+- (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
+@end
+
+@class UIScene;
+@class UIWindowScene;
+@class CKShareMetadata;
+SWIFT_CLASS("_TtC4Timo17TimoSceneDelegate")
+@interface TimoSceneDelegate : NSObject <UIWindowSceneDelegate>
+/// Just after opening, so the first search doesn’t pay for it.
+- (void)sceneDidBecomeActive:(UIScene * _Nonnull)scene;
+/// A link that opens the app arrives here rather than below.
+- (void)scene:(UIScene * _Nonnull)scene willConnectToSession:(UISceneSession * _Nonnull)session options:(UISceneConnectionOptions * _Nonnull)options;
+- (void)windowScene:(UIWindowScene * _Nonnull)windowScene userDidAcceptCloudKitShareWithMetadata:(CKShareMetadata * _Nonnull)metadata;
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
 

@@ -1,0 +1,64 @@
+{
+  "source": "/Users/timovijn/Timo/GitHub/timo/Timo/FocusedItem.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Close",
+        "location": {
+          "startingColumn": 41,
+          "startingLine": 46
+        }
+      },
+      {
+        "comment": "",
+        "key": "Showing choices",
+        "location": {
+          "startingColumn": 56,
+          "startingLine": 101
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 76,
+          "startingLine": 101
+        }
+      },
+      {
+        "comment": "",
+        "key": "Uncancel",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 91
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 93
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 99
+        }
+      },
+      {
+        "comment": "",
+        "key": "Show details and actions",
+        "location": {
+          "startingColumn": 45,
+          "startingLine": 217
+        }
+      }
+    ]
+  },
+  "version": 1
+}
