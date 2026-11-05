@@ -351,6 +351,7 @@ struct CompletionButton<Icon: View>: View {
 
     private var showsCheck: Bool { item.isComplete && !keepsCarriedArrow }
     private var showsCross: Bool { item.isCancelled && !keepsCarriedArrow }
+    private var glyphKind: Int { showsCheck ? -1 : showsCross ? 1 : 0 }
 
     var body: some View {
         Button {
@@ -362,20 +363,11 @@ struct CompletionButton<Icon: View>: View {
             }
         } label: {
             ZStack {
-                icon().opacity(showsCheck ? 0 : 1)
-                // Keep the cross outside the changing progress/outline icon, so restoring
-                // a timed item cannot remove it before its erase animation finishes.
-                CrossMark(progress: showsCross ? 1 : 0)
-                    .stroke(style: StrokeStyle(lineWidth: CompletionCircle.lineWidth, lineCap: .round))
-                    .foregroundStyle(.tertiary)
-                    .padding(CompletionCircle.diameter * 0.32)
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: showsCross)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-                CheckedCompletionCircle(filled: showsCheck)
+                icon()
+                // The same two strokes reshape between check and cross.
+                CompletionStatusGlyph(kind: glyphKind)
                     .allowsHitTesting(false)
             }
-            .animation(ItemStatusMotion.animation(reduceMotion: reduceMotion), value: showsCheck)
             .frame(width: CompletionCircle.diameter, height: CompletionCircle.diameter)
             .frame(width: 44, height: 44)
             .contentShape(Rectangle())
@@ -423,43 +415,66 @@ struct OutlinedCompletionCircle: View {
     }
 }
 
-/// One reversible progress value: fill first, then draw; erase first, then unfill.
-private struct CheckedCompletionCircle: View, Animatable {
-    var progress: CGFloat
+/// Keep the last glyph while erasing; changing settled states reshapes its strokes.
+private struct CompletionStatusGlyph: View {
+    let kind: Int
+    @State private var progress: CGFloat
+    @State private var morph: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(filled: Bool) { progress = filled ? 1 : 0 }
-
-    var animatableData: CGFloat {
-        get { progress }
-        set { progress = newValue }
+    init(kind: Int) {
+        self.kind = kind
+        _progress = State(initialValue: kind == 0 ? 0 : 1)
+        _morph = State(initialValue: kind == 1 ? 1 : 0)
     }
 
     var body: some View {
-        let disc = min(1, max(0, progress / 0.2))
-        let tick = min(1, max(0, (progress - 0.2) / 0.8))
-        ZStack {
-            Circle()
-                .fill(Color(.tertiaryLabel))
-                // An opaque backing keeps the returning outline from tinting the disc.
-                .background(Color(.systemBackground), in: Circle())
-                .scaleEffect(disc)
-            TickMark()
-                .trim(from: 0, to: tick)
-                .stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                .blendMode(.destinationOut)
-        }
-        .compositingGroup()
-        .frame(width: CompletionCircle.diameter, height: CompletionCircle.diameter)
-        .accessibilityHidden(true)
+        CompletionGlyphShape(progress: progress, morph: morph)
+            .stroke(style: StrokeStyle(lineWidth: CompletionCircle.lineWidth, lineCap: .round, lineJoin: .round))
+            .foregroundStyle(.tertiary)
+            .frame(width: CompletionCircle.diameter, height: CompletionCircle.diameter)
+            .accessibilityHidden(true)
+            .onChange(of: kind) { _, kind in
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.3)) {
+                    progress = kind == 0 ? 0 : 1
+                    if kind != 0 { morph = kind == 1 ? 1 : 0 }
+                }
+            }
     }
 }
 
-private struct TickMark: Shape {
+/// Interpolate endpoints instead of cross-fading glyphs or passing through an empty circle.
+private struct CompletionGlyphShape: Shape {
+    var progress: CGFloat
+    var morph: CGFloat
+    var animatableData: AnimatablePair<CGFloat, CGFloat> {
+        get { AnimatablePair(progress, morph) }
+        set { progress = newValue.first; morph = newValue.second }
+    }
+
     func path(in rect: CGRect) -> Path {
-        Path { path in
-            path.move(to: CGPoint(x: rect.minX + rect.width * 0.29, y: rect.minY + rect.height * 0.52))
-            path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.44, y: rect.minY + rect.height * 0.67))
-            path.addLine(to: CGPoint(x: rect.minX + rect.width * 0.72, y: rect.minY + rect.height * 0.36))
+        let blend = min(1, max(0, morph))
+        let drawn = min(1, max(0, progress))
+        func point(_ x: CGFloat, _ y: CGFloat, _ crossX: CGFloat, _ crossY: CGFloat) -> CGPoint {
+            CGPoint(x: rect.minX + rect.width * (x + (crossX - x) * blend),
+                    y: rect.minY + rect.height * (y + (crossY - y) * blend))
+        }
+        let firstStart = point(0.29, 0.52, 0.32, 0.32)
+        let firstEnd = point(0.44, 0.67, 0.68, 0.68)
+        let secondStart = point(0.44, 0.67, 0.68, 0.32)
+        let secondEnd = point(0.72, 0.36, 0.32, 0.68)
+        // Preserve sequential drawing/erasing, with equal stroke times for the cross.
+        let split = 0.336 + (0.5 - 0.336) * blend
+        return Path { path in
+            func stroke(_ start: CGPoint, _ end: CGPoint, _ amount: CGFloat) {
+                guard amount > 0 else { return }
+                let amount = min(1, amount)
+                path.move(to: start)
+                path.addLine(to: CGPoint(x: start.x + (end.x - start.x) * amount,
+                                        y: start.y + (end.y - start.y) * amount))
+            }
+            stroke(firstStart, firstEnd, drawn / split)
+            stroke(secondStart, secondEnd, (drawn - split) / (1 - split))
         }
     }
 }

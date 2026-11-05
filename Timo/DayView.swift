@@ -253,9 +253,6 @@ struct DayView: View {
                 if focused?.source == .day { focused = nil }
                 filter = .all; store.showDay(day); timelineOverflow.day = day
             }
-            // The card stays focussed under the editor, as ending it there showed the plain row
-            // for a moment as the sheet came up, and goes back once the editor closes.
-            .onChange(of: editing?.id) { _, id in if id == nil { closeFocus() } }
             // Deleted, here or on another device: nothing is left to close, and the page waits.
             .onChange(of: focusedItemIsGone) { _, gone in if gone { focused = nil } }
             .onChange(of: focusedInlineItemIsHidden) { _, hidden in
@@ -1017,7 +1014,9 @@ struct DayView: View {
                                             filter: filter.rawValue, showNow: showNow,
                                             timeNotes: items.map { timeNote($0, day: day) != nil },
                                             typeSize: dynamicTypeSize, inlineFocus: inlineFocusPhase(on: day))
-        return ModeTimelineLayout(startMinute: startMinute, laneCount: (lanes.values.max() ?? 0) + 1,
+        let laneCount = (lanes.values.max() ?? 0) + 1
+        let timeIndicatorWidth = DayTimelineLayout.gutter(laneCount: laneCount) - 8
+        return ModeTimelineLayout(startMinute: startMinute, laneCount: laneCount,
                                   contentKey: contentKey) {
             if isToday, let first = past.first(where: { item in !inProgress.contains { $0.id == item.id } }) {
                 let order = (compactOrder[first.id] ?? 0) - 1
@@ -1104,18 +1103,13 @@ struct DayView: View {
         .background(alignment: .topLeading) {
             ZStack(alignment: .topLeading) {
                 TimelineOverflowAnchor()
-                // The time passed shades the timeline behind the cards (their opaque backing keeps
-                // them clear of it), so what's behind us reads at a glance. Below the scale, and a
-                // plain view, so the minute tick only resizes it.
+                // Fill the clock-and-track gutter. Cards can shift vertically to make
+                // room, so elapsed time stops before them.
                 if let currentMinute, currentMinute >= startMinute {
                     Rectangle()
                         .fill(TimelineNowMarker.passedWash)
-                        .frame(height: DayTimelineLayout.top + CGFloat(currentMinute - startMinute) * DayTimelineLayout.pointsPerMinute)
-                        // From the middle of the first track to the screen edge, past the cards'
-                        // 16-point inset: the hour labels stay on the page colour, and the shading
-                        // reads as the timeline filling up rather than a panel.
-                        .padding(.leading, TimelineEntry.laneX(0))
-                        .padding(.trailing, -16)
+                        .frame(width: timeIndicatorWidth,
+                               height: DayTimelineLayout.top + CGFloat(currentMinute - startMinute) * DayTimelineLayout.pointsPerMinute)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
                 }
@@ -1146,8 +1140,8 @@ struct DayView: View {
                     }
                     .accessibilityHidden(true)
                     TimelineNowMarker(time: now)
-                        // The line runs on to the screen edge, like the wash above it.
-                        .padding(.trailing, -16)
+                        // End beside the last track, leaving a gap before the cards.
+                        .frame(width: timeIndicatorWidth)
                         .offset(y: DayTimelineLayout.top + CGFloat(currentMinute - startMinute) * DayTimelineLayout.pointsPerMinute
                                 - TimelineNowMarker.height / 2)
                 }
@@ -1187,6 +1181,11 @@ struct DayView: View {
         // here acts on that copy; it isn't counted, reviewed or reminded about here, but keeps an
         // orange dot while unfinished so the earlier day still shows it was left open.
         let carried = carriedDestination(item, from: day)
+        let originDate = item.day.date()
+        let originStyle = Date.FormatStyle.dateTime.weekday(.abbreviated).day().month(.abbreviated)
+        let carriedFrom = carried == nil && item.isCarried(now: now) && day == item.liveDay(now: now)
+            ? originDate.formatted(Calendar.current.isDate(originDate, equalTo: now, toGranularity: .year) ? originStyle : originStyle.year())
+            : nil
         let review = hasDot(item, .review, on: day)
         let reminder = hasDot(item, .reminders, on: day)
         let deadline = hasDot(item, .deadlines, on: day)
@@ -1208,16 +1207,13 @@ struct DayView: View {
                         if carried != nil {
                             OutlinedCompletionCircle(glyph: .chevron)
                                 .foregroundStyle(.tertiary)
-                        } else if let progress = timeProgress(item) {
-                            ProgressCircle(progress: progress)
                         } else {
-                            // The button draws and erases the check/cross above this stable outline.
-                            OutlinedCompletionCircle()
-                                .foregroundStyle(item.isCancelled ? .tertiary : .primary)
+                            // The outline stays mounted; only the elapsed arc draws/retracts.
+                            ProgressCircle(progress: timeProgress(item) ?? 0, settled: item.isSettled)
                         }
                     }
                 }
-                .accessibilityValue([carried.map { "Carried to \($0)" }, item.isCancelled ? "Cancelled" : nil,
+                .accessibilityValue([carried.map { "Carried to \($0)" }, carriedFrom.map { "Carried from \($0)" }, item.isCancelled ? "Cancelled" : nil,
                                      carried == nil ? timeProgress(item).flatMap { $0 >= 1 ? "Time passed" : $0 > 0 ? "\(Int($0 * 100))% of the time passed" : nil } : nil,
                                      review ? (item.suggestionDismissed ? "Left open" : "Needs review") : nil, reminder ? "Reminder set" : nil,
                                      deadline ? item.deadline.map { "Deadline \($0.formatted(date: .abbreviated, time: .shortened))" } : nil].compactMap { $0 }.joined(separator: ", "))
@@ -1231,6 +1227,10 @@ struct DayView: View {
                                 .fixedSize(horizontal: false, vertical: true)
                             if let carried {
                                 Text("Carried to \(carried)")
+                                    .font(.caption).foregroundStyle(.tertiary)
+                            }
+                            if let carriedFrom {
+                                Text("Carried from \(carriedFrom)")
                                     .font(.caption).foregroundStyle(.tertiary)
                             }
                             if visiting, item.start() == nil {
@@ -1272,7 +1272,7 @@ struct DayView: View {
                     .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
                     .contentShape(Rectangle())
                 }.buttonStyle(ItemCardPressStyle())
-                    .accessibilityValue([carried.map { "Carried to \($0)" },
+                    .accessibilityValue([carried.map { "Carried to \($0)" }, carriedFrom.map { "Carried from \($0)" },
                                          sharedSchedule && showsTime ? item.start().map { timeLabel(item, start: $0, day: day) } : nil,
                                          timeNote(item, day: day, width: .wide),
                                          // A carried entry's circle doesn't show a tick, so say it here.
@@ -2248,16 +2248,20 @@ private struct ModeSectionHeaderFade: ViewModifier {
 // traced clockwise in dark grey as the time runs, so it reads as ready to tick off once closed.
 private struct ProgressCircle: View {
     let progress: Double
+    let settled: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorSchemeContrast) private var contrast
     private static let lineWidth = CompletionCircle.lineWidth
 
     var body: some View {
         ZStack {
             // Increase Contrast keeps the untouched outline clearly visible.
-            Circle().stroke(Color.primary.opacity(contrast == .increased ? 0.45 : 0.25), lineWidth: Self.lineWidth)
+            Circle().stroke(settled ? Color(.tertiaryLabel) : Color.primary.opacity(contrast == .increased ? 0.45 : 0.25),
+                            lineWidth: Self.lineWidth)
             Circle().trim(from: 0, to: progress)
                 .stroke(Color.primary.opacity(0.6), style: StrokeStyle(lineWidth: Self.lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.25), value: progress)
         }
         .padding(Self.lineWidth / 2)
     }
@@ -2675,7 +2679,10 @@ private struct DayTimelineLayout: Layout {
         get { progress }
         set { progress = newValue }
     }
-    private var gutter: CGFloat { 84 + CGFloat(max(0, laneCount - 1)) * TimelineEntry.laneSpacing }
+    static func gutter(laneCount: Int) -> CGFloat {
+        84 + CGFloat(max(0, laneCount - 1)) * TimelineEntry.laneSpacing
+    }
+    private var gutter: CGFloat { Self.gutter(laneCount: laneCount) }
     static let top: CGFloat = 28
     static let pointsPerMinute: CGFloat = 1
 

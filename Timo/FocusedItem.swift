@@ -16,14 +16,21 @@ struct InlineFocusedDetails: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var choosingDeletion = false
     @State private var naturalHeight: CGFloat = 0
-    @State private var closingItem: PlanItem?
 
     var body: some View {
-        let displayedItem = closingItem ?? item
+        let displayedItem = item
         return VStack(alignment: .leading, spacing: 10) {
-            Text(displayedItem.history)
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            // Separate entries let the stack animate insertion/removal instead of a
+            // multiline Text replacing its intrinsic height in one step.
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(displayedItem.history.components(separatedBy: "\n"), id: \.self) { entry in
+                    Text(entry)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .transition(.opacity)
+                }
+            }
+            .font(.caption).foregroundStyle(.secondary)
+            .geometryGroup()
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 6) { actions(displayedItem) }
                     .fixedSize(horizontal: true, vertical: false)
@@ -43,6 +50,8 @@ struct InlineFocusedDetails: View {
         .padding(.leading, 52).padding(.bottom, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .buttonStyle(FocusedButtonStyle())
+        .animation(FocusedItemMotion.animation(reduceMotion: reduceMotion),
+                   value: [item.completedAt, item.cancelledAt])
         .fixedSize(horizontal: false, vertical: true)
         .onGeometryChange(for: CGFloat.self, of: \.size.height) { height in
             naturalHeight = height
@@ -62,7 +71,6 @@ struct InlineFocusedDetails: View {
             if expanded { heightChanged(naturalHeight) }
         }
         .onChange(of: token) { _, token in
-            closingItem = nil
             if token == nil { choosingDeletion = false }
         }
     }
@@ -77,11 +85,11 @@ struct InlineFocusedDetails: View {
             }
         }
         Button {
-            // Keep the pressed label and history at their old size during collapse.
-            closingItem = item
+            guard let current = store.item(item.id) else { return }
+            if !reduceMotion { FrameRateBoost.shared.request(for: .milliseconds(700)) }
             withAnimation(FocusedItemMotion.animation(reduceMotion: reduceMotion)) {
-                close()
-                store.setCancelled(item, !item.isCancelled, on: day)
+                store.setCancelled(current, !current.isCancelled, on: day)
+                contentChanged()
             }
         } label: {
             Label(displayedItem.isCancelled ? "Uncancel" : "Cancel",
