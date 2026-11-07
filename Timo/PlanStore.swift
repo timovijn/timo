@@ -133,7 +133,7 @@ import WidgetKit
         // Include earlier starts for overnight/multi-day ranges overlapping the viewed day.
         var selectedChanged = false
         for plan in plans {
-            let span = plan.template.end.flatMap { end in plan.template.start().map { max(0, end.timeIntervalSince($0)) } } ?? 0
+            let span = plan.template.scheduleEnd().map { max(0, $0.timeIntervalSince(plan.template.start() ?? plan.template.day.date())) } ?? 0
             let previous = calendar.date(byAdding: .day, value: -(Int(ceil(span / 86400))), to: displayedDay.date())!
             if Planner.materialize([plan], in: &updated, from: Day(previous), through: displayedDay) { selectedChanged = true }
         }
@@ -169,10 +169,12 @@ import WidgetKit
         if canWrite { reloadFromOtherDevice() }
         #endif
         var updated = items
-        let generated = materialize(&updated, series: series, now: now)
-        // Plans saved when carrying moved an item's day get their scheduled days back once.
+        var plans = series
+        // Restore old schedules before turning full-day spans into linked daily items.
         let restored = Planner.restoreScheduledDays(&updated)
-        if generated || restored { commit(updated) }
+        let split = Planner.splitDateRanges(items: &updated, series: &plans)
+        let generated = materialize(&updated, series: plans, now: now)
+        if generated || restored || split { commit(updated, series: plans) }
     }
     func requestReminderPermission() async throws -> Bool {
         try await notificationCenter.requestAuthorization(options: [.alert, .sound])
@@ -253,7 +255,11 @@ import WidgetKit
             }
             lines.append(schedule)
         } else {
-            lines.append("Anytime · \(dayLabel(item.liveDay(now: delivery, calendar: calendar).date(calendar: calendar)))")
+            if let endDay = item.endDay {
+                lines.append("Anytime · \(dayLabel(item.day.date(calendar: calendar))) – \(dayLabel(endDay.date(calendar: calendar)))")
+            } else {
+                lines.append("Anytime · \(dayLabel(item.liveDay(now: delivery, calendar: calendar).date(calendar: calendar)))")
+            }
         }
         if let deadline = item.deadline {
             lines.append("\(deadline < delivery ? "Was due" : "Due") \(when(deadline))")
@@ -274,7 +280,10 @@ import WidgetKit
         previousDefinition?.completedAt = item.completedAt
         previousDefinition?.cancelledAt = item.cancelledAt
         previousDefinition?.suggestionDismissed = item.suggestionDismissed
-        if (item.repeatRule != .never || previous?.seriesID != nil) && previousDefinition != item {
+        if item.minute == nil, let end = item.endDay,
+           item.repeatRule == .never, end > item.day || dateRange(of: item) != nil {
+            Planner.saveDateRange(item, items: &updated, series: &plans)
+        } else if (item.repeatRule != .never || previous?.seriesID != nil) && previousDefinition != item {
             Planner.saveRepeating(item, items: &updated, series: &plans)
         } else if let i = updated.firstIndex(where: { $0.id == item.id }) {
             updated[i] = item
@@ -282,6 +291,12 @@ import WidgetKit
             var fresh = item; fresh.originalDay = fresh.day; updated.append(fresh)
         }
         materialize(&updated, series: plans, now: Date())
+        commit(updated, series: plans)
+    }
+    func startNow(_ item: PlanItem) {
+        var updated = items
+        var plans = series
+        guard Planner.startNow(item.id, items: &updated, series: &plans, now: Date()) else { return }
         commit(updated, series: plans)
     }
     /// Ticks an item off, or undoes it. Ticked off while viewing a past day, it counts as done on
@@ -343,6 +358,23 @@ import WidgetKit
         // Undone from the button, the system's undo has nothing left to do.
         if let manager = deletionUndoManager, !manager.isUndoing { manager.removeAllActions(withTarget: self) }
     }
+    func linkedItems(of item: PlanItem, through last: Day) -> [LinkedItemEntry] {
+        Planner.linkedItems(for: item, in: items, series: series, through: last)
+    }
+    func linkedItemsContinue(after last: Day, for item: PlanItem) -> Bool {
+        guard let family = series.first(where: { $0.id == item.seriesID })?.familyID else { return false }
+        return series.contains { $0.familyID == family && $0.endBefore == nil }
+    }
+    func restoreLinkedItems(_ entries: [LinkedItemEntry]) {
+        var updated = items
+        var plans = series
+        var changed = false
+        for entry in entries where entry.status != .linked {
+            if Planner.restoreLinkedItem(entry, items: &updated, series: &plans) { changed = true }
+        }
+        if changed { commit(updated, series: plans) }
+    }
+    func dateRange(of item: PlanItem) -> ClosedRange<Day>? { Planner.dateRange(of: item, in: series) }
     /// Whether a repeating item is its series' first occurrence; then "this and following" is everything.
     func startsSeries(_ item: PlanItem) -> Bool { Planner.startsSeries(item, in: series) }
     /// The first day of the repeating item an occurrence belongs to.

@@ -3,6 +3,8 @@ import UIKit
 
 /// Inline focus reveals these mounted details inside the original ItemCard, like a filter panel.
 struct InlineFocusedDetails: View {
+    // The header already contributes eight points below its text.
+    static let topInset: CGFloat = 4
     let item: PlanItem
     let day: Day
     let expanded: Bool
@@ -20,23 +22,7 @@ struct InlineFocusedDetails: View {
     var body: some View {
         let displayedItem = item
         return VStack(alignment: .leading, spacing: 10) {
-            // Separate entries let the stack animate insertion/removal instead of a
-            // multiline Text replacing its intrinsic height in one step.
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(displayedItem.history.components(separatedBy: "\n"), id: \.self) { entry in
-                    Text(entry)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .transition(.opacity)
-                }
-            }
-            .font(.caption).foregroundStyle(.secondary)
-            .geometryGroup()
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 6) { actions(displayedItem) }
-                    .fixedSize(horizontal: true, vertical: false)
-                VStack(alignment: .leading, spacing: 6) { actions(displayedItem) }
-                    .fixedSize(horizontal: true, vertical: false)
-            }
+            FlowLayout(spacing: 6) { actions(displayedItem) }
             .frame(maxWidth: .infinity, alignment: .leading)
             // Move the action container as one unit, including a relabelled Cancel pill.
             .geometryGroup()
@@ -50,8 +36,6 @@ struct InlineFocusedDetails: View {
         .padding(.leading, 52).padding(.bottom, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .buttonStyle(FocusedButtonStyle())
-        .animation(FocusedItemMotion.animation(reduceMotion: reduceMotion),
-                   value: [item.completedAt, item.cancelledAt])
         .fixedSize(horizontal: false, vertical: true)
         .onGeometryChange(for: CGFloat.self, of: \.size.height) { height in
             naturalHeight = height
@@ -59,7 +43,7 @@ struct InlineFocusedDetails: View {
         }
         .frame(height: expanded ? nil : 0, alignment: .top)
         .clipped()
-        .padding(.top, expanded ? 3 - 8 : 0)
+        .padding(.top, expanded ? Self.topInset : 0)
         .opacity(expanded ? 1 : 0)
         .allowsHitTesting(expanded)
         .accessibilityHidden(!expanded)
@@ -77,6 +61,20 @@ struct InlineFocusedDetails: View {
 
     @ViewBuilder
     private func actions(_ displayedItem: PlanItem) -> some View {
+        if !displayedItem.isSettled, displayedItem.minute != nil || displayedItem.endDay != nil {
+            Button {
+                guard let current = store.item(item.id) else { return }
+                if !reduceMotion { FrameRateBoost.shared.request(for: .milliseconds(700)) }
+                close()
+                withAnimation(FocusedItemMotion.animation(reduceMotion: reduceMotion)) {
+                    store.startNow(current)
+                    contentChanged()
+                }
+            } label: {
+                Label("Start now", systemImage: "play.circle")
+            }
+            .accessibilityHint("Moves this item to start today at the current time, keeping its duration")
+        }
         if CloudSync.isAvailable {
             Button {
                 SharingSheet.present(for: item, cloud: store.cloud)

@@ -36,17 +36,23 @@ struct ItemEditor: View {
     /// Identities for `item.reminders`, kept in the same order, so a button follows its reminder when sorting.
     @State private var reminderIDs: [UUID]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @FocusState private var titleFocused: Bool
+    @State private var titleFocused = false
     /// Sections whose explanation is open. Explanations start closed, behind a small (i).
     @State private var openInfo: Set<String> = []
     /// Set on deleting, so the closing sheet doesn't turn into "New item" without its Delete row.
     @State private var deleted = false
+    @State private var showingLinkedItems = false
     private var existing: Bool { deleted || store.item(item.id) != nil }
-    init(item: PlanItem, viewingDay: Day, openItem: ((PlanItem) -> Void)? = nil) {
+    init(item: PlanItem, viewingDay: Day, range: ClosedRange<Day>? = nil, openItem: ((PlanItem) -> Void)? = nil) {
         self.viewingDay = viewingDay
         self.openItem = openItem
-        _item = State(initialValue: item)
-        opened = item
+        var draft = item
+        if let range {
+            draft.endDay = range.upperBound
+            draft.repeatRule = .never
+        }
+        _item = State(initialValue: draft)
+        opened = draft
         _locations = State(initialValue: item.locations.map { ItemTextEntry(text: $0) })
         _people = State(initialValue: item.people.map { ItemTextEntry(text: $0) })
         _reminderIDs = State(initialValue: item.reminders.map { _ in UUID() })
@@ -62,6 +68,9 @@ struct ItemEditor: View {
         } message: {
             Text(canSave ? "This item has changes that haven’t been saved." : "This item has changes, but it needs a title to be saved.")
         }
+        .sheet(isPresented: $showingLinkedItems) {
+            LinkedItemsOverview(source: item).environmentObject(store)
+        }
     }
     private var editor: some View {
         NavigationStack {
@@ -69,16 +78,14 @@ struct ItemEditor: View {
             ScrollViewReader { form in Form {
                 itemStatusSection
                 Section {
-                    // The title wraps but stays one line: Return finishes editing instead of adding a break.
-                    // The break is dropped in the binding, before it's stored; removing it afterwards in
-                    // onChange let the field grow a line for a frame, which made the form jump.
-                    TextField("What’s on your day?", text: Binding(get: { item.title }, set: { title in
-                        guard title.contains(where: \.isNewline) else { item.title = title; return }
-                        item.title = title.split(whereSeparator: \.isNewline).joined(separator: " ")
-                        titleFocused = false
-                    }), axis: .vertical)
-                        .font(.title3.weight(.medium)).focused($titleFocused)
-                        .submitLabel(.done)
+                    ItemTitleField(text: $item.title, focused: $titleFocused)
+                        .overlay(alignment: .topLeading) {
+                            if item.title.isEmpty {
+                                Text("What’s on your day?")
+                                    .font(.title3.weight(.medium)).foregroundStyle(Color(uiColor: .placeholderText))
+                                    .allowsHitTesting(false).accessibilityHidden(true)
+                            }
+                        }
                 }
                 Section {
                     PersonaChips(selection: $item.personas)
@@ -93,7 +100,7 @@ struct ItemEditor: View {
                     }
                 }
                 Section {
-                    // One line of buttons: the day, then an optional start and duration, each removable.
+                    // The start day, optional time, and an optional timed or inclusive date end.
                     FlowLayout(spacing: 8) {
                         SchedulePill(name: "Day", value: dayName(item.day),
                                      accessibilityValue: item.day.date().formatted(date: .complete, time: .omitted),
@@ -108,6 +115,13 @@ struct ItemEditor: View {
                                      value: item.start()?.formatted(date: .omitted, time: .shortened), isEditing: editing(.time),
                                      onAdd: { animate(addTime) }, onRemove: { animate(removeTime) }) {
                             VStack(spacing: 12) {
+                                Button("Now") {
+                                    Planner.updateStartToNow(&item, now: Date(), on: item.day)
+                                    editingField = nil
+                                }
+                                .buttonStyle(.bordered).buttonBorderShape(.capsule)
+                                .accessibilityHint("Sets the current time on the selected day")
+                                .frame(maxWidth: .infinity, alignment: .leading)
                                 ScheduleChips(options: timeSuggestions, selected: item.minute) { setMinute($0); editingField = nil }
                                 DatePicker("Time", selection: Binding(get: { item.start() ?? item.day.date() }, set: { new in
                                     let c = Calendar.current.dateComponents([.hour, .minute], from: new)
@@ -130,11 +144,27 @@ struct ItemEditor: View {
                                 }
                             }
                             .transition(.scale(scale: 0.8).combined(with: .opacity))
+                        } else {
+                            SchedulePill(name: "End date", addTitle: "Add end date", addLabel: "End date", removeTitle: "Remove end date",
+                                         value: item.endDay.map { "until \(dayName($0))" },
+                                         accessibilityValue: item.endDay.map { "Through " + $0.date().formatted(date: .complete, time: .omitted) + ", inclusive" },
+                                         isEditing: editing(.end), onAdd: { animate { setEndDay(item.day) } },
+                                         onRemove: { animate { setEndDay(nil) } }) {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    ScheduleChips(options: [ScheduleOption(value: item.day, title: item.day == Day(Date()) ? "Today" : "Same day")], selected: item.endDay) {
+                                        setEndDay($0); editingField = nil
+                                    }
+                                    DatePicker("End date", selection: Binding(get: { (item.endDay ?? item.day).date() }, set: {
+                                        setEndDay(Day($0)); editingField = nil
+                                    }), in: item.day.date()..., displayedComponents: .date)
+                                        .datePickerStyle(.graphical).labelsHidden()
+                                }
+                            }
                         }
                     }
                     .padding(.vertical, 2)
                     .id(PickerRow.schedule)
-                    .sensoryFeedback(.selection, trigger: "\(item.day) \(item.minute != nil) \(item.end != nil)")
+                    .sensoryFeedback(.selection, trigger: "\(item.day) \(item.minute != nil) \(item.end != nil) \(item.endDay != nil)")
                 } header: {
                     if existing && item.isCarried(now: Date()) {
                         InfoHeader("Schedule", isExpanded: infoBinding("schedule"))
@@ -146,7 +176,7 @@ struct ItemEditor: View {
                         Text("The schedule stays as planned. Until it is done, the item is also shown on today. Tick it off on the day it actually happened to keep it there.")
                     }
                 }
-                repeatSection
+                if store.dateRange(of: item) == nil { repeatSection }
                 Section {
                     Toggle("Move to next day if unfinished", isOn: Binding(get: { item.movesToNextDay }, set: {
                         item.movesToNextDay = $0
@@ -264,10 +294,26 @@ struct ItemEditor: View {
                         }
                     }
                 }
+                if let saved = store.item(item.id), saved.seriesID != nil, store.isOriginal(saved) {
+                    Section("Linked items") {
+                        Button { showingLinkedItems = true } label: {
+                            Label("View and restore items", systemImage: "link")
+                        }
+                    }
+                }
+                if existing, let savedItem = store.item(item.id) {
+                    Section("History") {
+                        Text(savedItem.history)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
+                    }
+                }
             }
-            .onChange(of: item.minute != nil) { _, timed in
+            .onChange(of: item.minute != nil || item.endDay != nil) { _, scheduledRange in
                 guard !existing, !carryChosen else { return }
-                item.movesToNextDay = !timed
+                item.movesToNextDay = !scheduledRange
             }
             .onChange(of: pendingField) { _, field in
                 guard let field else { return }
@@ -363,6 +409,10 @@ struct ItemEditor: View {
     private func setDay(_ day: Day) { Planner.updateStart(&item, day: day, minute: item.minute) }
     private func setMinute(_ minute: Int) { Planner.updateStart(&item, day: item.day, minute: minute) }
     private func setEnd(_ end: Date?) { item.end = end; item.suggestionDismissed = false }
+    private func setEndDay(_ day: Day?) {
+        item.endDay = day
+        item.suggestionDismissed = false
+    }
     /// Adds the suggested start, restoring the duration the time had before it was removed.
     private func addTime() {
         setMinute(suggestedStartMinute)
@@ -460,7 +510,7 @@ struct ItemEditor: View {
     }
     /// Due at the end of the item's time, otherwise at 17:00 on its day; the picker opens to adjust it.
     private func addDeadline() {
-        animate { item.deadline = item.end ?? item.day.date().addingTimeInterval(17 * 3600) }
+        animate { item.deadline = item.end ?? (item.endDay ?? item.day).date().addingTimeInterval(17 * 3600) }
         Task { @MainActor in
             // Let the new button appear before anchoring its popover to it.
             try? await Task.sleep(for: .milliseconds(300))
@@ -737,6 +787,165 @@ struct ItemEditor: View {
     private func lowercasedFirst(_ text: String) -> String { text.prefix(1).lowercased() + text.dropFirst() }
 }
 
+private struct LinkedItemsOverview: View {
+    let sourceID: UUID
+    @State private var through: Day
+    @State private var onlyChanges = false
+    @EnvironmentObject private var store: PlanStore
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    init(source: PlanItem) {
+        sourceID = source.id
+        let start = max(Day(Date()), source.day).date()
+        _through = State(initialValue: Day(Calendar.current.date(byAdding: .day, value: 60, to: start)!))
+    }
+    var body: some View {
+        NavigationStack {
+            Group {
+                if let source = store.item(sourceID) {
+                    let entries = store.linkedItems(of: source, through: through)
+                    let changed = entries.filter { $0.status != .linked }
+                    List {
+                        Section {
+                            Text("\(entries.filter { $0.status == .linked }.count) linked · \(entries.filter { $0.status == .changed }.count) changed · \(entries.filter { $0.status == .deleted }.count) deleted")
+                                .font(.subheadline).foregroundStyle(.secondary)
+                            Toggle("Changed or deleted only", isOn: $onlyChanges)
+                            if !changed.isEmpty {
+                                Button("Restore all changed or deleted items") { restore(changed) }
+                            }
+                        } footer: {
+                            Text("Restore returns each day to the original’s saved details and schedule. Existing completion and cancellation are kept; deleted items return open.")
+                        }
+                        Section {
+                            ForEach(entries.filter { !onlyChanges || $0.status != .linked }) { entry in
+                                entryRow(entry, source: source)
+                            }
+                        }
+                        if store.linkedItemsContinue(after: through, for: source) {
+                            Button("Show later items") {
+                                through = Day(Calendar.current.date(byAdding: .day, value: 60, to: through.date())!)
+                            }
+                        }
+                    }
+                } else {
+                    ContentUnavailableView("Item unavailable", systemImage: "link", description: Text("The original item is no longer in your plan."))
+                }
+            }
+            .navigationTitle("Linked items").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+    }
+    private func entryRow(_ entry: LinkedItemEntry, source: PlanItem) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(entry.origin.day.date().formatted(date: .abbreviated, time: .omitted))
+                    .font(.body.weight(.medium))
+                Text(entry.item?.title ?? source.title)
+                    .font(.subheadline).foregroundStyle(.secondary)
+                Text(status(entry, source: source))
+                    .font(.caption).foregroundStyle(.secondary)
+                if let actual = entry.item, entry.status == .changed {
+                    if actual.day != entry.origin.day {
+                        Text("Moved to " + actual.day.date().formatted(date: .abbreviated, time: .omitted))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    if let start = actual.start() {
+                        Text(start.formatted(date: .omitted, time: .shortened))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if entry.status != .linked {
+                Button("Restore") { restore([entry]) }
+                    .buttonStyle(.bordered).buttonBorderShape(.capsule)
+                    .accessibilityLabel("Restore item for " + entry.origin.day.date().formatted(date: .complete, time: .omitted))
+                    .accessibilityHint("Uses the original’s saved details and schedule")
+            }
+        }
+        .padding(.vertical, 4)
+    }
+    private func status(_ entry: LinkedItemEntry, source: PlanItem) -> String {
+        let label = entry.item?.id == sourceID ? "Original" : entry.status.rawValue.capitalized
+        return label + (entry.item?.isComplete == true ? " · Completed" : entry.item?.isCancelled == true ? " · Cancelled" : "")
+    }
+    private func restore(_ entries: [LinkedItemEntry]) {
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) { store.restoreLinkedItems(entries) }
+    }
+}
+
+/// Own the Return key before it becomes a newline. SwiftUI's multiline TextField can
+/// recommit an earlier editing value when its binding strips a newline and removes focus.
+private struct ItemTitleField: UIViewRepresentable {
+    @Binding var text: String
+    @Binding var focused: Bool
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    func makeUIView(context: Context) -> UITextView {
+        let view = UITextView()
+        view.delegate = context.coordinator
+        view.backgroundColor = .clear
+        view.textColor = .label
+        view.font = UIFontMetrics(forTextStyle: .title3).scaledFont(for: .systemFont(ofSize: 20, weight: .medium))
+        view.adjustsFontForContentSizeCategory = true
+        view.isScrollEnabled = false
+        view.textContainerInset = .zero
+        view.textContainer.lineFragmentPadding = 0
+        view.returnKeyType = .done
+        view.autocorrectionType = .no
+        view.smartInsertDeleteType = .no
+        view.accessibilityLabel = "What’s on your day?"
+        view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        view.text = text
+        return view
+    }
+    func updateUIView(_ view: UITextView, context: Context) {
+        context.coordinator.parent = self
+        // While typing, the text view owns the live value. A delayed SwiftUI update must
+        // never write an older copy over it, including edits that only remove a space.
+        if !view.isFirstResponder, view.text != text { view.text = text }
+        if focused, !view.isFirstResponder {
+            // The field may not have a window yet on the first Form update.
+            DispatchQueue.main.async { [weak view, weak coordinator = context.coordinator] in
+                guard coordinator?.parent.focused == true else { return }
+                view?.becomeFirstResponder()
+            }
+        } else if !focused, view.isFirstResponder { view.resignFirstResponder() }
+    }
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
+        guard let width = proposal.width, width > 0 else { return nil }
+        let fitted = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+        return CGSize(width: width, height: max(fitted.height, uiView.font?.lineHeight ?? 24))
+    }
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var parent: ItemTitleField
+        init(_ parent: ItemTitleField) { self.parent = parent }
+        func textViewDidBeginEditing(_ textView: UITextView) { parent.focused = true }
+        func textViewDidChange(_ textView: UITextView) { parent.text = textView.text }
+        func textViewDidEndEditing(_ textView: UITextView) {
+            parent.text = textView.text
+            parent.focused = false
+        }
+        func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+            if text == "\n" {
+                // Capture the exact visible text before ending the input session.
+                parent.text = textView.text
+                parent.focused = false
+                textView.resignFirstResponder()
+                return false
+            }
+            guard text.contains(where: \.isNewline) else { return true }
+            // A multiline paste stays a single wrapping title and keeps its spaces.
+            let replacement = text.split(whereSeparator: \.isNewline).joined(separator: " ")
+            textView.text = (textView.text as NSString).replacingCharacters(in: range, with: replacement)
+            textView.selectedRange = NSRange(location: range.location + replacement.utf16.count, length: 0)
+            parent.text = textView.text
+            return false
+        }
+    }
+}
+
 /// A section title with a small (i) beside it that shows or hides the section's explanation,
 /// which appears beneath the section's content.
 private struct InfoHeader: View {
@@ -956,8 +1165,8 @@ private struct PersonaChips: View {
     }
 }
 
-/// Places views left to right, wrapping onto further lines when they do not fit.
-private struct FlowLayout: Layout {
+/// Shared by editor pills and focussed actions: wrap only the views that do not fit.
+struct FlowLayout: Layout {
     var spacing: CGFloat = 8
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {

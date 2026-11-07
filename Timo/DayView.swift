@@ -243,7 +243,7 @@ struct DayView: View {
             .sheet(item: $editing) { item in
                 // A persona page or search can open an item from any day.
                 ItemEditor(item: item, viewingDay: persona == nil && !search.isOpen ? day : item.liveDay(now: now),
-                           openItem: openOnItsDay)
+                           range: store.isOriginal(item) ? store.dateRange(of: item) : nil, openItem: openOnItsDay)
                     .environmentObject(store)
             }
             .sheet(item: $changingReminder) { item in
@@ -323,7 +323,7 @@ struct DayView: View {
             guard let focused, !FocusedCardAnchor.isHolding,
                   !FocusedCardAnchor.contains(tap.location, id: focused.id, day: focused.day) else { return }
             closeFocus()
-        })
+        }, isEnabled: focused != nil && !pickingDate)
         .background {
             // ⌘F, without a button on screen.
             Button("Search") { search.open(reduceMotion: reduceMotion) }
@@ -426,7 +426,7 @@ struct DayView: View {
     /// stall the opening frames. It's laid out at its own width whatever the glass's size,
     /// so the morph never makes it lay out again.
     private var calendarCard: some View {
-        DayCalendar(selection: date, today: now) { pickFromCalendar($0) }
+        DayCalendar(selection: date, today: now, onDismiss: closeCalendar) { pickFromCalendar($0) }
             .padding(.horizontal, 12).padding(.vertical, 8)
             .frame(width: max(min(dockWidth - 32, 380), 0))
             .fixedSize(horizontal: false, vertical: true)
@@ -438,9 +438,6 @@ struct DayView: View {
             }
             .allowsHitTesting(pickingDate)
             .accessibilityHidden(!pickingDate)
-            .gesture(DragGesture(minimumDistance: 20).onEnded { drag in
-                if drag.translation.height > 50 { closeCalendar() }
-            }, isEnabled: pickingDate)
             .accessibilityAddTraits(.isModal)
             .accessibilityAction(.escape) { closeCalendar() }
     }
@@ -846,7 +843,11 @@ struct DayView: View {
             if sortMinute(a) != sortMinute(b) { return (sortMinute(a) ?? -1) < (sortMinute(b) ?? -1) }
             return a.createdAt < b.createdAt
         }
-        let anyTimeItems = (visible + moved).filter { !keepsTime($0) }.sorted(by: order)
+        // Explicit date ranges are scheduled for the full day. Once carried beyond their
+        // range they become Anytime, just like a carried timed item.
+        let isFullDay = { (item: PlanItem) in item.endDay != nil && item.appears(on: day) }
+        let fullDayItems = (visible + moved).filter(isFullDay).sorted(by: order)
+        let anyTimeItems = (visible + moved).filter { !keepsTime($0) && !isFullDay($0) }.sorted(by: order)
         let timedItems = ((visible + moved).filter(keepsTime) + visitors).sorted(by: order)
         return ScrollViewReader { proxy in ScrollView {
             VStack(alignment: .leading, spacing: 0) {
@@ -882,13 +883,26 @@ struct DayView: View {
                         .padding(.horizontal, 16)
                         .transition(sectionRemoval)
                 }
-                if !timedItems.isEmpty {
+                if !fullDayItems.isEmpty || !timedItems.isEmpty {
                     sectionHeading("Scheduled")
-                        .modifier(FilterCollapse(collapsed: !timedItems.contains { shown.contains($0.id) }, keepsSpaceInTimeView: true))
+                        .modifier(FilterCollapse(collapsed: !(fullDayItems + timedItems).contains { shown.contains($0.id) }, keepsSpaceInTimeView: !timedItems.isEmpty))
                         .transition(sectionRemoval)
-                    scheduledItems(items: timedItems, shown: shown, day: day, filter: filter)
-                        .padding(.horizontal, 16)
-                        .transition(sectionRemoval)
+                    if !fullDayItems.isEmpty {
+                        scheduledSectionDivider("Full day")
+                            .padding(.horizontal, 16)
+                            .modifier(ModeSectionHeaderFade(collapsesInTimeView: true))
+                            .modifier(FilterCollapse(collapsed: !fullDayItems.contains { shown.contains($0.id) }))
+                            .transition(sectionRemoval)
+                        anytimeItems(items: fullDayItems, shown: shown, day: day, filter: filter)
+                            .padding(.horizontal, 16)
+                            .modifier(FullDayTimelineSpacing(visible: !timedItems.isEmpty && fullDayItems.contains { shown.contains($0.id) }))
+                            .transition(sectionRemoval)
+                    }
+                    if !timedItems.isEmpty {
+                        scheduledItems(items: timedItems, shown: shown, day: day, filter: filter)
+                            .padding(.horizontal, 16)
+                            .transition(sectionRemoval)
+                    }
                 }
                 SettingsLink(isEnabled: { daySwipeInteraction.allowsItemActions })
                     .frame(maxWidth: .infinity).padding(.vertical, 28)
@@ -909,7 +923,7 @@ struct DayView: View {
         .modifier(PullsToSearch())
         .modifier(ScrollsToNowInTimeView(proxy: proxy))
         .modifier(ScrollsToFilteredItem(proxy: proxy, filter: filter.rawValue, animation: reviewAnimation,
-                                        target: anyTimeItems.first { shown.contains($0.id) }.map { .anytime($0.id) }
+                                        target: (anyTimeItems + fullDayItems).first { shown.contains($0.id) }.map { .anytime($0.id) }
                                             ?? timedItems.first { shown.contains($0.id) }.map { .scheduled($0.id) }))
         .modifier(TimelineOverflowScroll(proxy: proxy))
         }
@@ -924,7 +938,7 @@ struct DayView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 8)
     }
-    /// Use the same measured-row layout as Scheduled, without the clock-axis placement.
+    /// Untimed rows for Anytime and Full day, without clock-axis placement.
     private func anytimeItems(items: [PlanItem], shown: Set<UUID>, day: Day, filter: DayFilter) -> some View {
         let contentKey = TimelineContentKey(items: items, sharedZones: store.cloud.sharedZones, day: day, order: items.map(\.id),
                                             markers: items.map { item in [DayFilter.review, .reminders, .deadlines].map { hasDot(item, $0, on: day) } },
@@ -1160,6 +1174,11 @@ struct DayView: View {
         .animation(FocusedItemMotion.animation(reduceMotion: reduceMotion), value: inlineFocusPhase(on: day))
     }
     private func compactSectionDivider(_ title: String) -> some View {
+        scheduledSectionDivider(title)
+            .modifier(ModeSectionHeaderFade())
+            .layoutValue(key: TimelineMarkerKey.self, value: true)
+    }
+    private func scheduledSectionDivider(_ title: String) -> some View {
         HStack(spacing: 10) {
             Text(title)
             Spacer(minLength: 0)
@@ -1170,9 +1189,7 @@ struct DayView: View {
         .frame(height: 24)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
-        .modifier(ModeSectionHeaderFade())
         .allowsHitTesting(false)
-        .layoutValue(key: TimelineMarkerKey.self, value: true)
     }
     private func row(_ item: PlanItem, filter: DayFilter, day: Day, sharedSchedule: Bool = false, source: FocusSource = .day,
                      timeBelowTitle: Bool = false) -> some View {
@@ -1231,6 +1248,13 @@ struct DayView: View {
                             }
                             if let carriedFrom {
                                 Text("Carried from \(carriedFrom)")
+                                    .font(.caption).foregroundStyle(.tertiary)
+                            }
+                            if let range = store.dateRange(of: item) {
+                                Text(range.lowerBound.date().formatted(date: .abbreviated, time: .omitted) + " – " + range.upperBound.date().formatted(date: .abbreviated, time: .omitted))
+                                    .font(.caption).foregroundStyle(.tertiary)
+                            } else if let endDay = item.endDay, endDay > item.day {
+                                Text(item.day.date().formatted(date: .abbreviated, time: .omitted) + " – " + endDay.date().formatted(date: .abbreviated, time: .omitted))
                                     .font(.caption).foregroundStyle(.tertiary)
                             }
                             if visiting, item.start() == nil {
@@ -1311,7 +1335,7 @@ struct DayView: View {
                 if isFocusSource { focused?.detailsRevision += 1 }
             }, heightChanged: { height in
                 guard inlineExpanded, focused?.ending == false, focused?.token == inlineToken else { return }
-                FocusedCardAnchor.revealInline(item.id, extraHeight: max(0, height - 5), animated: !reduceMotion)
+                FocusedCardAnchor.revealInline(item.id, extraHeight: max(0, height + InlineFocusedDetails.topInset), animated: !reduceMotion)
             })
         }
         // Dots show only in the full day; a filtered row's panel already says why it is there.
@@ -1468,7 +1492,7 @@ struct DayView: View {
         } else if let carried = carriedDestination(item, from: day) {
             message = "Unfinished, carried to \(carried)"
         } else {
-            message = item.end != nil ? "This time has ended" : "The scheduled time has passed"
+            message = item.endDay != nil ? "The scheduled days have ended" : item.end != nil ? "This time has ended" : "The scheduled time has passed"
         }
         var actions = [FilteredItemAction(title: "Complete", symbol: "checkmark") {
             withAnimation(self.reviewAnimation) { self.store.toggle(item, on: day) }
@@ -1861,9 +1885,10 @@ private struct FilterScrollRoom: View {
 private struct DayCalendar: UIViewRepresentable {
     let selection: Date
     let today: Date
+    let onDismiss: () -> Void
     let onPick: (Date) -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(onPick: onPick) }
+    func makeCoordinator() -> Coordinator { Coordinator(onPick: onPick, onDismiss: onDismiss) }
     func makeUIView(context: Context) -> UICalendarView {
         let view = UICalendarView()
         view.calendar = .current
@@ -1876,11 +1901,19 @@ private struct DayCalendar: UIViewRepresentable {
         let selection = UICalendarSelectionMultiDate(delegate: context.coordinator)
         view.selectionBehavior = selection
         context.coordinator.selection = selection
+        // Keep dismissal in UIKit so a SwiftUI ancestor gesture cannot consume date taps.
+        let pull = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.pulled(_:)))
+        pull.cancelsTouchesInView = false
+        pull.delaysTouchesBegan = false
+        pull.delaysTouchesEnded = false
+        pull.delegate = context.coordinator
+        view.addGestureRecognizer(pull)
         view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         return view
     }
     func updateUIView(_ view: UICalendarView, context: Context) {
         context.coordinator.onPick = onPick
+        context.coordinator.onDismiss = onDismiss
         let currentDay = Day(today)
         if context.coordinator.today != currentDay {
             // The calendar stays built while hidden, so redraw its days when the date changes.
@@ -1902,12 +1935,26 @@ private struct DayCalendar: UIViewRepresentable {
         return CGSize(width: width, height: height)
     }
 
-    final class Coordinator: NSObject, UICalendarSelectionMultiDateDelegate {
+    final class Coordinator: NSObject, UICalendarSelectionMultiDateDelegate, UIGestureRecognizerDelegate {
         var onPick: (Date) -> Void
+        var onDismiss: () -> Void
         weak var selection: UICalendarSelectionMultiDate?
         var day: Day?
         var today: Day?
-        init(onPick: @escaping (Date) -> Void) { self.onPick = onPick }
+        init(onPick: @escaping (Date) -> Void, onDismiss: @escaping () -> Void) {
+            self.onPick = onPick; self.onDismiss = onDismiss
+        }
+        @objc func pulled(_ gesture: UIPanGestureRecognizer) {
+            guard gesture.state == .ended, gesture.translation(in: gesture.view).y > 50 else { return }
+            onDismiss()
+        }
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return true }
+            let velocity = pan.velocity(in: pan.view)
+            return velocity.y > abs(velocity.x)
+        }
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool { true }
 
         static func components(of date: Date) -> DateComponents {
             Calendar.current.dateComponents([.calendar, .era, .year, .month, .day], from: date)
@@ -2226,9 +2273,23 @@ private struct ModeFade: ViewModifier {
     }
 }
 
+/// Separate full-day cards from the clock scale without changing the compact list spacing.
+private struct FullDayTimelineSpacing: ViewModifier {
+    let visible: Bool
+    @Environment(ViewMode.self) private var mode
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.bottom, visible && mode.showingTime ? 20 : 0)
+            .animation(ViewMode.animation(reduceMotion: reduceMotion), value: mode.showingTime)
+    }
+}
+
 // Headers travel across rows mid-transition. Leave quickly, and only
 // return once the rows have nearly settled into the list.
 private struct ModeSectionHeaderFade: ViewModifier {
+    var collapsesInTimeView = false
     @Environment(ViewMode.self) private var mode
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -2239,6 +2300,11 @@ private struct ModeSectionHeaderFade: ViewModifier {
                        : mode.showingTime ? .easeOut(duration: 0.12) : .easeIn(duration: 0.18).delay(0.32),
                        value: mode.showingTime)
             .accessibilityHidden(mode.showingTime)
+            // Full day's divider lives above the rows rather than inside the timeline layout.
+            // Collapse its reserved height in step with the mode change as its text fades.
+            .frame(height: collapsesInTimeView && mode.showingTime ? 0 : nil, alignment: .top)
+            .clipped()
+            .animation(ViewMode.animation(reduceMotion: reduceMotion), value: mode.showingTime)
     }
 }
 

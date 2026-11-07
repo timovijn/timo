@@ -82,6 +82,8 @@ public struct RepeatingPlan: Codable, Equatable, Identifiable {
     public var familyID: UUID
     public var template: PlanItem
     public var endBefore: Day?
+    /// A finite group of separate full-day items, edited together from its original.
+    public var isDateRange: Bool?
     public var excludedDays: [Day] = []
     public init(template: PlanItem) {
         id = UUID()
@@ -93,11 +95,26 @@ public struct RepeatingPlan: Codable, Equatable, Identifiable {
         self.template.suggestionDismissed = false
         self.template.seriesID = nil
         self.template.occurrenceDay = nil
+        self.template.detachedFrom = nil
     }
     public func includes(_ day: Day, calendar: Calendar = .current) -> Bool {
         guard endBefore.map({ day < $0 }) ?? true, !excludedDays.contains(day) else { return false }
         return template.repeatRule.matches(day, starting: template.day, weekdays: template.repeatWeekdays, calendar: calendar)
     }
+}
+
+/// Retains where an individually edited occurrence came from, even if its date changes.
+public struct LinkedItemOrigin: Codable, Equatable, Hashable {
+    public var seriesID: UUID
+    public var day: Day
+    public init(seriesID: UUID, day: Day) { self.seriesID = seriesID; self.day = day }
+}
+public enum LinkedItemStatus: String, Equatable { case linked, changed, deleted }
+public struct LinkedItemEntry: Identifiable, Equatable {
+    public var origin: LinkedItemOrigin
+    public var status: LinkedItemStatus
+    public var item: PlanItem?
+    public var id: UUID { PlanItem.occurrenceID(series: origin.seriesID, day: origin.day) }
 }
 
 public struct PlanItem: Identifiable, Codable, Equatable {
@@ -107,6 +124,7 @@ public struct PlanItem: Identifiable, Codable, Equatable {
     public var repeatWeekdays: [Int] = []
     public var seriesID: UUID?
     public var occurrenceDay: Day?
+    public var detachedFrom: LinkedItemOrigin?
     /// The personas this item belongs to; it can be in several, or none.
     public var personas: [Persona] = []
     public var title: String
@@ -116,6 +134,8 @@ public struct PlanItem: Identifiable, Codable, Equatable {
     public var day: Day
     public var minute: Int?
     public var end: Date?
+    /// Inclusive final day of an untimed range, independent of time zone.
+    public var endDay: Day?
     /// Moments to be reminded; an item can have several.
     public var reminders: [Date]
     /// When the item has to be done by. Only marked, not notified.
@@ -136,16 +156,16 @@ public struct PlanItem: Identifiable, Codable, Equatable {
     /// Done with either way: completed or cancelled. Nothing more is asked of it.
     public var isSettled: Bool { isComplete || isCancelled }
     public init(id: UUID = UUID(), title: String, notes: String = "", day: Day,
-                minute: Int? = nil, end: Date? = nil, parentID: UUID? = nil, movesToNextDay: Bool = true, reminders: [Date] = [], locations: [String] = [], people: [String] = []) {
+                minute: Int? = nil, end: Date? = nil, endDay: Day? = nil, parentID: UUID? = nil, movesToNextDay: Bool = true, reminders: [Date] = [], locations: [String] = [], people: [String] = []) {
         self.id = id; self.movesToNextDay = movesToNextDay; self.title = title; self.notes = notes; self.day = day
-        self.minute = minute; self.end = end; self.parentID = parentID; originalDay = day
+        self.minute = minute; self.end = end; self.endDay = endDay; self.parentID = parentID; originalDay = day
         self.locations = locations; self.people = people
         self.reminders = reminders
         suggestionDismissed = false; createdAt = Date()
     }
     // Read the original task/event format without changing IDs or scheduling choices.
     private enum CodingKeys: String, CodingKey {
-        case id, title, notes, locations, people, day, minute, end, reminders, deadline, completedAt, cancelledAt, parentID, originalDay, carriedFrom, suggestionDismissed, createdAt, movesToNextDay, repeatRule, repeatWeekdays, seriesID, occurrenceDay, personas
+        case id, title, notes, locations, people, day, minute, end, endDay, reminders, deadline, completedAt, cancelledAt, parentID, originalDay, carriedFrom, suggestionDismissed, createdAt, movesToNextDay, repeatRule, repeatWeekdays, seriesID, occurrenceDay, detachedFrom, personas
     }
     private enum LegacyKeys: String, CodingKey { case kind, reminderAt, persona }
     public init(from decoder: Decoder) throws {
@@ -155,6 +175,7 @@ public struct PlanItem: Identifiable, Codable, Equatable {
         repeatWeekdays = try c.decodeIfPresent([Int].self, forKey: .repeatWeekdays) ?? []
         seriesID = try c.decodeIfPresent(UUID.self, forKey: .seriesID)
         occurrenceDay = try c.decodeIfPresent(Day.self, forKey: .occurrenceDay)
+        detachedFrom = try c.decodeIfPresent(LinkedItemOrigin.self, forKey: .detachedFrom)
         // Personas this version doesn't know are left out. Version 6 kept a single persona.
         if let saved = try c.decodeIfPresent([String].self, forKey: .personas) {
             personas = Persona.ordered(saved.compactMap(Persona.init(rawValue:)))
@@ -169,6 +190,7 @@ public struct PlanItem: Identifiable, Codable, Equatable {
         day = try c.decode(Day.self, forKey: .day)
         minute = try c.decodeIfPresent(Int.self, forKey: .minute)
         end = try c.decodeIfPresent(Date.self, forKey: .end)
+        endDay = try c.decodeIfPresent(Day.self, forKey: .endDay)
         if let saved = try c.decodeIfPresent([Date].self, forKey: .reminders) {
             reminders = saved
         } else {
@@ -231,12 +253,18 @@ public struct PlanItem: Identifiable, Codable, Equatable {
         guard !isCancelled, let start = start(calendar: calendar), let end else { return false }
         return start <= now && now < end
     }
+    /// Exclusive boundary: untimed ranges end at midnight after their inclusive final day.
+    public func scheduleEnd(calendar: Calendar = .current) -> Date? {
+        if let endDay { return calendar.date(byAdding: .day, value: 1, to: endDay.date(calendar: calendar)) }
+        return end
+    }
     public func isElapsed(now: Date, calendar: Calendar = .current) -> Bool {
         guard !isSettled else { return false }
-        guard let boundary = end ?? start(calendar: calendar) else { return false }
+        guard let boundary = scheduleEnd(calendar: calendar) ?? start(calendar: calendar) else { return false }
         return boundary < now
     }
     public func appears(on selected: Day, calendar: Calendar = .current) -> Bool {
+        if let endDay { return day <= selected && selected <= endDay }
         guard let start = start(calendar: calendar), let end else { return day == selected }
         let beginning = calendar.startOfDay(for: selected.date(calendar: calendar))
         let next = calendar.date(byAdding: .day, value: 1, to: beginning)!
@@ -249,8 +277,12 @@ public struct PlanItem: Identifiable, Codable, Equatable {
     /// A time range still running stays on its own day until it ends.
     public func liveDay(now: Date, calendar: Calendar = .current) -> Day {
         guard carries else { return day }
-        if let settled = completedAt ?? cancelledAt { return max(day, Day(settled, calendar: calendar)) }
-        if let end, end > now { return day }
+        if let settled = completedAt ?? cancelledAt {
+            let settledDay = Day(settled, calendar: calendar)
+            if let endDay, settledDay <= endDay { return day }
+            return max(day, settledDay)
+        }
+        if let boundary = scheduleEnd(calendar: calendar), boundary > now { return day }
         return max(day, Day(now, calendar: calendar))
     }
     /// Whether this item is shown on a later day than it was scheduled for.
@@ -328,15 +360,15 @@ extension PlanItem {
         take(\.title); take(\.notes); take(\.locations); take(\.people); take(\.deadline)
         take(\.parentID); take(\.movesToNextDay); take(\.carriedFrom)
         take(\.reminders); take(\.personas); take(\.suggestionDismissed)
-        if changed({ [$0.day, $0.minute, $0.end, $0.originalDay] }) {
-            result.day = mine.day; result.minute = mine.minute; result.end = mine.end; result.originalDay = mine.originalDay
+        if changed({ [$0.day, $0.minute, $0.end, $0.endDay, $0.originalDay] }) {
+            result.day = mine.day; result.minute = mine.minute; result.end = mine.end; result.endDay = mine.endDay; result.originalDay = mine.originalDay
         }
         if changed({ [$0.completedAt, $0.cancelledAt] }) {
             result.completedAt = mine.completedAt; result.cancelledAt = mine.cancelledAt
         }
-        if changed({ [$0.repeatRule, $0.repeatWeekdays, $0.seriesID, $0.occurrenceDay] }) {
+        if changed({ [$0.repeatRule, $0.repeatWeekdays, $0.seriesID, $0.occurrenceDay, $0.detachedFrom] }) {
             result.repeatRule = mine.repeatRule; result.repeatWeekdays = mine.repeatWeekdays
-            result.seriesID = mine.seriesID; result.occurrenceDay = mine.occurrenceDay
+            result.seriesID = mine.seriesID; result.occurrenceDay = mine.occurrenceDay; result.detachedFrom = mine.detachedFrom
         }
         return result
     }
@@ -374,7 +406,7 @@ public enum PlannerError: LocalizedError {
         switch self {
         case .repeatDays: return "Choose at least one day to repeat on."
         case .title: return "Give this item a title."
-        case .schedule: return "Choose a valid time, with any end time after the start."
+        case .schedule: return "Choose an end date on or after the start date, or an end time after the start time."
         case .parent: return "Choose an existing parent."
         case .nested: return "Linked items can only be one level deep."
         case .children: return "An item with linked children cannot itself have a parent."
@@ -450,9 +482,67 @@ public enum Planner {
         }
         return true
     }
-    // A repeating item has one shared definition. Editing any occurrence updates
-    // the whole family, including plans split by older versions of the app.
-    // The editor only sends this the master (original entry); a later day is detached instead.
+    /// The inclusive bounds of a linked full-day event. Daily items themselves cover one day.
+    public static func dateRange(of item: PlanItem, in series: [RepeatingPlan], calendar: Calendar = .current) -> ClosedRange<Day>? {
+        guard let plan = series.first(where: { $0.id == item.seriesID }), plan.isDateRange == true,
+              let end = plan.endBefore,
+              let last = calendar.date(byAdding: .day, value: -1, to: end.date(calendar: calendar)) else { return nil }
+        let finalDay = Day(last, calendar: calendar)
+        guard finalDay >= plan.template.day else { return nil }
+        return plan.template.day...finalDay
+    }
+    /// A bounded daily series reuses the ordinary item completion, editing and deletion rules.
+    public static func saveDateRange(_ edited: PlanItem, items: inout [PlanItem], series: inout [RepeatingPlan], calendar: Calendar = .current) {
+        guard let last = edited.endDay, last >= edited.day, edited.minute == nil else { return }
+        let previous = items.first { $0.id == edited.id }
+        let legacy = previous.flatMap { old in old.seriesID == nil && old.endDay.map { $0 > old.day } == true ? old : nil }
+        var daily = edited
+        daily.endDay = daily.day
+        daily.repeatRule = .daily
+        daily.repeatWeekdays = []
+        saveRepeating(daily, items: &items, series: &series, calendar: calendar)
+        guard let original = items.first(where: { $0.id == edited.id }),
+              let index = series.firstIndex(where: { $0.id == original.seriesID }) else { return }
+        if previous?.seriesID == nil {
+            // Two devices converting the same saved event must create the same group and days.
+            let id = PlanItem.occurrenceID(series: edited.id, day: edited.originalDay)
+            let generated = series[index].id
+            series[index].id = id
+            series[index].familyID = id
+            for i in items.indices where items[i].seriesID == generated { items[i].seriesID = id }
+        }
+        series[index].isDateRange = true
+        series[index].endBefore = Day(calendar.date(byAdding: .day, value: 1, to: last.date(calendar: calendar))!, calendar: calendar)
+        let plan = series[index]
+        let removed = items.filter { $0.seriesID == plan.id && !plan.includes($0.occurrenceDay ?? $0.day, calendar: calendar) }.map(\.id)
+        for id in removed { delete(id, includingChildren: false, from: &items) }
+        materialize([plan], in: &items, from: plan.template.day, through: last, calendar: calendar)
+        if let legacy {
+            for i in items.indices where items[i].seriesID == plan.id {
+                // Preserve an old whole-event completion/cancellation on every converted day.
+                items[i].completedAt = legacy.completedAt
+                items[i].cancelledAt = legacy.cancelledAt
+                // Existing explicitly dated reminders belong to their original date only.
+                items[i].reminders = legacy.reminders.filter {
+                    let day = Day($0, calendar: calendar)
+                    return day == items[i].day || (items[i].id == edited.id && (day < edited.day || day > last))
+                }
+                items[i].deadline = legacy.deadline.flatMap { Day($0, calendar: calendar) == items[i].day ? $0 : nil }
+            }
+            if let first = items.first(where: { $0.id == edited.id }) {
+                series[index].template.reminders = first.reminders
+                series[index].template.deadline = first.deadline
+            }
+        }
+    }
+    /// Upgrade old full-day spans once, keeping the original ID and all settled states.
+    @discardableResult public static func splitDateRanges(items: inout [PlanItem], series: inout [RepeatingPlan], calendar: Calendar = .current) -> Bool {
+        let ranges = items.filter { item in item.seriesID == nil && item.repeatRule == .never && item.minute == nil && item.endDay.map { $0 > item.day } == true }
+        for item in ranges { saveDateRange(item, items: &items, series: &series, calendar: calendar) }
+        return !ranges.isEmpty
+    }
+    // A repeating item has one shared definition. Edits update its whole family, including
+    // plans split by older versions. The editor detaches later days instead.
     public static func saveRepeating(_ edited: PlanItem, items: inout [PlanItem], series: inout [RepeatingPlan], calendar: Calendar = .current) {
         let previous = items.first { $0.id == edited.id }
         let family = series.first { $0.id == previous?.seriesID }?.familyID
@@ -506,6 +596,10 @@ public enum Planner {
         if let first = plans.min(by: { $0.template.day < $1.template.day }) {
             plan.id = first.id
             plan.familyID = first.familyID
+            if first.isDateRange == true, definition.repeatRule == .daily,
+               definition.minute == nil, definition.endDay == definition.day {
+                plan.isDateRange = true
+            }
         }
         // Preserve previous deletions and an explicitly stopped series.
         plan.excludedDays = Array(Set(plans.flatMap(\.excludedDays).map(shifted))).filter { $0 != edited.day }
@@ -524,10 +618,11 @@ public enum Planner {
             updated.occurrenceDay = day
             updated.originalDay = day
             updated.createdAt = old.createdAt
+            updated.detachedFrom = old.id == edited.id ? edited.detachedFrom : old.detachedFrom
             updated.completedAt = old.id == edited.id ? edited.completedAt : old.completedAt
             updated.cancelledAt = old.id == edited.id ? edited.cancelledAt : old.cancelledAt
             updated.parentID = old.parentID
-            let scheduleChanged = old.day != updated.day || old.minute != updated.minute || old.end != updated.end
+            let scheduleChanged = old.day != updated.day || old.minute != updated.minute || old.end != updated.end || old.endDay != updated.endDay
             updated.suggestionDismissed = scheduleChanged ? false : old.suggestionDismissed
             items.append(updated)
         }
@@ -565,15 +660,106 @@ public enum Planner {
             delete(item.id, includingChildren: false, from: &items)
         case .following:
             let related = Set(series.filter { $0.familyID == family }.map(\.id))
-            let ids = items.filter { occurrence in
+            let removed = items.filter { occurrence in
                 occurrence.seriesID.map(related.contains) ?? false && (occurrence.occurrenceDay ?? occurrence.day) >= day
-            }.map(\.id)
+            }
+            for index in series.indices where related.contains(series[index].id) {
+                let dates = removed.filter { $0.seriesID == series[index].id }.map { $0.occurrenceDay ?? $0.day }
+                series[index].excludedDays = Array(Set(series[index].excludedDays + dates)).sorted()
+            }
+            let ids = removed.map(\.id)
             for id in ids { delete(id, includingChildren: false, from: &items) }
             series.removeAll { related.contains($0.id) && $0.template.day >= day }
             for index in series.indices where related.contains(series[index].id) {
                 series[index].endBefore = min(series[index].endBefore ?? day, day)
             }
         }
+    }
+    private static func defaultLinkedItem(_ plan: RepeatingPlan, on day: Day, calendar: Calendar) -> PlanItem {
+        var value = plan.template
+        updateStart(&value, day: day, minute: value.minute, calendar: calendar)
+        let shift = calendar.dateComponents([.day], from: plan.template.day.date(calendar: calendar), to: day.date(calendar: calendar)).day ?? 0
+        value.deadline = plan.template.deadline.flatMap { calendar.date(byAdding: .day, value: shift, to: $0) }
+        value.id = PlanItem.occurrenceID(series: plan.id, day: day)
+        value.seriesID = plan.id; value.occurrenceDay = day; value.originalDay = day
+        value.detachedFrom = nil; value.carriedFrom = nil; value.parentID = nil
+        value.completedAt = nil; value.cancelledAt = nil; value.suggestionDismissed = false
+        return value
+    }
+    private static func linkedItem(_ origin: LinkedItemOrigin, plan: RepeatingPlan, items: [PlanItem]) -> PlanItem? {
+        if let linked = items.first(where: { $0.seriesID == origin.seriesID && ($0.occurrenceDay ?? $0.day) == origin.day }) { return linked }
+        if let detached = items.first(where: { $0.detachedFrom == origin }) { return detached }
+        // Older detached records have no provenance. Their stable occurrence ID still identifies them.
+        let derived = PlanItem.occurrenceID(series: origin.seriesID, day: origin.day)
+        return items.first {
+            $0.seriesID != plan.id && $0.detachedFrom == nil
+                && ($0.id == derived || (origin.day == plan.template.day && $0.id == plan.template.id))
+        }
+    }
+    private static func matchesLinkedDefault(_ item: PlanItem, _ expected: PlanItem) -> Bool {
+        item.title == expected.title && item.notes == expected.notes && item.locations == expected.locations && item.people == expected.people
+            && item.day == expected.day && item.minute == expected.minute && item.end == expected.end && item.endDay == expected.endDay
+            && item.movesToNextDay == expected.movesToNextDay && item.repeatRule == expected.repeatRule && item.repeatWeekdays == expected.repeatWeekdays
+            && item.personas == expected.personas && Set(item.reminders) == Set(expected.reminders) && item.deadline == expected.deadline
+    }
+    /// Finite groups show their full range. Open-ended repeats show generated and excluded
+    /// dates plus the requested horizon; merely opening the overview never creates records.
+    public static func linkedItems(for original: PlanItem, in items: [PlanItem], series: [RepeatingPlan], through horizon: Day,
+                                   calendar: Calendar = .current) -> [LinkedItemEntry] {
+        guard let family = series.first(where: { $0.id == original.seriesID })?.familyID else { return [] }
+        var entries: [LinkedItemEntry] = []
+        for plan in series where plan.familyID == family {
+            let materialized = items.filter { $0.seriesID == plan.id }.compactMap(\.occurrenceDay).max() ?? plan.template.day
+            let last = max(plan.endBefore.map { Day(calendar.date(byAdding: .day, value: -1, to: $0.date(calendar: calendar))!, calendar: calendar) } ?? max(horizon, materialized), plan.excludedDays.max() ?? plan.template.day)
+            var day = plan.template.day
+            while day <= last {
+                let excluded = plan.excludedDays.contains(day)
+                if plan.template.repeatRule.matches(day, starting: plan.template.day, weekdays: plan.template.repeatWeekdays, calendar: calendar),
+                   excluded || plan.endBefore.map({ day < $0 }) ?? true {
+                    let origin = LinkedItemOrigin(seriesID: plan.id, day: day)
+                    let actual = linkedItem(origin, plan: plan, items: items)
+                    let status: LinkedItemStatus
+                    if excluded { status = actual == nil ? .deleted : .changed }
+                    else if let actual { status = matchesLinkedDefault(actual, defaultLinkedItem(plan, on: day, calendar: calendar)) ? .linked : .changed }
+                    else { status = .linked }
+                    entries.append(LinkedItemEntry(origin: origin, status: status, item: actual))
+                }
+                guard let next = calendar.date(byAdding: .day, value: 1, to: day.date(calendar: calendar)) else { break }
+                day = Day(next, calendar: calendar)
+            }
+        }
+        return entries.sorted { $0.origin.day < $1.origin.day }
+    }
+    /// Restore one date to the saved template. Existing settlement and identity survive;
+    /// a deleted date returns open. An individually changed date rejoins its original series.
+    @discardableResult public static func restoreLinkedItem(_ entry: LinkedItemEntry, items: inout [PlanItem], series: inout [RepeatingPlan], calendar: Calendar = .current) -> Bool {
+        guard entry.status != .linked, let index = series.firstIndex(where: { $0.id == entry.origin.seriesID }) else { return false }
+        let plan = series[index], day = entry.origin.day
+        guard plan.template.repeatRule.matches(day, starting: plan.template.day, weekdays: plan.template.repeatWeekdays, calendar: calendar) else { return false }
+        let actual = linkedItem(entry.origin, plan: plan, items: items)
+        var restored = defaultLinkedItem(plan, on: day, calendar: calendar)
+        if let actual {
+            restored.id = actual.id; restored.createdAt = actual.createdAt
+            restored.completedAt = actual.completedAt; restored.cancelledAt = actual.cancelledAt
+            restored.parentID = actual.parentID
+            if let other = actual.seriesID, other != plan.id, let otherIndex = series.firstIndex(where: { $0.id == other }) {
+                let otherDay = actual.occurrenceDay ?? actual.day
+                if !series[otherIndex].excludedDays.contains(otherDay) { series[otherIndex].excludedDays.append(otherDay) }
+            }
+            items.removeAll { $0.id == actual.id }
+        }
+        if let end = series[index].endBefore, day >= end {
+            // Restoring one day after a "delete following" keeps the intervening deleted days out.
+            var cursor = end
+            while cursor < day {
+                if !series[index].excludedDays.contains(cursor) { series[index].excludedDays.append(cursor) }
+                cursor = Day(calendar.date(byAdding: .day, value: 1, to: cursor.date(calendar: calendar))!, calendar: calendar)
+            }
+            series[index].endBefore = Day(calendar.date(byAdding: .day, value: 1, to: day.date(calendar: calendar))!, calendar: calendar)
+        }
+        series[index].excludedDays.removeAll { $0 == day }
+        items.append(restored)
+        return true
     }
     /// Records what changed between a plan before and after a deletion.
     public static func deletion(of title: String, before: (items: [PlanItem], series: [RepeatingPlan]),
@@ -658,6 +844,9 @@ public enum Planner {
         single.seriesID = nil
         single.occurrenceDay = nil
         single.originalDay = single.day
+        if let source = previous?.seriesID ?? edited.seriesID {
+            single.detachedFrom = previous?.detachedFrom ?? LinkedItemOrigin(seriesID: source, day: previous?.occurrenceDay ?? edited.occurrenceDay ?? edited.day)
+        }
         items.removeAll { $0.id == edited.id }
         if single.repeatRule == .never || !(previous.map { changesPattern($0, to: edited) } ?? false) {
             single.repeatRule = .never
@@ -731,6 +920,9 @@ public enum Planner {
         if let end = item.end {
             guard let start = item.start(calendar: calendar), end > start else { throw PlannerError.schedule }
         }
+        if let endDay = item.endDay {
+            guard item.minute == nil, item.end == nil, endDay >= item.day else { throw PlannerError.schedule }
+        }
         if let parentID = item.parentID {
             guard parentID != item.id, let parent = items.first(where: { $0.id == parentID }) else { throw PlannerError.parent }
             guard parent.parentID == nil else { throw PlannerError.nested }
@@ -769,6 +961,14 @@ public enum Planner {
         for item in matching {
             let live = item.liveDay(now: now, calendar: calendar)
             days.insert(live)
+            if let endDay = item.endDay {
+                var covered = item.day
+                while covered <= endDay {
+                    days.insert(covered)
+                    guard let next = calendar.date(byAdding: .day, value: 1, to: covered.date(calendar: calendar)) else { break }
+                    covered = Day(next, calendar: calendar)
+                }
+            }
             var carriedFrom = item.day
             while carriedFrom < live, let next = calendar.date(byAdding: .day, value: 1, to: carriedFrom.date(calendar: calendar)) {
                 days.insert(carriedFrom)
@@ -811,6 +1011,14 @@ public enum Planner {
             while day < live, let next = calendar.date(byAdding: .day, value: 1, to: day.date(calendar: calendar)) {
                 days.append(day)
                 day = Day(next, calendar: calendar)
+            }
+            if let endDay = item.endDay {
+                var covered = item.day
+                while covered <= endDay {
+                    if !days.contains(covered) { days.append(covered) }
+                    guard let next = calendar.date(byAdding: .day, value: 1, to: covered.date(calendar: calendar)) else { break }
+                    covered = Day(next, calendar: calendar)
+                }
             }
             return days
         }
@@ -868,6 +1076,7 @@ public enum Planner {
         let oldStart = item.start(calendar: calendar)
         let duration = item.end.flatMap { end in oldStart.map { end.timeIntervalSince($0) } }
         let oldDay = item.day
+        let oldEndDay = item.endDay
         item.day = day; item.minute = minute
         if let oldStart, let newStart = item.start(calendar: calendar) {
             item.reminders = item.reminders.map { $0.addingTimeInterval(newStart.timeIntervalSince(oldStart)) }
@@ -877,11 +1086,45 @@ public enum Planner {
         }
         if let duration, let start = item.start(calendar: calendar) { item.end = start.addingTimeInterval(duration) }
         else { item.end = nil }
+        if let oldEndDay {
+            let span = calendar.dateComponents([.day], from: oldDay.date(calendar: calendar), to: oldEndDay.date(calendar: calendar)).day ?? 0
+            let finalDay = calendar.date(byAdding: .day, value: span, to: day.date(calendar: calendar))!
+            if let start = item.start(calendar: calendar) {
+                // Adding a time keeps the final date, with a one-hour end by default.
+                item.end = calendar.date(byAdding: .day, value: span, to: start.addingTimeInterval(3600))
+                item.endDay = nil
+            } else { item.endDay = Day(finalDay, calendar: calendar) }
+        } else if minute == nil, let oldEnd = item.end ?? (duration.flatMap { oldStart?.addingTimeInterval($0) }) {
+            // Dropping time keeps the calendar days the timed range actually occupied.
+            let finalDay = Day(oldEnd.addingTimeInterval(-1), calendar: calendar)
+            let span = calendar.dateComponents([.day], from: oldDay.date(calendar: calendar), to: finalDay.date(calendar: calendar)).day ?? 0
+            if span > 0 {
+                item.endDay = Day(calendar.date(byAdding: .day, value: span, to: day.date(calendar: calendar))!, calendar: calendar)
+            }
+        }
         item.suggestionDismissed = false
+    }
+    /// Use the live clock at tap time. The time picker supplies its selected day; the quick
+    /// action omits it so a scheduled item moves to today, keeping its duration and offsets.
+    public static func updateStartToNow(_ item: inout PlanItem, now: Date, on selected: Day? = nil, calendar: Calendar = .current) {
+        let parts = calendar.dateComponents([.hour, .minute], from: now)
+        updateStart(&item, day: selected ?? Day(now, calendar: calendar),
+                    minute: (parts.hour ?? 0) * 60 + (parts.minute ?? 0), calendar: calendar)
+    }
+    /// Start only this scheduled item. A linked occurrence detaches instead of moving its series.
+    @discardableResult public static func startNow(_ id: UUID, items: inout [PlanItem], series: inout [RepeatingPlan], now: Date, calendar: Calendar = .current) -> Bool {
+        guard let index = items.firstIndex(where: { $0.id == id }), !items[index].isSettled,
+              items[index].minute != nil || items[index].endDay != nil else { return false }
+        var updated = items[index]
+        updateStartToNow(&updated, now: now, calendar: calendar)
+        if updated.seriesID != nil { detach(updated, items: &items, series: &series, calendar: calendar) }
+        else { items[index] = updated }
+        return true
     }
     public static func reschedule(_ item: inout PlanItem, to day: Day, minute: Int?, end: Date? = nil) {
         updateStart(&item, day: day, minute: minute)
         item.end = end
+        if minute != nil { item.endDay = nil }
     }
     public static func suggestsParentCompletion(_ parent: PlanItem, in items: [PlanItem]) -> Bool {
         let children = items.filter { $0.parentID == parent.id }

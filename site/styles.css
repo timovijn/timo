@@ -892,12 +892,6 @@ em {
   font-size:12px;
   font-weight:550;
 }
-.focus-item .history {
-  font-size:9px;
-  color:#7e8375;
-  line-height:1.7;
-  margin-top:15px;
-}
 .focus-actions {
   display:flex;
   gap:6px;
@@ -1533,9 +1527,6 @@ details[open] summary::after {
   .focus-item strong {
     font-size:10px;
   }
-  .focus-item .history {
-    font-size:8px;
-  }
   .focus-actions {
     flex-wrap:wrap;
   }
@@ -1653,9 +1644,6 @@ details[open] summary::after {
   }
   .focus-item strong {
     font-size:12px;
-  }
-  .focus-item .history {
-    font-size:9px;
   }
   .persona-list {
     max-width:190px;

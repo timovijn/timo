@@ -100,8 +100,6 @@ let cancelled=false;
 cancel.addEventListener('click',()=>{
   cancelled=!cancelled;
   cancel.textContent=cancelled?'↶ Uncancel':'⊗ Cancel';
-  document.getElementById('focus-history').textContent=cancelled?'Cancelled 5 Nov, 13:45':'';
-  document.getElementById('focus-history').hidden=!cancelled;
   const symbol=document.querySelector('.focus-item .item-circle');symbol.textContent=cancelled?'×':'';
   document.querySelector('.focus-item strong').style.textDecoration=cancelled?'line-through':'none';
   document.querySelector('.focus-item strong').style.color=cancelled?'#818779':'var(--ink)';
