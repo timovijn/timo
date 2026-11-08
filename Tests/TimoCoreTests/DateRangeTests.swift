@@ -28,7 +28,7 @@ final class DateRangeTests: XCTestCase {
         var item = range(carries: true)
         XCTAssertFalse(item.isCarried(now: date(8, hour: 23), calendar: calendar))
         XCTAssertTrue(item.isCarried(now: date(9), calendar: calendar))
-        XCTAssertTrue(item.movedAway(from: day(8), now: date(9), calendar: calendar))
+        XCTAssertFalse(item.movedAway(from: day(8), now: date(9), calendar: calendar), "Covered dates retain their own daily state")
         item.completedAt = date(7)
         for value in 6...8 { XCTAssertTrue(item.shows(on: day(value), now: date(10), calendar: calendar)) }
         XCTAssertFalse(item.shows(on: day(9), now: date(10), calendar: calendar))

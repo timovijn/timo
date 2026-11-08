@@ -378,11 +378,13 @@ SWIFT_CLASS("_TtC4Timo14FrameRateBoost")
 
 @class UICloudSharingController;
 @class NSString;
+@class NSData;
 /// The system’s sheet for inviting people to a share and seeing who’s in it. Presented from
 /// UIKit: inside a SwiftUI sheet it’s a sheet within a sheet and comes up blank.
 SWIFT_CLASS("_TtC4Timo12SharingSheet")
 @interface SharingSheet : NSObject <UICloudSharingControllerDelegate>
 - (NSString * _Nullable)itemTitleForCloudSharingController:(UICloudSharingController * _Nonnull)csc SWIFT_WARN_UNUSED_RESULT;
+- (NSData * _Nullable)itemThumbnailDataForCloudSharingController:(UICloudSharingController * _Nonnull)csc SWIFT_WARN_UNUSED_RESULT;
 - (void)cloudSharingController:(UICloudSharingController * _Nonnull)csc failedToSaveShareWithError:(NSError * _Nonnull)error;
 - (void)cloudSharingControllerDidSaveShare:(UICloudSharingController * _Nonnull)csc;
 - (void)cloudSharingControllerDidStopSharing:(UICloudSharingController * _Nonnull)csc;
@@ -406,8 +408,6 @@ SWIFT_CLASS("_TtC4Timo15TimoAppDelegate")
 @class CKShareMetadata;
 SWIFT_CLASS("_TtC4Timo17TimoSceneDelegate")
 @interface TimoSceneDelegate : NSObject <UIWindowSceneDelegate>
-/// Just after opening, so the first search doesn’t pay for it.
-- (void)sceneDidBecomeActive:(UIScene * _Nonnull)scene;
 /// A link that opens the app arrives here rather than below.
 - (void)scene:(UIScene * _Nonnull)scene willConnectToSession:(UISceneSession * _Nonnull)session options:(UISceneConnectionOptions * _Nonnull)options;
 - (void)windowScene:(UIWindowScene * _Nonnull)windowScene userDidAcceptCloudKitShareWithMetadata:(CKShareMetadata * _Nonnull)metadata;

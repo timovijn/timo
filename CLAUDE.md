@@ -11,7 +11,7 @@ SwiftUI day planner for iOS 26 with a Liquid Glass look. The README describes ev
 - `Timo/ItemEditor.swift`: the item editor (schedule/reminder pills, persona chips, location/people pills, (i) explanations).
 - `Timo/PersonaViews.swift`: persona orb, top-left persona menu, persona history page, long-press delete.
 - `Timo/SearchView.swift`: search: the button beside the persona button that grows into the field in a row under the top controls (`SearchLayer`), the pull that draws it down (`SearchPull`, `PullsToSearch`) and the page-hiding `SearchBackdrop`. Results are the day list's own rows; the persona scopes them and the day's filter buttons count and narrow them (`searchFilter` in `DayView`); matching lives in `Planner.search`, and dates in a query are read by `SearchQuery`.
-- `Timo/PlanStore.swift`: JSON persistence (document version 8, reads 1–8), reminders, sample day.
+- `Timo/PlanStore.swift`: JSON persistence (document version 9, reads 1–9), reminders, sample day.
 - `Timo/PlanLocation.swift`: where the plan file lives (the App Group's shared container when available; one file on the Mac shared by all simulators), compiled into the app and the widget.
 - `TimoWidget/TimoWidget.swift`: the lock screen widget extension (today's done count); it also compiles `Planner.swift`.
 - `Timo/GuideActivity.swift` (app and widget): Live Activity attributes, persona colours and the Complete intent; `TimoWidget/GuideLiveActivity.swift` draws it; `Timo/DayGuideActivities.swift` starts, schedules and ends the activities ("Guide my day").

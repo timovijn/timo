@@ -513,7 +513,7 @@ private struct CrossMark: Shape {
     }
 }
 
-/// Every item has a faint fill, whether open, completed, cancelled or carried. The outlined style
+/// Open items have a faint fill; completed and cancelled items have no background or outline. The outlined style
 /// (over the page's background colour) is kept but currently unused. Increase Contrast makes both styles a little firmer.
 /// Pressing the item (its title, not its circle) settles the card in a touch, springing back on
 /// release, without shading it: holding hands over to the system's own lift. Reduce Motion
@@ -522,6 +522,7 @@ struct ItemCard: ViewModifier {
     var outlined = false
     /// An item from another day, shown for a reminder or deadline: no fill, a dashed outline.
     var dashed = false
+    var settled = false
     /// Space between the card's trailing edge and the time; the day view's shared time label
     /// is placed outside the row, so it uses the same inset.
     static let trailingInset: CGFloat = 12
@@ -549,19 +550,19 @@ struct ItemCard: ViewModifier {
             .padding(.trailing, Self.trailingInset)
             .padding(.vertical, 2)
             .environment(\.itemCardPressed, $pressed)
-            // Fade between the fill and the outline; the list reconfigures a completed row
-            // without the caller's transaction, which used to swap them in a single frame.
-            .background(Self.tint(contrast, colorScheme: colorScheme).opacity(outlined || dashed ? 0 : 1), in: Self.shape)
-            // Keep the existing card opaque throughout layout and mode animations.
-            .background(Color(.systemBackground), in: Self.shape)
+            .background(Self.tint(contrast, colorScheme: colorScheme).opacity(settled || outlined || dashed ? 0 : 1), in: Self.shape)
+            // Open cards stay opaque during layout animations; settled rows reveal the page.
+            .background(Color(.systemBackground).opacity(settled ? 0 : 1), in: Self.shape)
             .overlay {
                 // Filled cards get a hairline edge so they read as surfaces; outlined
                 // (carried) cards keep their fuller stroke in place of the fill.
                 Self.shape.strokeBorder(Self.outline(contrast, colorScheme: colorScheme).opacity(dashed ? 2.5 : 1),
                                         style: StrokeStyle(lineWidth: outlined || dashed ? 1 : 0.5, dash: dashed ? [4, 3] : []))
+                    .opacity(settled ? 0 : 1)
                     .allowsHitTesting(false)
             }
             .animation(reduceMotion ? nil : .smooth(duration: 0.35), value: outlined)
+            .animation(ItemStatusMotion.animation(reduceMotion: reduceMotion), value: settled)
             .scaleEffect(pressed && !reduceMotion ? 0.98 : 1)
             // A quick press in, then a soft spring back so letting go feels physical.
             .animation(reduceMotion ? nil : pressed ? .easeOut(duration: 0.1) : .spring(duration: 0.35, bounce: 0.3),
@@ -598,6 +599,11 @@ extension PlanItem {
         var lines = ["Created " + Self.stamp(createdAt)]
         if let completedAt { lines.append("Completed " + Self.stamp(completedAt)) }
         if let cancelledAt { lines.append("Cancelled " + Self.stamp(cancelledAt)) }
+        for status in dailyStatuses ?? [] {
+            let day = status.day.date().formatted(date: .abbreviated, time: .omitted)
+            if let completedAt = status.completedAt { lines.append("Completed for " + day + ": " + Self.stamp(completedAt)) }
+            if let cancelledAt = status.cancelledAt { lines.append("Cancelled for " + day + ": " + Self.stamp(cancelledAt)) }
+        }
         return lines.joined(separator: "\n")
     }
     private static func stamp(_ date: Date) -> String {

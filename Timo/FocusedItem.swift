@@ -86,7 +86,7 @@ struct InlineFocusedDetails: View {
             guard let current = store.item(item.id) else { return }
             if !reduceMotion { FrameRateBoost.shared.request(for: .milliseconds(700)) }
             withAnimation(FocusedItemMotion.animation(reduceMotion: reduceMotion)) {
-                store.setCancelled(current, !current.isCancelled, on: day)
+                store.setCancelled(current, !current.on(day).isCancelled, on: day)
                 contentChanged()
             }
         } label: {

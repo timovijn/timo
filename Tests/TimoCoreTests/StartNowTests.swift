@@ -47,19 +47,15 @@ final class StartNowTests: XCTestCase {
         XCTAssertEqual(items.filter { $0.id != original.id }, unchanged)
         XCTAssertFalse(Planner.materialize(series, in: &items, from: day(6), through: day(8), calendar: calendar))
     }
-    func testFullDayOccurrenceBecomesTimedWithoutChangingOtherDays() throws {
+    func testFullDayEventBecomesOneTimedRange() throws {
         let event = PlanItem(title: "Weekend", day: day(6), endDay: day(8), movesToNextDay: false)
-        var items: [PlanItem] = [], series: [RepeatingPlan] = []
-        Planner.saveDateRange(event, items: &items, series: &series, calendar: calendar)
-        let selected = try XCTUnwrap(items.first { $0.day == day(7) })
-        let others = items.filter { $0.id != selected.id }
-        XCTAssertTrue(Planner.startNow(selected.id, items: &items, series: &series, now: date(7, 15, 12), calendar: calendar))
-        let moved = try XCTUnwrap(items.first { $0.id == selected.id })
-        XCTAssertNil(moved.endDay)
-        XCTAssertNil(moved.seriesID)
-        XCTAssertEqual(moved.minute, 15 * 60 + 12)
-        XCTAssertEqual(moved.end, date(7, 16, 12))
-        XCTAssertEqual(items.filter { $0.id != selected.id }, others)
+        var items = [event], series: [RepeatingPlan] = []
+        XCTAssertTrue(Planner.startNow(event.id, items: &items, series: &series, now: date(7, 15, 12), calendar: calendar))
+        XCTAssertEqual(items.count, 1)
+        XCTAssertNil(items[0].endDay)
+        XCTAssertNil(items[0].seriesID)
+        XCTAssertEqual(items[0].minute, 15 * 60 + 12)
+        XCTAssertEqual(items[0].end, date(9, 16, 12))
     }
     func testQuickActionLeavesSettledUntimedAndMissingItemsUntouched() {
         var done = PlanItem(title: "Done", day: day(7), minute: 540)

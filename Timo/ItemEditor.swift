@@ -43,16 +43,11 @@ struct ItemEditor: View {
     @State private var deleted = false
     @State private var showingLinkedItems = false
     private var existing: Bool { deleted || store.item(item.id) != nil }
-    init(item: PlanItem, viewingDay: Day, range: ClosedRange<Day>? = nil, openItem: ((PlanItem) -> Void)? = nil) {
+    init(item: PlanItem, viewingDay: Day, openItem: ((PlanItem) -> Void)? = nil) {
         self.viewingDay = viewingDay
         self.openItem = openItem
-        var draft = item
-        if let range {
-            draft.endDay = range.upperBound
-            draft.repeatRule = .never
-        }
-        _item = State(initialValue: draft)
-        opened = draft
+        _item = State(initialValue: item.on(viewingDay))
+        opened = item.on(viewingDay)
         _locations = State(initialValue: item.locations.map { ItemTextEntry(text: $0) })
         _people = State(initialValue: item.people.map { ItemTextEntry(text: $0) })
         _reminderIDs = State(initialValue: item.reminders.map { _ in UUID() })
@@ -176,7 +171,7 @@ struct ItemEditor: View {
                         Text("The schedule stays as planned. Until it is done, the item is also shown on today. Tick it off on the day it actually happened to keep it there.")
                     }
                 }
-                if store.dateRange(of: item) == nil { repeatSection }
+                repeatSection
                 Section {
                     Toggle("Move to next day if unfinished", isOn: Binding(get: { item.movesToNextDay }, set: {
                         item.movesToNextDay = $0
@@ -270,6 +265,7 @@ struct ItemEditor: View {
                     Section {
                         Button {
                             Planner.setCancelled(!item.isCancelled, &item, on: viewingDay, now: Date())
+                            item = item.on(viewingDay)
                         } label: {
                             Label(item.isCancelled ? "Uncancel item" : "Cancel item",
                                   systemImage: item.isCancelled ? "arrow.uturn.backward.circle" : "xmark.circle")
@@ -635,7 +631,7 @@ struct ItemEditor: View {
     @ViewBuilder private var itemStatusSection: some View {
         if let stored = store.item(item.id) {
             let now = Date()
-            let wasCarried = stored.isCarried(now: now)
+            let wasCarried = stored.isCarried(now: now) && !stored.appears(on: viewingDay)
             let carried = wasCarried && viewingDay > stored.day
             let carriedOriginal = wasCarried && viewingDay == stored.day
             let original = stored.seriesID == nil ? nil : store.originalDay(of: stored)

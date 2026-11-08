@@ -4,13 +4,25 @@
 <dict>
 	<key>files</key>
 	<dict>
+		<key>AppIcon60x60@2x.png</key>
+		<data>
+		FsEV7kYYvt/HTVgIbAqf49iHmwk=
+		</data>
+		<key>AppIcon76x76@2x~ipad.png</key>
+		<data>
+		D79GS/YYBQ2HVxNLeCEsUeNk++E=
+		</data>
+		<key>Assets.car</key>
+		<data>
+		Gbnmin/Ez1MOQ4IfjW7UuoGWR6E=
+		</data>
 		<key>Info.plist</key>
 		<data>
-		2nWpieRbt6iU+RAniKQtq+sxX5A=
+		pavel5kwTu51ix7LESrXDm2JVSc=
 		</data>
 		<key>Metadata.appintents/extract.actionsdata</key>
 		<data>
-		HUAgbnSPYWRorGy1PHkk+oJpDZM=
+		hRtvDCi6RyY9rVC4U17exAnZITA=
 		</data>
 		<key>Metadata.appintents/version.json</key>
 		<data>
@@ -22,11 +34,11 @@
 		</data>
 		<key>PlugIns/TimoWidget.appex/Info.plist</key>
 		<data>
-		BX3PIcfbir1W703SKeFHySoYOFI=
+		5Wbhr01gfbnFcMXDy7sBvBG/KTQ=
 		</data>
 		<key>PlugIns/TimoWidget.appex/Metadata.appintents/extract.actionsdata</key>
 		<data>
-		x4uS8O4I3W50GVJQm9VvoGER6ZM=
+		uIeOKm0OFB7BaQjFipIogcxG8eM=
 		</data>
 		<key>PlugIns/TimoWidget.appex/Metadata.appintents/version.json</key>
 		<data>
@@ -34,15 +46,15 @@
 		</data>
 		<key>PlugIns/TimoWidget.appex/TimoWidget</key>
 		<data>
-		cINPXVVwXfJI3HiAZPZMZUC27BQ=
+		uR/zknd4Kx+yuU00SbKnL/FgZog=
 		</data>
 		<key>PlugIns/TimoWidget.appex/TimoWidget.debug.dylib</key>
 		<data>
-		GP961WHx8Uipvz4Hx0I7PvmIIjE=
+		KJV0u1N49YEJkaJVz3eeU0WemX4=
 		</data>
 		<key>PlugIns/TimoWidget.appex/_CodeSignature/CodeResources</key>
 		<data>
-		A9OzcYZK68Tka1LQ3XB5LVDnqgA=
+		5CPJm9U5MT1uUd1iZMYYKmpp8j4=
 		</data>
 		<key>PlugIns/TimoWidget.appex/__preview.dylib</key>
 		<data>
@@ -50,20 +62,41 @@
 		</data>
 		<key>Timo.debug.dylib</key>
 		<data>
-		9PEWpqzOlra3QMkCvkh8xJ1Zh2c=
+		o/PBntTaw+m5tCnZpUQR5DQscBc=
 		</data>
 		<key>__preview.dylib</key>
 		<data>
-		JaAxYgDBHJXeNBOyY3ZITdRVmRg=
+		9uuNqoKjkedpC3BAHX4rBaRNHVk=
 		</data>
 	</dict>
 	<key>files2</key>
 	<dict>
+		<key>AppIcon60x60@2x.png</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			EUaERnXr81nmh+c3BQM95gRV6eVqnUa3FAflDdz/uXc=
+			</data>
+		</dict>
+		<key>AppIcon76x76@2x~ipad.png</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			HSj5Zcpy8+drWBaepu4d4il0CLVuLqC+FreAfUQnCIQ=
+			</data>
+		</dict>
+		<key>Assets.car</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			qJA8BO7L1Rtr6qbA8aIFpBEEh7HYrvl9NiuqGxxx83A=
+			</data>
+		</dict>
 		<key>Metadata.appintents/extract.actionsdata</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			/gMJwic/9XXOVVLjDVW2Sek5qghRR7wIZ5zgw/vVeUc=
+			CnOftrUDHDf4Pfn2JinVcYAx+iN91y8nOpGEphm9zDU=
 			</data>
 		</dict>
 		<key>Metadata.appintents/version.json</key>
@@ -77,14 +110,14 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			IFRB/WcF6BLsHv9xEIlp0w371KyguECdQ+Cf0aCpgLQ=
+			2cqNkyWtpuXxeHq8S3F548FYTvx/FwrvPhWWoe8UWMw=
 			</data>
 		</dict>
 		<key>PlugIns/TimoWidget.appex/Metadata.appintents/extract.actionsdata</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			2Qv4aFXoiEteVIC2QiuY6YLb62aVw2yQS8BLxmADEno=
+			/lUFtk4ktesJvU9Woj1yuWqf8lYpDKd1wQkYOmT4Ksg=
 			</data>
 		</dict>
 		<key>PlugIns/TimoWidget.appex/Metadata.appintents/version.json</key>
@@ -98,21 +131,21 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			Xu26k8eut9xFFWMHF/nD9R4ikLh/9opltbvap7bgiKo=
+			fMZqldj2/uPxqEsCCKWiEy29mpHLcRYGkokpTFVmlEc=
 			</data>
 		</dict>
 		<key>PlugIns/TimoWidget.appex/TimoWidget.debug.dylib</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			mN/WkNw8zXgaEmBGEGVywJ8EONL4HOR9RhaugL21cWk=
+			KD49l0RqkhrkCXktp1SP619VKq1OP+xD+z7T87F8nX4=
 			</data>
 		</dict>
 		<key>PlugIns/TimoWidget.appex/_CodeSignature/CodeResources</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			7yklgLJiCvgDsE6qAPIIzXILDFeaD+/7+l0/vR6CGV8=
+			X3NtbU+X8Dec3lIB0HqXQjrYqkG4LUbBYJ+YjnLrHKc=
 			</data>
 		</dict>
 		<key>PlugIns/TimoWidget.appex/__preview.dylib</key>
@@ -126,14 +159,14 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			Em18DW6roWAOG8FB5rw7LbRs2YhdvKoBeiGVJYi1Gp8=
+			bKDHrzMYkxSi4DcKvwbKYyW+IFtK9VNhoeMGRyPU4ug=
 			</data>
 		</dict>
 		<key>__preview.dylib</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			M+9N3aA9MlJScUGttwrqvyoWSF7zF1lfInVgcK1xQlY=
+			E4nn15Qh7Az98gw+RN6bqUtdSD0Q9kVGeBTOIn6OR/Y=
 			</data>
 		</dict>
 	</dict>

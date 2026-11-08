@@ -7,7 +7,7 @@
         "key": "",
         "location": {
           "startingColumn": 62,
-          "startingLine": 196
+          "startingLine": 216
         }
       },
       {
@@ -15,7 +15,7 @@
         "key": "Search",
         "location": {
           "startingColumn": 67,
-          "startingLine": 196
+          "startingLine": 216
         }
       },
       {
@@ -23,7 +23,7 @@
         "key": "",
         "location": {
           "startingColumn": 61,
-          "startingLine": 197
+          "startingLine": 217
         }
       },
       {
@@ -31,7 +31,7 @@
         "key": "Finds items on any day. Pulling a page down also opens it",
         "location": {
           "startingColumn": 66,
-          "startingLine": 197
+          "startingLine": 217
         }
       },
       {
@@ -39,7 +39,7 @@
         "key": "Close search",
         "location": {
           "startingColumn": 29,
-          "startingLine": 315
+          "startingLine": 335
         }
       },
       {
@@ -47,7 +47,7 @@
         "key": "Clear search",
         "location": {
           "startingColumn": 37,
-          "startingLine": 299
+          "startingLine": 319
         }
       },
       {
@@ -55,7 +55,7 @@
         "key": "Search",
         "location": {
           "startingColumn": 30,
-          "startingLine": 266
+          "startingLine": 286
         }
       },
       {
@@ -63,7 +63,7 @@
         "key": "",
         "location": {
           "startingColumn": 35,
-          "startingLine": 276
+          "startingLine": 296
         }
       },
       {
@@ -71,7 +71,7 @@
         "key": "Search",
         "location": {
           "startingColumn": 49,
-          "startingLine": 284
+          "startingLine": 304
         }
       },
       {
@@ -79,7 +79,7 @@
         "key": "Finds items on any day by title, notes, people or location",
         "location": {
           "startingColumn": 48,
-          "startingLine": 285
+          "startingLine": 305
         }
       },
       {
@@ -87,7 +87,7 @@
         "key": "Nothing in %@ matches “%@”. Choose All to search everything.",
         "location": {
           "startingColumn": 62,
-          "startingLine": 365
+          "startingLine": 385
         }
       },
       {
@@ -95,7 +95,7 @@
         "key": "No Results in %@",
         "location": {
           "startingColumn": 44,
-          "startingLine": 364
+          "startingLine": 384
         }
       }
     ]

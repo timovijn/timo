@@ -59,7 +59,8 @@ struct DayView: View {
     private var focusedItemIsGone: Bool { focused.map { store.item($0.id) == nil } ?? false }
     /// Actions and search changes can remove a row without deleting its underlying item.
     private var focusedInlineItemIsHidden: Bool {
-        guard let focused, let item = store.item(focused.id) else { return false }
+        guard let focused, let saved = store.item(focused.id) else { return false }
+        let item = saved.on(focused.day)
         switch focused.source {
         case .day:
             guard !search.isOpen, persona == nil, focused.day == day else { return true }
@@ -100,7 +101,7 @@ struct DayView: View {
     private let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
     private var day: Day { Day(date) }
     private var visible: [PlanItem] {
-        store.items.filter { $0.shows(on: day, now: now) }.sorted {
+        store.items.filter { $0.shows(on: day, now: now) }.map { $0.on(day) }.sorted {
             if $0.minute != $1.minute { return ($0.minute ?? -1) < ($1.minute ?? -1) }
             return $0.createdAt < $1.createdAt
         }
@@ -172,7 +173,7 @@ struct DayView: View {
                              adjacentContent: { adjacentDay in
                                  pageContent(for: adjacentDay.date(), filter: .all, mode: previewMode, insets: viewport.safeAreaInsets)
                              },
-                             revision: DayPageRevision(items: store.items, sharedZones: store.cloud.sharedZones, filter: filter.rawValue, panelFilter: panelFilter.rawValue,
+                             revision: DayPageRevision(items: store.items, series: store.repeatingPlans, sharedZones: store.cloud.sharedZones, filter: filter.rawValue, panelFilter: panelFilter.rawValue,
                                                        minute: Int(now.timeIntervalSinceReferenceDate / 60), typeSize: dynamicTypeSize,
                                                        insets: viewport.safeAreaInsets, reduceMotion: reduceMotion, focusedID: focused?.id, focusEnding: focused?.ending ?? false, focusDetailsRevision: focused?.detailsRevision ?? 0),
                              reduceMotion: reduceMotion,
@@ -243,7 +244,7 @@ struct DayView: View {
             .sheet(item: $editing) { item in
                 // A persona page or search can open an item from any day.
                 ItemEditor(item: item, viewingDay: persona == nil && !search.isOpen ? day : item.liveDay(now: now),
-                           range: store.isOriginal(item) ? store.dateRange(of: item) : nil, openItem: openOnItsDay)
+                           openItem: openOnItsDay)
                     .environmentObject(store)
             }
             .sheet(item: $changingReminder) { item in
@@ -813,7 +814,7 @@ struct DayView: View {
     }
     private func dayList(for date: Date, filter: DayFilter) -> some View {
         let day = Day(date)
-        let visible = store.items.filter { $0.shows(on: day, now: now) }.sorted {
+        let visible = store.items.filter { $0.shows(on: day, now: now) }.map { $0.on(day) }.sorted {
             if $0.minute != $1.minute { return ($0.minute ?? -1) < ($1.minute ?? -1) }
             return $0.createdAt < $1.createdAt
         }
@@ -940,7 +941,7 @@ struct DayView: View {
     }
     /// Untimed rows for Anytime and Full day, without clock-axis placement.
     private func anytimeItems(items: [PlanItem], shown: Set<UUID>, day: Day, filter: DayFilter) -> some View {
-        let contentKey = TimelineContentKey(items: items, sharedZones: store.cloud.sharedZones, day: day, order: items.map(\.id),
+        let contentKey = TimelineContentKey(items: items, series: store.repeatingPlans, sharedZones: store.cloud.sharedZones, day: day, order: items.map(\.id),
                                             markers: items.map { item in [DayFilter.review, .reminders, .deadlines].map { hasDot(item, $0, on: day) } },
                                             filter: filter.rawValue, showNow: false, timeNotes: [], typeSize: dynamicTypeSize, inlineFocus: inlineFocusPhase(on: day))
         return AnytimeLayout(contentKey: contentKey) {
@@ -1023,7 +1024,7 @@ struct DayView: View {
         let activeTop = active.first.flatMap { compactOrder[$0.id] }.map { $0 - 1 } ?? 0
         // Keep both text layouts at fixed endpoint widths. Only their positions
         // and opacity animate, so wrapping never changes in the middle of a frame.
-        let contentKey = TimelineContentKey(items: items, sharedZones: store.cloud.sharedZones, day: day, order: compactItems.map(\.id),
+        let contentKey = TimelineContentKey(items: items, series: store.repeatingPlans, sharedZones: store.cloud.sharedZones, day: day, order: compactItems.map(\.id),
                                             markers: items.map { item in [DayFilter.review, .reminders, .deadlines].map { hasDot(item, $0, on: day) } },
                                             filter: filter.rawValue, showNow: showNow,
                                             timeNotes: items.map { timeNote($0, day: day) != nil },
@@ -1250,10 +1251,7 @@ struct DayView: View {
                                 Text("Carried from \(carriedFrom)")
                                     .font(.caption).foregroundStyle(.tertiary)
                             }
-                            if let range = store.dateRange(of: item) {
-                                Text(range.lowerBound.date().formatted(date: .abbreviated, time: .omitted) + " – " + range.upperBound.date().formatted(date: .abbreviated, time: .omitted))
-                                    .font(.caption).foregroundStyle(.tertiary)
-                            } else if let endDay = item.endDay, endDay > item.day {
+                            if let endDay = item.endDay, endDay > item.day {
                                 Text(item.day.date().formatted(date: .abbreviated, time: .omitted) + " – " + endDay.date().formatted(date: .abbreviated, time: .omitted))
                                     .font(.caption).foregroundStyle(.tertiary)
                             }
@@ -1341,9 +1339,8 @@ struct DayView: View {
         // Dots show only in the full day; a filtered row's panel already says why it is there.
         .padding(.trailing, markerInset)
         .animation(ItemStatusMotion.animation(reduceMotion: reduceMotion), value: [item.isComplete, item.isCancelled, review, reminder, deadline])
-        // Every item has the same faint fill: open, ticked, cancelled or carried. An item from
-        // another day, here for its reminder or deadline, has a dashed outline instead.
-        .modifier(ItemCard(dashed: visiting))
+        // Settled items recede into the page; open visitors keep their dashed outline.
+        .modifier(ItemCard(dashed: visiting, settled: item.isSettled))
         .itemFocus(item.id, day: day, isEnabled: {
             guard daySwipeInteraction.allowsItemActions,
                   focused?.ending != false || focused?.id != item.id || focused?.day != day
@@ -2715,6 +2712,7 @@ private struct InlineFocusPhase: Equatable {
 
 private struct TimelineContentKey: Equatable {
     let items: [PlanItem]
+    let series: [RepeatingPlan]
     /// "Shared" can add a line to a row.
     var sharedZones: Set<String> = []
     let day: Day
@@ -3182,6 +3180,7 @@ private final class DaySwipeInteraction: ObservableObject {
 // label updates must not rebuild three pages during a horizontal animation.
 private struct DayPageRevision: Equatable {
     let items: [PlanItem]
+    let series: [RepeatingPlan]
     let sharedZones: Set<String>
     let filter: Int
     let panelFilter: Int
@@ -3197,7 +3196,7 @@ private struct DayPageRevision: Equatable {
     func hasSameUnfilteredContent(as other: Self) -> Bool {
         // The two neighbouring pages always show All. Filter and status-panel changes
         // belong to the visible page and must not invalidate those neighbours.
-        items == other.items && sharedZones == other.sharedZones && minute == other.minute && typeSize == other.typeSize
+        items == other.items && series == other.series && sharedZones == other.sharedZones && minute == other.minute && typeSize == other.typeSize
             && insets == other.insets && reduceMotion == other.reduceMotion
     }
 }

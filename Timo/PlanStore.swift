@@ -9,7 +9,7 @@ import WidgetKit
     @Published private(set) var items: [PlanItem] = []
     let cloud = CloudSync()
     private let guide = DayGuideActivities()
-    private var series: [RepeatingPlan] = []
+    @Published private var series: [RepeatingPlan] = []
     var repeatingPlans: [RepeatingPlan] { series }
     private var displayedDay = Day(Date())
     @Published var errorMessage: String?
@@ -29,7 +29,7 @@ import WidgetKit
     private var reminderWorker: Task<Void, Never>?
     private let notificationCenter = UNUserNotificationCenter.current()
     private struct Document: Codable {
-        var version = 8
+        var version = 9
         var items: [PlanItem]
         var series: [RepeatingPlan]
         private enum CodingKeys: String, CodingKey { case version, items, series }
@@ -57,7 +57,7 @@ import WidgetKit
             if FileManager.default.fileExists(atPath: url.path) {
                 let data = try Data(contentsOf: url)
                 let document = try JSONDecoder().decode(Document.self, from: data)
-                guard (1...8).contains(document.version) else { throw CocoaError(.fileReadCorruptFile) }
+                guard (1...9).contains(document.version) else { throw CocoaError(.fileReadCorruptFile) }
                 items = document.items
                 series = document.series
                 savedData = data
@@ -67,10 +67,11 @@ import WidgetKit
             errorMessage = "Your saved plan could not be opened. It has been left untouched. \(error.localizedDescription)"
         }
         notificationCenter.delegate = ReminderNotificationDelegate.shared
+        // Load known record zones before migrations queue their saves and deletions.
+        // The sync engine starts asynchronously after this initialization returns.
+        if canWrite { cloud.attach(self) }
         reconcile()
         refreshReminders()
-        // Never sync a plan that couldn't be read, so iCloud can't overwrite or lose it.
-        if canWrite { cloud.attach(self) }
         #if targetEnvironment(simulator)
         if canWrite { watchPlanFile() }
         #endif
@@ -95,10 +96,10 @@ import WidgetKit
     private func reloadFromOtherDevice() {
         guard let data = try? Data(contentsOf: url), data != savedData,
               let document = try? JSONDecoder().decode(Document.self, from: data),
-              (1...8).contains(document.version) else { return }
+              (1...9).contains(document.version) else { return }
         savedData = data
-        items = document.items
         series = document.series
+        items = document.items
         refreshReminders()
         WidgetCenter.shared.reloadAllTimelines()
     }
@@ -113,8 +114,8 @@ import WidgetKit
             try data.write(to: url, options: .atomic)
             savedData = data
             if !fromCloud { cloud.queueChanges(items: items, updated, series: series, updatedSeries ?? series) }
-            items = updated
             if let updatedSeries { series = updatedSeries }
+            items = updated
             refreshReminders()
             WidgetCenter.shared.reloadAllTimelines()
         } catch { errorMessage = "This change could not be saved. \(error.localizedDescription)" }
@@ -124,7 +125,7 @@ import WidgetKit
         let today = calendar.startOfDay(for: now)
         let horizon = calendar.date(byAdding: .day, value: 60, to: today)!
         var changed = false
-        for plan in plans {
+        for plan in plans where plan.isDateRange != true {
             // Carrying repeats can still be unfinished on days the app was never opened.
             // Generate those occurrences as well, retaining their original occurrence keys.
             let first = plan.template.carries ? plan.template.day : Day(today)
@@ -132,7 +133,7 @@ import WidgetKit
         }
         // Include earlier starts for overnight/multi-day ranges overlapping the viewed day.
         var selectedChanged = false
-        for plan in plans {
+        for plan in plans where plan.isDateRange != true {
             let span = plan.template.scheduleEnd().map { max(0, $0.timeIntervalSince(plan.template.start() ?? plan.template.day.date())) } ?? 0
             let previous = calendar.date(byAdding: .day, value: -(Int(ceil(span / 86400))), to: displayedDay.date())!
             if Planner.materialize([plan], in: &updated, from: Day(previous), through: displayedDay) { selectedChanged = true }
@@ -152,7 +153,7 @@ import WidgetKit
     /// shows repeats that far ahead. Days are otherwise generated about 60 days ahead.
     func generateRepeats(through last: Day) {
         var updated = items
-        if Planner.materialize(series, in: &updated, from: Day(Date()), through: last) { commit(updated) }
+        if Planner.materialize(series.filter { $0.isDateRange != true }, in: &updated, from: Day(Date()), through: last) { commit(updated) }
     }
     /// Whether a repeating item among `listed` goes on past `day`.
     func repeats(_ listed: [PlanItem], after day: Day) -> Bool {
@@ -170,11 +171,10 @@ import WidgetKit
         #endif
         var updated = items
         var plans = series
-        // Restore old schedules before turning full-day spans into linked daily items.
         let restored = Planner.restoreScheduledDays(&updated)
-        let split = Planner.splitDateRanges(items: &updated, series: &plans)
+        let consolidated = Planner.consolidateDateRanges(items: &updated, series: &plans)
         let generated = materialize(&updated, series: plans, now: now)
-        if generated || restored || split { commit(updated, series: plans) }
+        if generated || restored || consolidated { commit(updated, series: plans) }
     }
     func requestReminderPermission() async throws -> Bool {
         try await notificationCenter.requestAuthorization(options: [.alert, .sound])
@@ -197,10 +197,16 @@ import WidgetKit
                 notificationCenter.removePendingNotificationRequests(withIdentifiers:
                     pending.filter { $0.identifier.hasPrefix("timo.reminder.") }.map(\.identifier))
                 // Identifiers are "timo.reminder.<item>.<time>", one per reminder.
-                let activeIDs = Set(snapshot.filter { !$0.isSettled }.map(\.id.uuidString))
+                let byID = Dictionary(snapshot.map { ($0.id.uuidString, $0) }, uniquingKeysWith: { first, _ in first })
                 let delivered = await notificationCenter.deliveredNotifications()
                 notificationCenter.removeDeliveredNotifications(withIdentifiers: delivered.map(\.request.identifier)
-                    .filter { $0.hasPrefix("timo.reminder.") && !activeIDs.contains(String($0.dropFirst("timo.reminder.".count).prefix(36))) })
+                    .filter { identifier in
+                        guard identifier.hasPrefix("timo.reminder.") else { return false }
+                        let suffix = identifier.dropFirst("timo.reminder.".count)
+                        guard let item = byID[String(suffix.prefix(36))] else { return true }
+                        let date = suffix.split(separator: ".").last.flatMap { Double($0) }.map { Date(timeIntervalSince1970: $0) } ?? Date()
+                        return item.on(Day(date)).isSettled
+                    })
                 guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else { continue }
                 let announced = DayGuideActivities.announcedStarts(snapshot, now: Date())
                 for reminder in Planner.upcomingReminders(in: snapshot, now: Date()) {
@@ -271,7 +277,8 @@ import WidgetKit
         if !context.isEmpty { lines.append(context) }
         return lines.joined(separator: "\n")
     }
-    func save(_ item: PlanItem) throws {
+    func save(_ edited: PlanItem) throws {
+        let item = edited.unprojected
         try Planner.validate(item, in: items)
         var updated = items
         var plans = series
@@ -280,10 +287,7 @@ import WidgetKit
         previousDefinition?.completedAt = item.completedAt
         previousDefinition?.cancelledAt = item.cancelledAt
         previousDefinition?.suggestionDismissed = item.suggestionDismissed
-        if item.minute == nil, let end = item.endDay,
-           item.repeatRule == .never, end > item.day || dateRange(of: item) != nil {
-            Planner.saveDateRange(item, items: &updated, series: &plans)
-        } else if (item.repeatRule != .never || previous?.seriesID != nil) && previousDefinition != item {
+        if (item.repeatRule != .never || previous?.seriesID != nil) && previousDefinition != item {
             Planner.saveRepeating(item, items: &updated, series: &plans)
         } else if let i = updated.firstIndex(where: { $0.id == item.id }) {
             updated[i] = item
@@ -305,9 +309,9 @@ import WidgetKit
     func toggle(_ item: PlanItem, on day: Day) {
         var updated = items
         guard let i = updated.firstIndex(where: { $0.id == item.id }) else { return }
-        guard !updated[i].isCancelled else { return setCancelled(item, false, on: day) }
-        updated[i].completedAt = updated[i].isComplete ? nil : Planner.completionDate(on: day, now: Date())
-        updated[i].suggestionDismissed = false
+        let projected = updated[i].on(day)
+        guard !projected.isCancelled else { return setCancelled(item, false, on: day) }
+        Planner.setComplete(!projected.isComplete, &updated[i], on: day, now: Date())
         commit(updated)
     }
     /// Cancels or restores a single item; for a repeating item, only this occurrence.
@@ -374,7 +378,6 @@ import WidgetKit
         }
         if changed { commit(updated, series: plans) }
     }
-    func dateRange(of item: PlanItem) -> ClosedRange<Day>? { Planner.dateRange(of: item, in: series) }
     /// Whether a repeating item is its series' first occurrence; then "this and following" is everything.
     func startsSeries(_ item: PlanItem) -> Bool { Planner.startsSeries(item, in: series) }
     /// The first day of the repeating item an occurrence belongs to.

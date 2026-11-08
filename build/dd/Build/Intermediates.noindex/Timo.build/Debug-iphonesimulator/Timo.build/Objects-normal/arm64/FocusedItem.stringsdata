@@ -4,58 +4,74 @@
     "Localizable": [
       {
         "comment": "",
+        "key": "Moves this item to start today at the current time, keeping its duration",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 76
+        }
+      },
+      {
+        "comment": "",
         "key": "Showing choices",
         "location": {
-          "startingColumn": 56,
-          "startingLine": 44
+          "startingColumn": 48,
+          "startingLine": 106
         }
       },
       {
         "comment": "",
         "key": "",
         "location": {
-          "startingColumn": 76,
-          "startingLine": 44
+          "startingColumn": 68,
+          "startingLine": 106
+        }
+      },
+      {
+        "comment": "",
+        "key": "Start now",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 74
+        }
+      },
+      {
+        "comment": "",
+        "key": "Share",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 82
         }
       },
       {
         "comment": "",
         "key": "Uncancel",
         "location": {
-          "startingColumn": 31,
-          "startingLine": 33
+          "startingColumn": 47,
+          "startingLine": 93
         }
       },
       {
         "comment": "",
         "key": "Cancel",
         "location": {
-          "startingColumn": 31,
-          "startingLine": 35
+          "startingColumn": 60,
+          "startingLine": 93
         }
       },
       {
         "comment": "",
         "key": "Delete",
         "location": {
-          "startingColumn": 27,
-          "startingLine": 42
-        }
-      },
-      {
-        "comment": "",
-        "key": "Close focussed item",
-        "location": {
-          "startingColumn": 37,
-          "startingLine": 128
+          "startingColumn": 26,
+          "startingLine": 105
         }
       },
       {
         "comment": "",
         "key": "Show details and actions",
         "location": {
-          "startingColumn": 45,
-          "startingLine": 200
+          "startingColumn": 41,
+          "startingLine": 181
         }
       }
     ]

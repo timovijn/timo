@@ -14,7 +14,7 @@ final class LinkedRestoreTests: XCTestCase {
     func group() -> ([PlanItem], [RepeatingPlan]) {
         let event = PlanItem(title: "Weekend", notes: "Original details", day: day(6), endDay: day(8), movesToNextDay: false)
         var items: [PlanItem] = [], series: [RepeatingPlan] = []
-        Planner.saveDateRange(event, items: &items, series: &series, calendar: calendar)
+        makeLegacyDateRange(event, items: &items, series: &series, calendar: calendar)
         return (items, series)
     }
     func overview(_ source: PlanItem, _ items: [PlanItem], _ series: [RepeatingPlan]) -> [LinkedItemEntry] {
@@ -76,7 +76,7 @@ final class LinkedRestoreTests: XCTestCase {
     func testRestoreFollowingDeletedDayKeepsOtherDeletedDaysOut() throws {
         let event = PlanItem(title: "Trip", day: day(6), endDay: day(10), movesToNextDay: false)
         var items: [PlanItem] = [], series: [RepeatingPlan] = []
-        Planner.saveDateRange(event, items: &items, series: &series, calendar: calendar)
+        makeLegacyDateRange(event, items: &items, series: &series, calendar: calendar)
         let source = items[0]
         let target = try XCTUnwrap(items.first { $0.day == day(8) })
         Planner.delete(target, .following, items: &items, series: &series)

@@ -518,6 +518,12 @@ import UserNotifications
             case RecordType.item:
                 guard var theirs = try? Self.decoder.decode(PlanItem.self, from: payload) else { continue }
                 if let index = items.firstIndex(where: { $0.id == theirs.id }) {
+                    // A late legacy daily record must not replace the consolidated event
+                    // that retained this ID. Send the canonical event back to this record.
+                    if let oldSeries = theirs.seriesID, items[index].mergedRangeSeriesIDs?.contains(oldSeries) == true {
+                        queue([.saveRecord(record.recordID)])
+                        continue
+                    }
                     if Self.isShared(zone) { theirs.personal = items[index].personal }
                     items[index] = merge(mine: items[index], theirs: theirs, base: base, pending: pending)
                 } else {
