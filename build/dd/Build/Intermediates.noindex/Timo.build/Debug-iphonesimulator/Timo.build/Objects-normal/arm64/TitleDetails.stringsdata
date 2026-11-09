@@ -1,0 +1,64 @@
+{
+  "source": "/Users/timovijn/Timo/GitHub/timo/Timo/TitleDetails.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Add a title to go with these details.",
+        "location": {
+          "startingColumn": 44,
+          "startingLine": 39
+        }
+      },
+      {
+        "comment": "",
+        "key": "Saved as “%@”. Tap a detail to keep its words in the title.",
+        "location": {
+          "startingColumn": 86,
+          "startingLine": 39
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@ from the title: %@",
+        "location": {
+          "startingColumn": 45,
+          "startingLine": 35
+        }
+      },
+      {
+        "comment": "",
+        "key": "Keeps these words in the title instead",
+        "location": {
+          "startingColumn": 44,
+          "startingLine": 36
+        }
+      },
+      {
+        "comment": "",
+        "key": "next day",
+        "location": {
+          "startingColumn": 106,
+          "startingLine": 104
+        }
+      },
+      {
+        "comment": "",
+        "key": "Today",
+        "location": {
+          "startingColumn": 56,
+          "startingLine": 89
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tomorrow",
+        "location": {
+          "startingColumn": 146,
+          "startingLine": 90
+        }
+      }
+    ]
+  },
+  "version": 1
+}

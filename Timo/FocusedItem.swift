@@ -10,6 +10,8 @@ struct InlineFocusedDetails: View {
     let expanded: Bool
     let token: UUID?
     let close: () -> Void
+    /// Opens a copy of the item in the editor, as "Duplicate item".
+    let duplicate: (PlanItem) -> Void
     let collapsed: (UUID) -> Void
     let contentChanged: () -> Void
     let heightChanged: (CGFloat) -> Void
@@ -75,8 +77,17 @@ struct InlineFocusedDetails: View {
             }
             .accessibilityHint("Moves this item to start today at the current time, keeping its duration")
         }
+        Button {
+            guard let current = store.item(item.id) else { return }
+            close()
+            duplicate(current.on(day).duplicate())
+        } label: {
+            Label("Duplicate", systemImage: "plus.square.on.square")
+        }
+        .accessibilityHint("Opens a copy of this item to change and save")
         if CloudSync.isAvailable {
             Button {
+                close()
                 SharingSheet.present(for: item, cloud: store.cloud)
             } label: {
                 Label("Share", systemImage: "person.2")
@@ -85,6 +96,8 @@ struct InlineFocusedDetails: View {
         Button {
             guard let current = store.item(item.id) else { return }
             if !reduceMotion { FrameRateBoost.shared.request(for: .milliseconds(700)) }
+            // Done with the item, like Start now: the menu closes as the change shows.
+            close()
             withAnimation(FocusedItemMotion.animation(reduceMotion: reduceMotion)) {
                 store.setCancelled(current, !current.on(day).isCancelled, on: day)
                 contentChanged()

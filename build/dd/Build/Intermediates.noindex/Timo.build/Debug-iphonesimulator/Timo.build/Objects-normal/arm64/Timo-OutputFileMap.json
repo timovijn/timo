@@ -16,6 +16,16 @@
     "swift-dependencies" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/Planner.swiftdeps",
     "swiftmodule" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/Planner~partial.swiftmodule"
   },
+  "/Users/timovijn/Timo/GitHub/timo/Sources/TimoCore/QuickEntry.swift" : {
+    "const-values" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/QuickEntry.swiftconstvalues",
+    "dependencies" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/QuickEntry.d",
+    "diagnostics" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/QuickEntry.dia",
+    "index-unit-output-path" : "/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/QuickEntry.o",
+    "llvm-bc" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/QuickEntry.bc",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/QuickEntry.o",
+    "swift-dependencies" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/QuickEntry.swiftdeps",
+    "swiftmodule" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/QuickEntry~partial.swiftmodule"
+  },
   "/Users/timovijn/Timo/GitHub/timo/Timo/CloudSharing.swift" : {
     "const-values" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/CloudSharing.swiftconstvalues",
     "dependencies" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/CloudSharing.d",
@@ -135,6 +145,16 @@
     "object" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/TimoApp.o",
     "swift-dependencies" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/TimoApp.swiftdeps",
     "swiftmodule" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/TimoApp~partial.swiftmodule"
+  },
+  "/Users/timovijn/Timo/GitHub/timo/Timo/TitleDetails.swift" : {
+    "const-values" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/TitleDetails.swiftconstvalues",
+    "dependencies" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/TitleDetails.d",
+    "diagnostics" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/TitleDetails.dia",
+    "index-unit-output-path" : "/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/TitleDetails.o",
+    "llvm-bc" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/TitleDetails.bc",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/TitleDetails.o",
+    "swift-dependencies" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/TitleDetails.swiftdeps",
+    "swiftmodule" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/TitleDetails~partial.swiftmodule"
   },
   "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/DerivedSources/GeneratedAssetSymbols.swift" : {
     "const-values" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftconstvalues",

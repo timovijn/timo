@@ -199,6 +199,26 @@ public struct PlanItem: Identifiable, Codable, Equatable {
         result.statusDay = endDay != nil && minute == nil ? selected : nil
         return result
     }
+    /// A new, unsaved copy to start from: the same plan (title, schedule, repeat, personas,
+    /// people, places, reminders, deadline) but open, unshared and linked to nothing, so saving a
+    /// repeating one starts a series of its own.
+    public func duplicate(now: Date = Date()) -> PlanItem {
+        var copy = unprojected
+        copy.id = UUID()
+        copy.wholeCompletedAt = nil
+        copy.wholeCancelledAt = nil
+        copy.dailyStatuses = nil
+        copy.seriesID = nil
+        copy.occurrenceDay = nil
+        copy.detachedFrom = nil
+        copy.mergedRangeSeriesIDs = nil
+        copy.excludedRangeDays = nil
+        copy.carriedFrom = nil
+        copy.suggestionDismissed = false
+        copy.originalDay = copy.day
+        copy.createdAt = now
+        return copy
+    }
     public var unprojected: PlanItem {
         var result = self
         result.statusDay = nil

@@ -1,0 +1,12 @@
+{
+  "/Users/timovijn/Timo/GitHub/timo/Sources/TimoCore/Planner.swift" : {
+    "abi-baseline-json" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/TimoWidget.build/Objects-normal/arm64/TimoWidget.abi.json",
+    "const-values" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/TimoWidget.build/Objects-normal/arm64/TimoWidget-primary.swiftconstvalues",
+    "dependencies" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/TimoWidget.build/Objects-normal/arm64/TimoWidget-primary.d",
+    "diagnostics" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/TimoWidget.build/Objects-normal/arm64/TimoWidget-primary.dia",
+    "objc-header" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/TimoWidget.build/Objects-normal/arm64/TimoWidget-Swift.h",
+    "swiftdoc" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/TimoWidget.build/Objects-normal/arm64/TimoWidget.swiftdoc",
+    "swiftmodule" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/TimoWidget.build/Objects-normal/arm64/TimoWidget.swiftmodule",
+    "swiftsourceinfo" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/TimoWidget.build/Objects-normal/arm64/TimoWidget.swiftsourceinfo"
+  }
+}

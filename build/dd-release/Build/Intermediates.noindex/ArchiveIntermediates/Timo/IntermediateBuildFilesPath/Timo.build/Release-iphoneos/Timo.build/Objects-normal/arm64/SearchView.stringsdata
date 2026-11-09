@@ -1,0 +1,104 @@
+{
+  "source": "/Users/timovijn/Timo/GitHub/timo/Timo/SearchView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 62,
+          "startingLine": 216
+        }
+      },
+      {
+        "comment": "",
+        "key": "Search",
+        "location": {
+          "startingColumn": 67,
+          "startingLine": 216
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 61,
+          "startingLine": 217
+        }
+      },
+      {
+        "comment": "",
+        "key": "Finds items on any day. Pulling a page down also opens it",
+        "location": {
+          "startingColumn": 66,
+          "startingLine": 217
+        }
+      },
+      {
+        "comment": "",
+        "key": "Close search",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 335
+        }
+      },
+      {
+        "comment": "",
+        "key": "Clear search",
+        "location": {
+          "startingColumn": 37,
+          "startingLine": 319
+        }
+      },
+      {
+        "comment": "",
+        "key": "Search",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 286
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 296
+        }
+      },
+      {
+        "comment": "",
+        "key": "Search",
+        "location": {
+          "startingColumn": 49,
+          "startingLine": 304
+        }
+      },
+      {
+        "comment": "",
+        "key": "Finds items on any day by title, notes, people or location",
+        "location": {
+          "startingColumn": 48,
+          "startingLine": 305
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nothing in %@ matches “%@”. Choose All to search everything.",
+        "location": {
+          "startingColumn": 62,
+          "startingLine": 385
+        }
+      },
+      {
+        "comment": "",
+        "key": "No Results in %@",
+        "location": {
+          "startingColumn": 44,
+          "startingLine": 384
+        }
+      }
+    ]
+  },
+  "version": 1
+}

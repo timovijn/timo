@@ -1,0 +1,160 @@
+{
+  "source": "/Users/timovijn/Timo/GitHub/timo/Timo/CloudSharing.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Sharing",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 184
+        }
+      },
+      {
+        "comment": "",
+        "key": "Sharing",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 189
+        }
+      },
+      {
+        "comment": "",
+        "key": "Shared with",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 129
+        }
+      },
+      {
+        "comment": "",
+        "key": "Plan together. Everyone sees the same item and one completion completes it for all.",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 121
+        }
+      },
+      {
+        "comment": "",
+        "key": "Your reminders and personas stay your own.",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 126
+        }
+      },
+      {
+        "comment": "",
+        "key": "Shared",
+        "location": {
+          "startingColumn": 49,
+          "startingLine": 138
+        }
+      },
+      {
+        "comment": "",
+        "key": "Sharing",
+        "location": {
+          "startingColumn": 102,
+          "startingLine": 159
+        }
+      },
+      {
+        "comment": "",
+        "key": "Invited",
+        "location": {
+          "startingColumn": 79,
+          "startingLine": 160
+        }
+      },
+      {
+        "comment": "",
+        "key": "Share",
+        "location": {
+          "startingColumn": 91,
+          "startingLine": 160
+        }
+      },
+      {
+        "comment": "",
+        "key": "Share with",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 165
+        }
+      },
+      {
+        "comment": "",
+        "key": "Share directly with someone you’re already connected to. No new link needed.",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 166
+        }
+      },
+      {
+        "comment": "",
+        "key": "Manage sharing",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 177
+        }
+      },
+      {
+        "comment": "",
+        "key": "Invite someone new",
+        "location": {
+          "startingColumn": 63,
+          "startingLine": 171
+        }
+      },
+      {
+        "comment": "",
+        "key": "View sharing",
+        "location": {
+          "startingColumn": 86,
+          "startingLine": 171
+        }
+      },
+      {
+        "comment": "",
+        "key": "Preparing sharing",
+        "location": {
+          "startingColumn": 88,
+          "startingLine": 172
+        }
+      },
+      {
+        "comment": "",
+        "key": "Connecting to someone new starts with an invitation link.",
+        "location": {
+          "startingColumn": 44,
+          "startingLine": 181
+        }
+      },
+      {
+        "comment": "",
+        "key": "Turn on iCloud in Settings to share.",
+        "location": {
+          "startingColumn": 106,
+          "startingLine": 181
+        }
+      },
+      {
+        "comment": "",
+        "key": "Done",
+        "location": {
+          "startingColumn": 77,
+          "startingLine": 186
+        }
+      },
+      {
+        "comment": "",
+        "key": "OK",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 190
+        }
+      }
+    ]
+  },
+  "version": 1
+}

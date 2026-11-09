@@ -15,6 +15,9 @@ private let resourceBundle = Foundation.Bundle(for: ResourceBundleClass.self)
 @available(iOS 17.0, macOS 14.0, tvOS 17.0, watchOS 10.0, *)
 extension DeveloperToolsSupport.ColorResource {
 
+    /// The "LaunchBackground" asset catalog color resource.
+    static let launchBackground = DeveloperToolsSupport.ColorResource(name: "LaunchBackground", bundle: resourceBundle)
+
 }
 
 // MARK: - Image Symbols -

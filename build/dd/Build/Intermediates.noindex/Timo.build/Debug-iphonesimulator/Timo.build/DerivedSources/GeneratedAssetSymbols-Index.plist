@@ -3,7 +3,18 @@
 <plist version="1.0">
 <dict>
 	<key>colors</key>
-	<array/>
+	<array>
+		<dict>
+			<key>catalogPath</key>
+			<string>/Users/timovijn/Timo/GitHub/timo/Timo/Assets.xcassets</string>
+			<key>objcSymbol</key>
+			<string>ACColorNameLaunchBackground</string>
+			<key>relativePath</key>
+			<string>./LaunchBackground.colorset</string>
+			<key>swiftSymbol</key>
+			<string>launchBackground</string>
+		</dict>
+	</array>
 	<key>images</key>
 	<array/>
 	<key>symbols</key>

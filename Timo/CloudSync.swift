@@ -1,6 +1,7 @@
 import CloudKit
 import Foundation
 import Observation
+import OSLog
 import UIKit
 import UserNotifications
 
@@ -18,6 +19,12 @@ import UserNotifications
 /// CloudKit can't deliver a share to someone by itself. Once two people share a zone it serves
 /// as a private channel: the next share between them goes straight in as an `Invitation` record
 /// holding its URL, and the other person's app accepts it (`shareDirectly`).
+extension Logger {
+    /// Accepting a share and getting its records in, step by step, so a real-device try shows
+    /// where it stops (Console, subsystem com.timovijn.timo, category Sharing).
+    static let sharing = Logger(subsystem: "com.timovijn.timo", category: "Sharing")
+}
+
 @Observable @MainActor final class CloudSync: CKSyncEngineDelegate {
     enum Status: Equatable {
         case off, checking, noAccount, restricted, unavailable, syncing, upToDate
@@ -45,6 +52,8 @@ import UserNotifications
     /// This person's iCloud user, to tell which invitations are theirs.
     @ObservationIgnored private var userRecordName: String?
     @ObservationIgnored private var accepting: Set<String> = []
+    /// Share links opened before the engines were up, accepted as soon as they are.
+    @ObservationIgnored private var pendingLinks: [CKShare.Metadata] = []
     @ObservationIgnored private let cacheURL = URL.applicationSupportDirectory
         .appending(path: "Timo", directoryHint: .isDirectory).appending(path: "sync.json")
 
@@ -156,8 +165,14 @@ import UserNotifications
         Task {
             let container = Self.container
             let account: CKAccountStatus
-            do { account = try await container.accountStatus() } catch { status = .unavailable; return }
+            do { account = try await container.accountStatus() } catch {
+                Logger.sharing.error("Account status failed: \(error.localizedDescription, privacy: .public)")
+                status = .unavailable; return
+            }
             guard isEnabled, engine == nil else { return }
+            if !pendingLinks.isEmpty, account != .available {
+                Logger.sharing.error("No usable iCloud account (\(account.rawValue, privacy: .public)); \(self.pendingLinks.count, privacy: .public) link(s) wait")
+            }
             switch account {
             case .available: userRecordName = try? await container.userRecordID().recordName
             case .noAccount: status = .noAccount; return
@@ -177,6 +192,12 @@ import UserNotifications
             sharedEngine.state.add(pendingRecordZoneChanges: queuedShared)
             queued = []
             queuedShared = []
+            // A link that opened the app arrived before the engines existed. Accepted first, so
+            // the fetch below already finds its zone in the shared database.
+            let links = pendingLinks
+            pendingLinks = []
+            if !links.isEmpty { Logger.sharing.info("Engines up; accepting \(links.count, privacy: .public) waiting link(s)") }
+            for metadata in links { await acceptLink(metadata) }
             await syncNow()
             await acceptInvitations()
             checkIn()
@@ -420,6 +441,9 @@ import UserNotifications
             @unknown default: break
             }
         case .fetchedDatabaseChanges(let changes):
+            if !isPrivate {
+                Logger.sharing.info("Shared database: \(changes.modifications.count, privacy: .public) zone(s) changed, \(changes.deletions.count, privacy: .public) gone: \(changes.modifications.map(\.zoneID.zoneName).joined(separator: ", "), privacy: .public)")
+            }
             for deletion in changes.deletions {
                 if Self.isShared(deletion.zoneID) {
                     removeZone(deletion.zoneID, reset: isPrivate && deletion.reason == .encryptedDataReset)
@@ -432,6 +456,9 @@ import UserNotifications
                 }
             }
         case .fetchedRecordZoneChanges(let changes):
+            if !isPrivate {
+                Logger.sharing.info("Shared database: \(changes.modifications.count, privacy: .public) record(s) fetched, \(changes.deletions.count, privacy: .public) deleted")
+            }
             apply(changes, from: syncEngine)
         case .sentRecordZoneChanges(let sent):
             handleSent(sent, by: syncEngine)
@@ -516,7 +543,10 @@ import UserNotifications
             }
             switch record.recordType {
             case RecordType.item:
-                guard var theirs = try? Self.decoder.decode(PlanItem.self, from: payload) else { continue }
+                guard var theirs = try? Self.decoder.decode(PlanItem.self, from: payload) else {
+                    Logger.sharing.error("Item \(name, privacy: .public) in \(zone.zoneName, privacy: .public) could not be read")
+                    continue
+                }
                 if let index = items.firstIndex(where: { $0.id == theirs.id }) {
                     // A late legacy daily record must not replace the consolidated event
                     // that retained this ID. Send the canonical event back to this record.
@@ -528,6 +558,7 @@ import UserNotifications
                     items[index] = merge(mine: items[index], theirs: theirs, base: base, pending: pending)
                 } else {
                     if Self.isShared(zone), let personal = overlay(for: name) { theirs.personal = personal }
+                    if Self.isShared(zone) { Logger.sharing.info("Added shared item \(name, privacy: .public) from \(zone.zoneName, privacy: .public)") }
                     items.append(theirs)
                 }
             case RecordType.series:
@@ -804,12 +835,76 @@ import UserNotifications
     }
 
     /// Someone opened a link to a shared item. It takes iCloud to get it, so this turns sync on.
+    /// A link that launches the app arrives while the engines are still starting (the account
+    /// check comes first): fetching then did nothing, and the start's own fetch could run before
+    /// the share was accepted, so the item only came on the next return to the app. The link
+    /// waits for the engines instead.
     func accept(_ metadata: CKShare.Metadata) async {
-        guard Self.isAvailable else { return }
-        do {
-            _ = try await Self.container.accept(metadata)
-            if isEnabled { await syncNow() } else { setEnabled(true) }
-        } catch { status = .failed(error.localizedDescription) }
+        let zone = metadata.share.recordID.zoneID
+        Logger.sharing.info("Link opened for \(zone.zoneName, privacy: .public); participant status \(metadata.participantStatus.rawValue, privacy: .public), sync \(self.isEnabled ? "on" : "off", privacy: .public)")
+        guard Self.isAvailable else { Logger.sharing.error("This build has no iCloud"); return }
+        // A cold start can deliver the same link both on connecting and as an acceptance.
+        guard !pendingLinks.contains(where: { $0.share.recordID == metadata.share.recordID }) else { return }
+        if engine != nil, sharedEngine != nil {
+            await acceptLink(metadata)
+            return
+        }
+        pendingLinks.append(metadata)
+        if !isEnabled {
+            Logger.sharing.info("Turning sync on to receive the share")
+            setEnabled(true)
+        } else if status != .checking {
+            // Sync is on but didn't start (no account at the time, say): try again now.
+            Logger.sharing.info("Sync on but not running (\(String(describing: self.status), privacy: .public)); starting")
+            start()
+        } else {
+            Logger.sharing.info("Sync is starting; the link waits for it")
+        }
+    }
+
+    /// Accepts a link's share, then fetches until its zone's records are in.
+    private func acceptLink(_ metadata: CKShare.Metadata) async {
+        let zone = metadata.share.recordID.zoneID
+        let key = "link-" + zone.zoneName + "-" + zone.ownerName
+        guard accepting.insert(key).inserted else { return }
+        defer { accepting.remove(key) }
+        if metadata.participantStatus != .accepted {
+            do {
+                _ = try await Self.container.accept(metadata)
+                Logger.sharing.info("Accepted share \(zone.zoneName, privacy: .public)")
+            } catch {
+                Logger.sharing.error("Accepting \(zone.zoneName, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+                status = .failed(error.localizedDescription)
+                store?.errorMessage = "The shared item could not be opened. \(error.localizedDescription)"
+                return
+            }
+        } else {
+            Logger.sharing.info("Share \(zone.zoneName, privacy: .public) was already accepted")
+        }
+        await fetchShared(zone)
+    }
+
+    /// The shared database can take a moment to list a zone just accepted, so a fetch right
+    /// after can miss it. Asks for the zone by name too, and tries a few times.
+    private func fetchShared(_ zone: CKRecordZone.ID) async {
+        guard let sharedEngine else { return }
+        let arrived = { self.cache.records.values.contains { $0.zone == zone } }
+        for attempt in 1...4 {
+            do {
+                try await sharedEngine.fetchChanges()
+                if !arrived() { try await sharedEngine.fetchChanges(CKSyncEngine.FetchChangesOptions(scope: .zoneIDs([zone]))) }
+            } catch {
+                Logger.sharing.error("Fetching \(zone.zoneName, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+                show(error)
+            }
+            if arrived() {
+                Logger.sharing.info("Records of \(zone.zoneName, privacy: .public) are in after \(attempt, privacy: .public) fetch(es)")
+                return
+            }
+            Logger.sharing.info("No records of \(zone.zoneName, privacy: .public) yet (fetch \(attempt, privacy: .public))")
+            try? await Task.sleep(for: .seconds(2 * attempt))
+        }
+        Logger.sharing.error("Gave up waiting for \(zone.zoneName, privacy: .public); the next fetch may still bring it")
     }
 
     private func saveCache() {

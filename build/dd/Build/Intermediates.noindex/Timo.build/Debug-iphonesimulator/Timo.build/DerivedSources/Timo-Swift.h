@@ -396,19 +396,22 @@ SWIFT_CLASS("_TtC4Timo12SharingSheet")
 @class UISceneSession;
 @class UISceneConnectionOptions;
 @class UISceneConfiguration;
+@class CKShareMetadata;
 /// Receives share links. An app without a scene delegate of its own never hears of one.
 SWIFT_CLASS("_TtC4Timo15TimoAppDelegate")
 @interface TimoAppDelegate : NSObject <UIApplicationDelegate>
 - (UISceneConfiguration * _Nonnull)application:(UIApplication * _Nonnull)application configurationForConnectingSceneSession:(UISceneSession * _Nonnull)session options:(UISceneConnectionOptions * _Nonnull)options SWIFT_WARN_UNUSED_RESULT;
+/// Only reached if a scene doesn’t take the link; kept so one can’t be lost.
+- (void)application:(UIApplication * _Nonnull)application userDidAcceptCloudKitShareWithMetadata:(CKShareMetadata * _Nonnull)metadata;
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
 @end
 
 @class UIScene;
 @class UIWindowScene;
-@class CKShareMetadata;
 SWIFT_CLASS("_TtC4Timo17TimoSceneDelegate")
 @interface TimoSceneDelegate : NSObject <UIWindowSceneDelegate>
-/// A link that opens the app arrives here rather than below.
+/// A link that launches the app arrives here rather than below. The engines aren’t up yet
+/// then; <code>CloudSync.accept</code> holds the link until they are.
 - (void)scene:(UIScene * _Nonnull)scene willConnectToSession:(UISceneSession * _Nonnull)session options:(UISceneConnectionOptions * _Nonnull)options;
 - (void)windowScene:(UIWindowScene * _Nonnull)windowScene userDidAcceptCloudKitShareWithMetadata:(CKShareMetadata * _Nonnull)metadata;
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;

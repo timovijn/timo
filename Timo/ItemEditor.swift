@@ -15,6 +15,9 @@ struct ItemEditor: View {
     @State private var personDraft = ""
     /// The item as the editor opened with it, to tell whether there is anything to lose on closing.
     private let opened: PlanItem
+    /// A copy made with Duplicate: unsaved, so there is something to keep from the start, and its
+    /// title is a finished one rather than a line to read for details.
+    private let isDuplicate: Bool
     @State private var confirmingClose = false
     @State private var issue: String?
     /// An edited later day of a repeating item, waiting for the warning to be confirmed.
@@ -37,14 +40,28 @@ struct ItemEditor: View {
     @State private var reminderIDs: [UUID]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var titleFocused = false
+    /// The title row has scrolled up under the bar, which then shows the item's title.
+    @State private var titleScrolledAway = false
+    /// Words of a new item's title kept as words rather than read as details.
+    @State private var ignoredTitleWords: Set<String> = []
+    /// The form as it was before a new item's title started filling it in, so each change to the
+    /// title fills it in afresh: a changed or deleted word takes its value back out.
+    @State private var titleBaseline: TitleBaseline?
+    private struct TitleBaseline {
+        var item: PlanItem
+        var people: [ItemTextEntry]
+        var locations: [ItemTextEntry]
+    }
     /// Sections whose explanation is open. Explanations start closed, behind a small (i).
     @State private var openInfo: Set<String> = []
     /// Set on deleting, so the closing sheet doesn't turn into "New item" without its Delete row.
     @State private var deleted = false
     @State private var showingLinkedItems = false
     private var existing: Bool { deleted || store.item(item.id) != nil }
-    init(item: PlanItem, viewingDay: Day, openItem: ((PlanItem) -> Void)? = nil) {
+    private var kindTitle: LocalizedStringKey { existing ? "Edit item" : isDuplicate ? "Duplicate item" : "New item" }
+    init(item: PlanItem, viewingDay: Day, isDuplicate: Bool = false, openItem: ((PlanItem) -> Void)? = nil) {
         self.viewingDay = viewingDay
+        self.isDuplicate = isDuplicate
         self.openItem = openItem
         _item = State(initialValue: item.on(viewingDay))
         opened = item.on(viewingDay)
@@ -52,17 +69,36 @@ struct ItemEditor: View {
         _people = State(initialValue: item.people.map { ItemTextEntry(text: $0) })
         _reminderIDs = State(initialValue: item.reminders.map { _ in UUID() })
     }
+    /// The bar's centre: "Edit item", "New item" or "Duplicate item" while the title row is in view, then the item's
+    /// own title, the two crossfading and sliding as the row scrolls under the bar. (Changing the
+    /// navigation title itself would swap it in one step.)
+    private var barTitle: some View {
+        // While a new item's title is being read, the title it will keep rather than the full line.
+        let read = titleEntry.map(\.title).flatMap { $0.isEmpty ? nil : $0 }
+        let title = read ?? item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let showsTitle = titleScrolledAway && !title.isEmpty
+        return ZStack {
+            Text(kindTitle)
+                .opacity(showsTitle ? 0 : 1)
+                .offset(y: showsTitle ? -8 : 0)
+                .accessibilityHidden(showsTitle)
+            Text(verbatim: title)
+                .opacity(showsTitle ? 1 : 0)
+                .offset(y: showsTitle ? 0 : 8)
+                .accessibilityHidden(!showsTitle)
+        }
+        .font(.headline).lineLimit(1)
+        .padding(.horizontal, 8)
+    }
     var body: some View {
         editor
-        // With unsaved changes the sheet springs back from a swipe; Cancel asks what to do with them.
+        // One size, so there's nothing to drag: as tall as a sheet goes while it's still a floating
+        // glass card (at full height iOS makes it an edge-to-edge page). The keyboard is left to
+        // iOS, which takes the sheet to full height while it's up and back again after.
+        .presentationDetents([.fraction(0.95)])
+        // A swipe down closes the editor like ✕ when nothing changed; with changes it springs back,
+        // and ✕ asks what to do with them.
         .interactiveDismissDisabled(hasChanges)
-        .confirmationDialog("Save your changes?", isPresented: $confirmingClose, titleVisibility: .visible) {
-            if canSave { Button("Save") { commitAndSave() } }
-            Button("Discard Changes", role: .destructive) { dismiss() }
-            Button("Keep Editing", role: .cancel) {}
-        } message: {
-            Text(canSave ? "This item has changes that haven’t been saved." : "This item has changes, but it needs a title to be saved.")
-        }
         .sheet(isPresented: $showingLinkedItems) {
             LinkedItemsOverview(source: item).environmentObject(store)
         }
@@ -71,9 +107,11 @@ struct ItemEditor: View {
         NavigationStack {
             // The reader lets a place or person row scroll well clear of the keyboard.
             ScrollViewReader { form in Form {
-                itemStatusSection
                 Section {
                     ItemTitleField(text: $item.title, focused: $titleFocused)
+                        .onScrollVisibilityChange(threshold: 0.1) { visible in
+                            withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { titleScrolledAway = !visible }
+                        }
                         .overlay(alignment: .topLeading) {
                             if item.title.isEmpty {
                                 Text("What’s on your day?")
@@ -81,6 +119,14 @@ struct ItemEditor: View {
                                     .allowsHitTesting(false).accessibilityHidden(true)
                             }
                         }
+                    if let titleEntry {
+                        TitleDetailPills(entry: titleEntry) { ignoredTitleWords.formUnion($0) }
+                    }
+                } header: {
+                    Text("Title")
+                } footer: {
+                    // Where a carried or linked item comes from, small under its title.
+                    itemStatusNote
                 }
                 Section {
                     PersonaChips(selection: $item.personas)
@@ -231,7 +277,8 @@ struct ItemEditor: View {
                         if let deadline = item.deadline {
                             SchedulePill(name: "Deadline", removeTitle: "Remove deadline", value: deadlineText(deadline),
                                          accessibilityValue: deadline.formatted(date: .abbreviated, time: .shortened),
-                                         symbol: "flag", tint: .red, isEditing: editing(.deadline),
+                                         // Grey once it has passed, like a past reminder.
+                                         symbol: "flag", tint: deadline <= Date() ? .gray : .red, isEditing: editing(.deadline),
                                          onRemove: { animate { editingField = nil; item.deadline = nil } }) {
                                 DatePicker("Due by", selection: Binding(get: { item.deadline ?? deadline }, set: { item.deadline = $0 }))
                             }
@@ -248,7 +295,8 @@ struct ItemEditor: View {
                     InfoHeader("Deadline", isExpanded: infoBinding("deadline"))
                 } footer: {
                     InfoFooter(isExpanded: openInfo.contains("deadline")) {
-                        Text("A red dot marks the item until it is done. A deadline doesn’t notify you; add a reminder for that.")
+                        Text("A red dot marks the item until it is done. A deadline doesn’t notify you; add a reminder for that."
+                             + (item.deadline.map { $0 <= Date() } == true ? " A grey deadline has passed." : ""))
                     }
                 }
                 Section("Locations") {
@@ -308,7 +356,7 @@ struct ItemEditor: View {
                 }
             }
             .onChange(of: item.minute != nil || item.endDay != nil) { _, scheduledRange in
-                guard !existing, !carryChosen else { return }
+                guard !existing, !isDuplicate, !carryChosen else { return }
                 item.movesToNextDay = !scheduledRange
             }
             .onChange(of: pendingField) { _, field in
@@ -342,9 +390,12 @@ struct ItemEditor: View {
                 }
             }
             }
-            .navigationTitle(existing ? "Your item" : "New item").navigationBarTitleDisplayMode(.inline)
-            // A quiet note under the title once an existing item differs from what was opened.
-            .navigationSubtitle(existing && hasChanges ? "Edited" : "")
+            // Kept for VoiceOver and the system; the bar shows `barTitle` in its place.
+            .navigationTitle(kindTitle).navigationBarTitleDisplayMode(.inline)
+            // The form fades out under the title as it scrolls, rather than meeting a hard bar edge.
+            .scrollEdgeEffectStyle(.soft, for: .top)
+            // The same gap above the Title header as between the sections below.
+            .contentMargins(.top, 10, for: .scrollContent)
             .background(KeyboardDismissal())
             .background(PopoverDismissal(isActive: editingField != nil) { editingField = nil })
             // A popover replaces the keyboard, whichever field was being typed in.
@@ -352,10 +403,39 @@ struct ItemEditor: View {
                 if field != nil { UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil) }
             }
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { close() } }
-                ToolbarItem(placement: .confirmationAction) { Button("Save") { commitAndSave() }.fontWeight(.semibold).disabled(!canSave) }
+                // Round glass icons; their titles stay as VoiceOver labels.
+                ToolbarItem(placement: .principal) { barTitle }.sharedBackgroundVisibility(.hidden)
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", systemImage: "xmark", role: .cancel) { close() }
+                        // On the button, so the question comes out of ✕.
+                        .confirmationDialog("Save your changes?", isPresented: $confirmingClose, titleVisibility: .visible) {
+                            if canSave { Button("Save") { commitAndSave() } }
+                            Button("Discard Changes", role: .destructive) { dismiss() }
+                            Button("Keep Editing", role: .cancel) {}
+                        } message: {
+                            Text(canSave ? "This item has changes that haven’t been saved." : "This item has changes, but it needs a title to be saved.")
+                        }
+                }
+                // Plain glass like Cancel, greyed out until there's something to save. (Not the
+                // confirmation placement: that fills the button solid in the app's black or white tint.)
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Save", systemImage: "checkmark") { commitAndSave() }
+                        .fontWeight(.semibold)
+                        .disabled(!(hasChanges && canSave))
+                }
             }
-            .onAppear { if !existing { titleFocused = true } }
+            .onAppear { if !existing && !isDuplicate { titleFocused = true } }
+            // Typing fills in the fields as the title names them; done, the title keeps the rest.
+            .onChange(of: item.title) { _, _ in
+                guard titleFocused, !existing, !isDuplicate else { return }
+                if titleBaseline == nil { titleBaseline = TitleBaseline(item: item, people: people, locations: locations) }
+                fillInTitleDetails()
+            }
+            .onChange(of: ignoredTitleWords) { _, _ in fillInTitleDetails() }
+            .onChange(of: titleFocused) { _, focused in
+                // On the next turn, once the field has written its final text back.
+                if !focused { Task { @MainActor in applyTitleDetails() } }
+            }
             .alert("Check this item", isPresented: Binding(get: { issue != nil }, set: { if !$0 { issue = nil } })) {
                 if needsNotificationSettings {
                     Button("Open Settings") {
@@ -628,7 +708,7 @@ struct ItemEditor: View {
     }
     /// Keep carried and linked status together above the editable fields. Use the saved
     /// item so changing its draft schedule doesn't rewrite what happened to it.
-    @ViewBuilder private var itemStatusSection: some View {
+    @ViewBuilder private var itemStatusNote: some View {
         if let stored = store.item(item.id) {
             let now = Date()
             let wasCarried = stored.isCarried(now: now) && !stored.appears(on: viewingDay)
@@ -636,7 +716,7 @@ struct ItemEditor: View {
             let carriedOriginal = wasCarried && viewingDay == stored.day
             let original = stored.seriesID == nil ? nil : store.originalDay(of: stored)
             if carried || carriedOriginal || original != nil {
-                Section {
+                VStack(alignment: .leading, spacing: 4) {
                     if carriedOriginal {
                         let count = Calendar.current.dateComponents([.day], from: stored.day.date(),
                                                                     to: stored.liveDay(now: now).date()).day ?? 0
@@ -726,6 +806,7 @@ struct ItemEditor: View {
     }
     private var hasChanges: Bool {
         guard !deleted else { return false }
+        if isDuplicate && !existing { return true }
         // Reminders compare as a set: sorting or a duplicate isn't a change.
         func normalized(_ item: PlanItem) -> PlanItem {
             var item = item
@@ -746,7 +827,66 @@ struct ItemEditor: View {
             save()
         }
     }
+    /// What a new item's title says about its day, time, repeat, persona, people and places,
+    /// read as it's typed: "January 20 dinner with Sam at 18:00".
+    private var titleEntry: QuickEntry? {
+        guard !existing, !isDuplicate, !item.title.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        func unique(_ names: [String]) -> [String] {
+            var seen: Set<String> = []
+            return names.filter { seen.insert($0.lowercased()).inserted }
+        }
+        return QuickEntry(item.title, on: titleBaseline?.item.day ?? item.day, now: Date(), ignoring: ignoredTitleWords,
+                          knownPeople: unique(store.items.flatMap(\.people)), knownPlaces: unique(store.items.flatMap(\.locations)))
+    }
+    /// Fills the form in from what the title names so far, starting from the form as it was before
+    /// the title began, so only what the title says now is in it.
+    private func fillInTitleDetails() {
+        guard let base = titleBaseline else { return }
+        let title = item.title
+        let entry = titleEntry
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
+            item = base.item
+            item.title = title
+            people = base.people
+            locations = base.locations
+            if let entry, !entry.matches.isEmpty { fillIn(entry) }
+        }
+    }
+    /// The title is done (or the item saved): the details are already in the form, so the title
+    /// keeps only the remaining words. Other changes made since are left as they are.
+    private func applyTitleDetails() {
+        defer { titleBaseline = nil }
+        guard let entry = titleEntry, !entry.matches.isEmpty, !entry.title.isEmpty else { return }
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) {
+            // Not filled in while typing (a title that was never typed in), so fill it in now.
+            if titleBaseline == nil { fillIn(entry) }
+            item.title = entry.title
+        }
+    }
+    private func fillIn(_ entry: QuickEntry) {
+        let kinds = Set(entry.matches.map(\.kind))
+        if kinds.contains(.day) || kinds.contains(.repeats) { setDay(entry.day) }
+        if kinds.contains(.day) { setEndDay(entry.minute == nil ? entry.endDay : nil) }
+        if let minute = entry.minute {
+            item.endDay = nil
+            setMinute(minute)
+            setEnd(entry.endMinute.flatMap { end in item.start().map { $0.addingTimeInterval(TimeInterval((end - minute) * 60)) } })
+        }
+        if kinds.contains(.repeats) {
+            item.repeatRule = entry.repeatRule
+            item.repeatWeekdays = entry.repeatWeekdays
+            item.endDay = nil
+        }
+        item.personas = Persona.ordered(item.personas + entry.personas)
+        for name in entry.people where !people.contains(where: { $0.text.lowercased() == name.lowercased() }) {
+            people.append(ItemTextEntry(text: name))
+        }
+        for place in entry.locations where !locations.contains(where: { $0.text.lowercased() == place.lowercased() }) {
+            locations.append(ItemTextEntry(text: place))
+        }
+    }
     private func save() {
+        applyTitleDetails()
         let edited = edited
         item.locations = edited.locations
         item.people = edited.people
@@ -1031,10 +1171,10 @@ private struct SchedulePill<Picker: View>: View {
                             if let symbol { Image(systemName: symbol).accessibilityHidden(true) }
                             Text(value)
                         }
-                        .foregroundStyle(tint.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.primary))
+                        .foregroundStyle(tint.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.pillText))
                     } else {
                         HStack(spacing: 6) { Image(systemName: "plus").accessibilityHidden(true); Text(addLabel ?? addTitle) }
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.pillSecondaryText)
                     }
                 }
                 .padding(.leading, 12).padding(.trailing, value != nil && onRemove != nil ? 2 : 12)
@@ -1048,7 +1188,7 @@ private struct SchedulePill<Picker: View>: View {
                     Image(systemName: "xmark.circle.fill")
                         // A tinted pill (a reminder) tints its remove button to match.
                         .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(tint.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.secondary))
+                        .foregroundStyle(tint.map { AnyShapeStyle($0) } ?? AnyShapeStyle(.pillSecondaryText))
                         .padding(.leading, 4).padding(.trailing, 8)
                         .frame(minHeight: 36)
                         // Reach a 44-point target without making the capsule taller.
@@ -1061,10 +1201,10 @@ private struct SchedulePill<Picker: View>: View {
         .fixedSize()
         // A set value is a filled capsule; an add button is a dashed outline, like AddPillLabel.
         .background(value == nil ? AnyShapeStyle(.clear)
-                    : tint.map { AnyShapeStyle($0.opacity(0.14)) } ?? AnyShapeStyle(.fill.tertiary), in: .capsule)
+                    : tint.map { AnyShapeStyle($0.opacity(0.14)) } ?? AnyShapeStyle(.pillFill), in: .capsule)
         .overlay {
             if value == nil {
-                Capsule().strokeBorder(Color.secondary.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                Capsule().strokeBorder(Color.pillSecondaryText.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
                     .allowsHitTesting(false)
             }
         }
@@ -1115,8 +1255,8 @@ private struct ScheduleChips<Value: Hashable>: View {
                     .fixedSize()
                     .padding(.horizontal, padding).frame(minHeight: 34)
                     .frame(maxWidth: flexible ? .infinity : nil)
-                    .foregroundStyle(isSelected ? AnyShapeStyle(Color(.systemBackground)) : AnyShapeStyle(.primary))
-                    .background(isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(.fill.tertiary), in: .capsule)
+                    .foregroundStyle(isSelected ? AnyShapeStyle(Color(.systemBackground)) : AnyShapeStyle(.pillText))
+                    .background(isSelected ? AnyShapeStyle(.pillText) : AnyShapeStyle(.pillFill), in: .capsule)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(option.accessibilityLabel ?? option.title)
@@ -1149,9 +1289,15 @@ private struct PersonaChips: View {
                 Text(persona.title).fixedSize()
             }
             .padding(.leading, 8).padding(.trailing, 12).frame(minHeight: 34)
-            // Chosen, it reads like a reminder pill in the persona's colour; the rest stay quiet.
-            .foregroundStyle(isSelected ? AnyShapeStyle(persona.color) : AnyShapeStyle(.secondary))
-            .background(isSelected ? AnyShapeStyle(persona.color.opacity(0.14)) : AnyShapeStyle(.fill.tertiary), in: .capsule)
+            // Chosen, it reads like a reminder pill in the persona's colour; the rest look like the
+            // editor's add buttons, a dashed outline with grey text.
+            .foregroundStyle(isSelected ? AnyShapeStyle(persona.color) : AnyShapeStyle(.pillSecondaryText))
+            .background(isSelected ? persona.color.opacity(0.14) : .clear, in: .capsule)
+            .overlay {
+                if !isSelected {
+                    Capsule().strokeBorder(Color.pillSecondaryText.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                }
+            }
             .contentShape(.capsule)
         }
         .buttonStyle(.plain)
@@ -1217,37 +1363,43 @@ private struct TextPills: View {
     @State private var adding = false
     /// Set while the add button starts another pill from the new one, so losing focus keeps the field.
     @State private var continuing = false
+    /// Set while the new pill's ✕ waits for the keyboard to go, so losing focus doesn't keep its text.
+    @State private var discardingDraft = false
+    @State private var keyboardShown = false
     private enum Field: Hashable { case entry(UUID), new }
 
     var body: some View {
         FlowLayout(spacing: 8) {
             ForEach($entries) { $entry in
                 HStack(spacing: 6) {
-                    Image(systemName: kind.symbol).foregroundStyle(.secondary).accessibilityHidden(true)
+                    Image(systemName: kind.symbol).foregroundStyle(.pillSecondaryText).accessibilityHidden(true)
                     field(text: $entry.text, focusedAs: .entry(entry.id))
-                    Button { animate { entries.removeAll { $0.id == entry.id } } } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .symbolRenderingMode(.hierarchical).foregroundStyle(.secondary)
-                            .frame(minHeight: 36)
-                            // Reach a 44-point target without making the pill taller.
-                            .contentShape(.rect.inset(by: -6))
+                    removeButton(label: Text("\(Text(kind.removeTitle)): \(entry.text)")) {
+                        removeAfterKeyboard { entries.removeAll { $0.id == entry.id } }
                     }
-                    .buttonStyle(.borderless)
-                    .accessibilityLabel(Text("\(Text(kind.removeTitle)): \(entry.text)"))
                 }
+                .foregroundStyle(.pillText)
                 .padding(.leading, 12).padding(.trailing, 8)
                 .frame(minHeight: 36)
-                .background(.fill.tertiary, in: .capsule)
+                .background(.pillFill, in: .capsule)
                 .transition(.scale(scale: 0.8).combined(with: .opacity))
             }
             if adding {
                 HStack(spacing: 6) {
-                    Image(systemName: kind.symbol).foregroundStyle(.secondary).accessibilityHidden(true)
+                    Image(systemName: kind.symbol).foregroundStyle(.pillSecondaryText).accessibilityHidden(true)
                     field(text: $draft, focusedAs: .new)
+                    // Remove straight away, like a pill already added: drops what's being typed.
+                    removeButton(label: Text("\(Text(kind.removeTitle)): \(draft)")) {
+                        discardingDraft = true
+                        // The text goes once the pill has, so it doesn't flash its placeholder on the way out.
+                        removeAfterKeyboard({ adding = false }, then: { draft = ""; discardingDraft = false })
+                    }
                 }
-                .padding(.horizontal, 12)
+                .foregroundStyle(.pillText)
+                .padding(.leading, 12).padding(.trailing, 8)
                 .frame(minHeight: 36)
-                .background(.fill.tertiary, in: .capsule)
+                .background(.pillFill, in: .capsule)
+                .transition(.scale(scale: 0.8).combined(with: .opacity))
             }
             // While typing a new one, the add button stays so the next can follow straight away.
             if !adding || !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -1261,10 +1413,12 @@ private struct TextPills: View {
         }
         .padding(.vertical, 2)
         .sensoryFeedback(.selection, trigger: entries.count)
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboardShown = true }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { _ in keyboardShown = false }
         .onChange(of: focus) { old, new in
             if new != nil { onEditing() }
             // Settle a pill once its field loses focus: keep new text, and drop any left empty.
-            if old == .new, new != .new {
+            if old == .new, new != .new, !discardingDraft {
                 animate {
                     keepDraft()
                     if !continuing { adding = false }
@@ -1291,15 +1445,53 @@ private struct TextPills: View {
         if !text.isEmpty { entries.append(ItemTextEntry(text: text)) }
     }
     private func field(text: Binding<String>, focusedAs field: Field) -> some View {
-        TextField(kind.placeholder, text: text)
-            .textInputAutocapitalization(.words)
-            .submitLabel(.done)
-            .onSubmit { focus = nil }
-            .focused($focus, equals: field)
-            // The pill grows with what is typed, from a small minimum.
+        // The pill fits what is typed: a hidden copy of the text (or the placeholder while empty)
+        // sets the width, as a text field on its own takes a fixed default width.
+        Text(text.wrappedValue.isEmpty ? kind.placeholder : text.wrappedValue)
             .fixedSize()
-            .frame(minWidth: 48, alignment: .leading)
-            .accessibilityLabel(kind.name)
+            .padding(.trailing, 2)  // room for the cursor
+            .frame(minWidth: 16, alignment: .leading)
+            .hidden()
+            .overlay(alignment: .leading) {
+                TextField(kind.placeholder, text: text)
+                    .textInputAutocapitalization(.words)
+                    .submitLabel(.done)
+                    .onSubmit { focus = nil }
+                    .focused($focus, equals: field)
+                    .accessibilityLabel(kind.name)
+            }
+    }
+    /// Removes a pill with its usual animation. With the keyboard up, the keyboard goes first: it
+    /// takes the sheet from full height back to a card, and a pill leaving during that would vanish
+    /// in the jump. So the pill waits until the keyboard has hidden (or briefly, without one).
+    private func removeAfterKeyboard(_ change: @escaping () -> Void, then completion: @escaping () -> Void = {}) {
+        func remove() {
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.25), change, completion: completion)
+        }
+        guard keyboardShown else { remove(); return }
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        Task { @MainActor in
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    for await _ in NotificationCenter.default.notifications(named: UIResponder.keyboardDidHideNotification) { break }
+                }
+                group.addTask { try? await Task.sleep(for: .seconds(0.8)) }
+                await group.next()
+                group.cancelAll()
+            }
+            remove()
+        }
+    }
+    private func removeButton(label: Text, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: "xmark.circle.fill")
+                .symbolRenderingMode(.hierarchical).foregroundStyle(.pillSecondaryText)
+                .frame(minHeight: 36)
+                // Reach a 44-point target without making the pill taller.
+                .contentShape(.rect.inset(by: -6))
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel(label)
     }
     private func animate(_ change: () -> Void) {
         withAnimation(reduceMotion ? nil : .smooth(duration: 0.25), change)
@@ -1315,10 +1507,10 @@ private struct AddPillLabel: View {
             Image(systemName: "plus").accessibilityHidden(true)
             Text(title)
         }
-        .foregroundStyle(.secondary)
+        .foregroundStyle(.pillSecondaryText)
         .padding(.horizontal, 12)
         .frame(minHeight: 36)
-        .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+        .overlay(Capsule().strokeBorder(Color.pillSecondaryText.opacity(0.45), style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
         .contentShape(.capsule)
     }
 }
@@ -1429,6 +1621,9 @@ private struct KeyboardDismissal: UIViewRepresentable {
             var view = touch.view
             while let current = view {
                 if current is UITextField || current is UITextView { return false }
+                // Cancel and Save act on their own. Closing the keyboard first would shrink the
+                // sheet from full height and move the button away before the tap lands.
+                if current is UINavigationBar { return false }
                 view = current.superview
             }
             return true
@@ -1436,4 +1631,14 @@ private struct KeyboardDismissal: UIViewRepresentable {
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                                shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
     }
+}
+
+extension ShapeStyle where Self == Color {
+    // Pills use plain system colours rather than the vibrant `.fill` and `.primary`/`.secondary`
+    // styles: those are drawn differently on the sheet's glass and on its opaque full-height page,
+    // so pills would change colour in one frame when the keyboard takes the sheet to full height.
+    /// An unset pill's fill.
+    static var pillFill: Color { Color(.secondarySystemFill) }
+    static var pillText: Color { Color(.label) }
+    static var pillSecondaryText: Color { Color(.secondaryLabel) }
 }

@@ -4,82 +4,26 @@
     "Localizable": [
       {
         "comment": "",
-        "key": "Save your changes?",
+        "key": "Edit item",
         "location": {
-          "startingColumn": 29,
-          "startingLine": 59
-        }
-      },
-      {
-        "comment": "",
-        "key": "Save",
-        "location": {
-          "startingColumn": 33,
-          "startingLine": 60
-        }
-      },
-      {
-        "comment": "",
-        "key": "Discard Changes",
-        "location": {
-          "startingColumn": 20,
+          "startingColumn": 60,
           "startingLine": 61
         }
       },
       {
         "comment": "",
-        "key": "Keep Editing",
+        "key": "Duplicate item",
         "location": {
-          "startingColumn": 20,
-          "startingLine": 62
-        }
-      },
-      {
-        "comment": "",
-        "key": "This item has changes that haven’t been saved.",
-        "location": {
-          "startingColumn": 28,
-          "startingLine": 64
-        }
-      },
-      {
-        "comment": "",
-        "key": "This item has changes, but it needs a title to be saved.",
-        "location": {
-          "startingColumn": 81,
-          "startingLine": 64
-        }
-      },
-      {
-        "comment": "",
-        "key": "Your item",
-        "location": {
-          "startingColumn": 41,
-          "startingLine": 345
+          "startingColumn": 88,
+          "startingLine": 61
         }
       },
       {
         "comment": "",
         "key": "New item",
         "location": {
-          "startingColumn": 55,
-          "startingLine": 345
-        }
-      },
-      {
-        "comment": "",
-        "key": "Edited",
-        "location": {
-          "startingColumn": 58,
-          "startingLine": 347
-        }
-      },
-      {
-        "comment": "",
-        "key": "",
-        "location": {
-          "startingColumn": 69,
-          "startingLine": 347
+          "startingColumn": 107,
+          "startingLine": 61
         }
       },
       {
@@ -87,7 +31,7 @@
         "key": "Check this item",
         "location": {
           "startingColumn": 20,
-          "startingLine": 359
+          "startingLine": 439
         }
       },
       {
@@ -95,7 +39,7 @@
         "key": "Unlink this item?",
         "location": {
           "startingColumn": 20,
-          "startingLine": 368
+          "startingLine": 448
         }
       },
       {
@@ -103,7 +47,7 @@
         "key": "Locations",
         "location": {
           "startingColumn": 25,
-          "startingLine": 254
+          "startingLine": 302
         }
       },
       {
@@ -111,7 +55,7 @@
         "key": "People",
         "location": {
           "startingColumn": 25,
-          "startingLine": 258
+          "startingLine": 306
         }
       },
       {
@@ -119,7 +63,7 @@
         "key": "Notes",
         "location": {
           "startingColumn": 25,
-          "startingLine": 262
+          "startingLine": 310
         }
       },
       {
@@ -127,7 +71,7 @@
         "key": "Linked items",
         "location": {
           "startingColumn": 29,
-          "startingLine": 294
+          "startingLine": 342
         }
       },
       {
@@ -135,7 +79,7 @@
         "key": "History",
         "location": {
           "startingColumn": 29,
-          "startingLine": 301
+          "startingLine": 349
         }
       },
       {
@@ -143,7 +87,15 @@
         "key": "What’s on your day?",
         "location": {
           "startingColumn": 38,
-          "startingLine": 79
+          "startingLine": 117
+        }
+      },
+      {
+        "comment": "",
+        "key": "Title",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 126
         }
       },
       {
@@ -151,7 +103,7 @@
         "key": "Persona",
         "location": {
           "startingColumn": 32,
-          "startingLine": 90
+          "startingLine": 136
         }
       },
       {
@@ -159,7 +111,7 @@
         "key": "Day",
         "location": {
           "startingColumn": 44,
-          "startingLine": 100
+          "startingLine": 146
         }
       },
       {
@@ -167,7 +119,7 @@
         "key": "Time",
         "location": {
           "startingColumn": 44,
-          "startingLine": 109
+          "startingLine": 155
         }
       },
       {
@@ -175,7 +127,7 @@
         "key": "Add time",
         "location": {
           "startingColumn": 62,
-          "startingLine": 109
+          "startingLine": 155
         }
       },
       {
@@ -183,7 +135,7 @@
         "key": "Remove time",
         "location": {
           "startingColumn": 87,
-          "startingLine": 109
+          "startingLine": 155
         }
       },
       {
@@ -191,7 +143,7 @@
         "key": "End date",
         "location": {
           "startingColumn": 48,
-          "startingLine": 143
+          "startingLine": 189
         }
       },
       {
@@ -199,7 +151,7 @@
         "key": "Add end date",
         "location": {
           "startingColumn": 70,
-          "startingLine": 143
+          "startingLine": 189
         }
       },
       {
@@ -207,7 +159,7 @@
         "key": "End date",
         "location": {
           "startingColumn": 96,
-          "startingLine": 143
+          "startingLine": 189
         }
       },
       {
@@ -215,7 +167,7 @@
         "key": "Remove end date",
         "location": {
           "startingColumn": 121,
-          "startingLine": 143
+          "startingLine": 189
         }
       },
       {
@@ -223,7 +175,7 @@
         "key": "End time",
         "location": {
           "startingColumn": 48,
-          "startingLine": 128
+          "startingLine": 174
         }
       },
       {
@@ -231,7 +183,7 @@
         "key": "Add end time",
         "location": {
           "startingColumn": 70,
-          "startingLine": 128
+          "startingLine": 174
         }
       },
       {
@@ -239,7 +191,7 @@
         "key": "End",
         "location": {
           "startingColumn": 96,
-          "startingLine": 128
+          "startingLine": 174
         }
       },
       {
@@ -247,7 +199,7 @@
         "key": "Remove end time",
         "location": {
           "startingColumn": 116,
-          "startingLine": 128
+          "startingLine": 174
         }
       },
       {
@@ -255,7 +207,7 @@
         "key": "Day",
         "location": {
           "startingColumn": 44,
-          "startingLine": 105
+          "startingLine": 151
         }
       },
       {
@@ -263,7 +215,7 @@
         "key": "Now",
         "location": {
           "startingColumn": 40,
-          "startingLine": 113
+          "startingLine": 159
         }
       },
       {
@@ -271,7 +223,7 @@
         "key": "Sets the current time on the selected day",
         "location": {
           "startingColumn": 52,
-          "startingLine": 118
+          "startingLine": 164
         }
       },
       {
@@ -279,7 +231,7 @@
         "key": "Time",
         "location": {
           "startingColumn": 44,
-          "startingLine": 121
+          "startingLine": 167
         }
       },
       {
@@ -287,7 +239,7 @@
         "key": "Ends",
         "location": {
           "startingColumn": 48,
-          "startingLine": 137
+          "startingLine": 183
         }
       },
       {
@@ -295,7 +247,7 @@
         "key": "End date",
         "location": {
           "startingColumn": 48,
-          "startingLine": 152
+          "startingLine": 198
         }
       },
       {
@@ -303,7 +255,7 @@
         "key": "Schedule",
         "location": {
           "startingColumn": 30,
-          "startingLine": 167
+          "startingLine": 213
         }
       },
       {
@@ -311,7 +263,7 @@
         "key": "Schedule",
         "location": {
           "startingColumn": 36,
-          "startingLine": 165
+          "startingLine": 211
         }
       },
       {
@@ -319,7 +271,7 @@
         "key": "The schedule stays as planned. Until it is done, the item is also shown on today. Tick it off on the day it actually happened to keep it there.",
         "location": {
           "startingColumn": 30,
-          "startingLine": 171
+          "startingLine": 217
         }
       },
       {
@@ -327,7 +279,7 @@
         "key": "Move to next day if unfinished",
         "location": {
           "startingColumn": 28,
-          "startingLine": 176
+          "startingLine": 222
         }
       },
       {
@@ -335,7 +287,7 @@
         "key": "Carry over",
         "location": {
           "startingColumn": 32,
-          "startingLine": 182
+          "startingLine": 228
         }
       },
       {
@@ -343,7 +295,7 @@
         "key": "Unfinished items move to today. A time range keeps its time and duration; a single time becomes any time.",
         "location": {
           "startingColumn": 32,
-          "startingLine": 186
+          "startingLine": 232
         }
       },
       {
@@ -351,7 +303,7 @@
         "key": "This item stays on its scheduled day, even if unfinished.",
         "location": {
           "startingColumn": 32,
-          "startingLine": 187
+          "startingLine": 233
         }
       },
       {
@@ -359,7 +311,7 @@
         "key": "Reminder",
         "location": {
           "startingColumn": 44,
-          "startingLine": 203
+          "startingLine": 249
         }
       },
       {
@@ -367,7 +319,7 @@
         "key": "Add reminder",
         "location": {
           "startingColumn": 66,
-          "startingLine": 203
+          "startingLine": 249
         }
       },
       {
@@ -375,7 +327,7 @@
         "key": "Reminder",
         "location": {
           "startingColumn": 92,
-          "startingLine": 203
+          "startingLine": 249
         }
       },
       {
@@ -383,7 +335,7 @@
         "key": "Reminder",
         "location": {
           "startingColumn": 48,
-          "startingLine": 195
+          "startingLine": 241
         }
       },
       {
@@ -391,7 +343,7 @@
         "key": "Remove reminder",
         "location": {
           "startingColumn": 73,
-          "startingLine": 195
+          "startingLine": 241
         }
       },
       {
@@ -399,7 +351,7 @@
         "key": "Reminders",
         "location": {
           "startingColumn": 32,
-          "startingLine": 222
+          "startingLine": 268
         }
       },
       {
@@ -407,7 +359,7 @@
         "key": "Deadline",
         "location": {
           "startingColumn": 48,
-          "startingLine": 240
+          "startingLine": 287
         }
       },
       {
@@ -415,7 +367,7 @@
         "key": "Add deadline",
         "location": {
           "startingColumn": 70,
-          "startingLine": 240
+          "startingLine": 287
         }
       },
       {
@@ -423,7 +375,7 @@
         "key": "Deadline",
         "location": {
           "startingColumn": 96,
-          "startingLine": 240
+          "startingLine": 287
         }
       },
       {
@@ -431,7 +383,7 @@
         "key": "Deadline",
         "location": {
           "startingColumn": 48,
-          "startingLine": 232
+          "startingLine": 278
         }
       },
       {
@@ -439,7 +391,7 @@
         "key": "Remove deadline",
         "location": {
           "startingColumn": 73,
-          "startingLine": 232
+          "startingLine": 278
         }
       },
       {
@@ -447,7 +399,7 @@
         "key": "Due by",
         "location": {
           "startingColumn": 44,
-          "startingLine": 236
+          "startingLine": 283
         }
       },
       {
@@ -455,15 +407,7 @@
         "key": "Deadline",
         "location": {
           "startingColumn": 32,
-          "startingLine": 248
-        }
-      },
-      {
-        "comment": "",
-        "key": "A red dot marks the item until it is done. A deadline doesn’t notify you; add a reminder for that.",
-        "location": {
-          "startingColumn": 30,
-          "startingLine": 251
+          "startingLine": 295
         }
       },
       {
@@ -471,7 +415,7 @@
         "key": "Anything to remember",
         "location": {
           "startingColumn": 46,
-          "startingLine": 262
+          "startingLine": 310
         }
       },
       {
@@ -479,7 +423,7 @@
         "key": "Uncancel item",
         "location": {
           "startingColumn": 54,
-          "startingLine": 270
+          "startingLine": 318
         }
       },
       {
@@ -487,7 +431,7 @@
         "key": "Cancel item",
         "location": {
           "startingColumn": 72,
-          "startingLine": 270
+          "startingLine": 318
         }
       },
       {
@@ -495,7 +439,7 @@
         "key": "Delete item",
         "location": {
           "startingColumn": 39,
-          "startingLine": 278
+          "startingLine": 326
         }
       },
       {
@@ -503,7 +447,7 @@
         "key": "Delete item",
         "location": {
           "startingColumn": 46,
-          "startingLine": 287
+          "startingLine": 335
         }
       },
       {
@@ -511,23 +455,71 @@
         "key": "View and restore items",
         "location": {
           "startingColumn": 35,
-          "startingLine": 296
+          "startingLine": 344
         }
       },
       {
         "comment": "",
         "key": "Cancel",
         "location": {
-          "startingColumn": 70,
-          "startingLine": 355
+          "startingColumn": 28,
+          "startingLine": 409
+        }
+      },
+      {
+        "comment": "",
+        "key": "Save your changes?",
+        "location": {
+          "startingColumn": 45,
+          "startingLine": 411
         }
       },
       {
         "comment": "",
         "key": "Save",
         "location": {
-          "startingColumn": 70,
-          "startingLine": 356
+          "startingColumn": 49,
+          "startingLine": 412
+        }
+      },
+      {
+        "comment": "",
+        "key": "Discard Changes",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 413
+        }
+      },
+      {
+        "comment": "",
+        "key": "Keep Editing",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 414
+        }
+      },
+      {
+        "comment": "",
+        "key": "This item has changes that haven’t been saved.",
+        "location": {
+          "startingColumn": 44,
+          "startingLine": 416
+        }
+      },
+      {
+        "comment": "",
+        "key": "This item has changes, but it needs a title to be saved.",
+        "location": {
+          "startingColumn": 97,
+          "startingLine": 416
+        }
+      },
+      {
+        "comment": "",
+        "key": "Save",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 422
         }
       },
       {
@@ -535,7 +527,7 @@
         "key": "Open Settings",
         "location": {
           "startingColumn": 28,
-          "startingLine": 361
+          "startingLine": 441
         }
       },
       {
@@ -543,7 +535,7 @@
         "key": "OK",
         "location": {
           "startingColumn": 24,
-          "startingLine": 366
+          "startingLine": 446
         }
       },
       {
@@ -551,7 +543,7 @@
         "key": "Unlink and Save",
         "location": {
           "startingColumn": 24,
-          "startingLine": 371
+          "startingLine": 451
         }
       },
       {
@@ -559,7 +551,7 @@
         "key": "Edit Original Item",
         "location": {
           "startingColumn": 28,
-          "startingLine": 373
+          "startingLine": 453
         }
       },
       {
@@ -567,7 +559,7 @@
         "key": "Cancel",
         "location": {
           "startingColumn": 24,
-          "startingLine": 375
+          "startingLine": 455
         }
       },
       {
@@ -575,7 +567,7 @@
         "key": "Remind me at",
         "location": {
           "startingColumn": 24,
-          "startingLine": 543
+          "startingLine": 623
         }
       },
       {
@@ -583,7 +575,7 @@
         "key": "Share item",
         "location": {
           "startingColumn": 23,
-          "startingLine": 588
+          "startingLine": 668
         }
       },
       {
@@ -591,7 +583,7 @@
         "key": "Repeat",
         "location": {
           "startingColumn": 20,
-          "startingLine": 594
+          "startingLine": 674
         }
       },
       {
@@ -599,7 +591,7 @@
         "key": "Repeat",
         "location": {
           "startingColumn": 24,
-          "startingLine": 615
+          "startingLine": 695
         }
       },
       {
@@ -607,7 +599,7 @@
         "key": "Starts on the first matching day on or after the selected date. Changes to the original item, including how it repeats, apply to all its linked items. Changing how a linked item repeats unlinks it and makes it a new original item. Completion is separate for each item. The Carry over setting controls whether unfinished items move to the next day.",
         "location": {
           "startingColumn": 24,
-          "startingLine": 619
+          "startingLine": 699
         }
       },
       {
@@ -615,7 +607,7 @@
         "key": "Repeat this item every day, every weekday, every week or on days you choose. Each occurrence is completed separately. The Carry over setting controls whether unfinished items move to the next day.",
         "location": {
           "startingColumn": 24,
-          "startingLine": 620
+          "startingLine": 700
         }
       },
       {
@@ -623,7 +615,7 @@
         "key": "Original item, carried to %@ so far",
         "location": {
           "startingColumn": 30,
-          "startingLine": 644
+          "startingLine": 724
         }
       },
       {
@@ -631,7 +623,7 @@
         "key": "",
         "location": {
           "startingColumn": 66,
-          "startingLine": 654
+          "startingLine": 734
         }
       },
       {
@@ -639,7 +631,7 @@
         "key": "Goes to the item on its original scheduled day",
         "location": {
           "startingColumn": 71,
-          "startingLine": 654
+          "startingLine": 734
         }
       },
       {
@@ -647,7 +639,7 @@
         "key": "",
         "location": {
           "startingColumn": 70,
-          "startingLine": 668
+          "startingLine": 748
         }
       },
       {
@@ -655,7 +647,7 @@
         "key": "Goes to the original item",
         "location": {
           "startingColumn": 75,
-          "startingLine": 668
+          "startingLine": 748
         }
       },
       {
@@ -663,7 +655,7 @@
         "key": "Linked items",
         "location": {
           "startingColumn": 30,
-          "startingLine": 831
+          "startingLine": 971
         }
       },
       {
@@ -671,7 +663,7 @@
         "key": "The original item is no longer in your plan.",
         "location": {
           "startingColumn": 103,
-          "startingLine": 828
+          "startingLine": 968
         }
       },
       {
@@ -679,7 +671,7 @@
         "key": "Item unavailable",
         "location": {
           "startingColumn": 44,
-          "startingLine": 828
+          "startingLine": 968
         }
       },
       {
@@ -687,7 +679,7 @@
         "key": "Show later items",
         "location": {
           "startingColumn": 36,
-          "startingLine": 822
+          "startingLine": 962
         }
       },
       {
@@ -695,7 +687,7 @@
         "key": "%lld linked · %lld changed · %lld deleted",
         "location": {
           "startingColumn": 34,
-          "startingLine": 807
+          "startingLine": 947
         }
       },
       {
@@ -703,7 +695,7 @@
         "key": "Changed or deleted only",
         "location": {
           "startingColumn": 36,
-          "startingLine": 809
+          "startingLine": 949
         }
       },
       {
@@ -711,7 +703,7 @@
         "key": "Restore all changed or deleted items",
         "location": {
           "startingColumn": 40,
-          "startingLine": 811
+          "startingLine": 951
         }
       },
       {
@@ -719,7 +711,7 @@
         "key": "Restore returns each day to the original’s saved details and schedule. Existing completion and cancellation are kept; deleted items return open.",
         "location": {
           "startingColumn": 34,
-          "startingLine": 814
+          "startingLine": 954
         }
       },
       {
@@ -727,7 +719,7 @@
         "key": "Done",
         "location": {
           "startingColumn": 77,
-          "startingLine": 832
+          "startingLine": 972
         }
       },
       {
@@ -735,7 +727,7 @@
         "key": "Restore",
         "location": {
           "startingColumn": 24,
-          "startingLine": 857
+          "startingLine": 997
         }
       },
       {
@@ -743,7 +735,7 @@
         "key": "Uses the original’s saved details and schedule",
         "location": {
           "startingColumn": 40,
-          "startingLine": 860
+          "startingLine": 1000
         }
       },
       {
@@ -751,7 +743,7 @@
         "key": "About %@",
         "location": {
           "startingColumn": 38,
-          "startingLine": 967
+          "startingLine": 1107
         }
       },
       {
@@ -759,7 +751,7 @@
         "key": "Shown",
         "location": {
           "startingColumn": 46,
-          "startingLine": 968
+          "startingLine": 1108
         }
       },
       {
@@ -767,7 +759,7 @@
         "key": "Hidden",
         "location": {
           "startingColumn": 56,
-          "startingLine": 968
+          "startingLine": 1108
         }
       },
       {
@@ -775,7 +767,7 @@
         "key": "Shows or hides an explanation below this section",
         "location": {
           "startingColumn": 32,
-          "startingLine": 969
+          "startingLine": 1109
         }
       },
       {
@@ -783,7 +775,7 @@
         "key": "",
         "location": {
           "startingColumn": 40,
-          "startingLine": 1008
+          "startingLine": 1148
         }
       },
       {
@@ -791,7 +783,7 @@
         "key": "",
         "location": {
           "startingColumn": 43,
-          "startingLine": 1010
+          "startingLine": 1150
         }
       },
       {
@@ -799,7 +791,7 @@
         "key": "Removes this persona",
         "location": {
           "startingColumn": 41,
-          "startingLine": 1160
+          "startingLine": 1306
         }
       },
       {
@@ -807,7 +799,7 @@
         "key": "Adds this persona",
         "location": {
           "startingColumn": 66,
-          "startingLine": 1160
+          "startingLine": 1306
         }
       },
       {
@@ -815,7 +807,7 @@
         "key": "Location",
         "location": {
           "startingColumn": 56,
-          "startingLine": 1199
+          "startingLine": 1345
         }
       },
       {
@@ -823,7 +815,7 @@
         "key": "Person",
         "location": {
           "startingColumn": 69,
-          "startingLine": 1199
+          "startingLine": 1345
         }
       },
       {
@@ -831,7 +823,7 @@
         "key": "Add location",
         "location": {
           "startingColumn": 60,
-          "startingLine": 1200
+          "startingLine": 1346
         }
       },
       {
@@ -839,7 +831,7 @@
         "key": "Add person",
         "location": {
           "startingColumn": 77,
-          "startingLine": 1200
+          "startingLine": 1346
         }
       },
       {
@@ -847,7 +839,7 @@
         "key": "Remove location",
         "location": {
           "startingColumn": 63,
-          "startingLine": 1201
+          "startingLine": 1347
         }
       },
       {
@@ -855,7 +847,7 @@
         "key": "Remove person",
         "location": {
           "startingColumn": 83,
-          "startingLine": 1201
+          "startingLine": 1347
         }
       },
       {
@@ -863,7 +855,15 @@
         "key": "%@: %@",
         "location": {
           "startingColumn": 46,
-          "startingLine": 1236
+          "startingLine": 1377
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@: %@",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 1392
         }
       }
     ]

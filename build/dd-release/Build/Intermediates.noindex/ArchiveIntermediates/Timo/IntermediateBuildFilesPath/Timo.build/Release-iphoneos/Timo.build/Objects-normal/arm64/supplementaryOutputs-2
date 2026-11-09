@@ -1,0 +1,12 @@
+{
+  "/Users/timovijn/Timo/GitHub/timo/Sources/TimoCore/Planner.swift" : {
+    "abi-baseline-json" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/Timo.abi.json",
+    "const-values" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/Timo-primary.swiftconstvalues",
+    "dependencies" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/Timo-primary.d",
+    "diagnostics" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/Timo-primary.dia",
+    "objc-header" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/Timo-Swift.h",
+    "swiftdoc" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/Timo.swiftdoc",
+    "swiftmodule" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/Timo.swiftmodule",
+    "swiftsourceinfo" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/Timo.swiftsourceinfo"
+  }
+}

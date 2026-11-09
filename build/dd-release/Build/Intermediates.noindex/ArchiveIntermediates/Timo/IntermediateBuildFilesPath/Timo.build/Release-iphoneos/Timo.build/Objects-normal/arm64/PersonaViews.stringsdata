@@ -1,0 +1,160 @@
+{
+  "source": "/Users/timovijn/Timo/GitHub/timo/Timo/PersonaViews.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Persona",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 103
+        }
+      },
+      {
+        "comment": "",
+        "key": "Opens the list of personas. Swipe up or down to cycle through them.",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 105
+        }
+      },
+      {
+        "comment": "",
+        "key": "Persona",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 65
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld to review",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 248
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld with reminders",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 250
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld with deadlines",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 252
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld/%lld complete",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 254
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nothing in %@ yet",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 261
+        }
+      },
+      {
+        "comment": "",
+        "key": "Give an item the %@ persona and it will be gathered here, with everything before and after it.",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 263
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add an item",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 265
+        }
+      },
+      {
+        "comment": "",
+        "key": "Lists repeating items three months further ahead",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 338
+        }
+      },
+      {
+        "comment": "",
+        "key": "Show 3 more months of repeating items",
+        "location": {
+          "startingColumn": 19,
+          "startingLine": 333
+        }
+      },
+      {
+        "comment": "",
+        "key": "Original item only",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 627
+        }
+      },
+      {
+        "comment": "",
+        "key": "This linked item only",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 629
+        }
+      },
+      {
+        "comment": "",
+        "key": "This and following linked items",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 630
+        }
+      },
+      {
+        "comment": "",
+        "key": "Original and all linked items",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 632
+        }
+      },
+      {
+        "comment": "",
+        "key": "Deleted “%@”",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 647
+        }
+      },
+      {
+        "comment": "",
+        "key": "Undo",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 650
+        }
+      },
+      {
+        "comment": "",
+        "key": "Puts back what was deleted",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 654
+        }
+      }
+    ]
+  },
+  "version": 1
+}

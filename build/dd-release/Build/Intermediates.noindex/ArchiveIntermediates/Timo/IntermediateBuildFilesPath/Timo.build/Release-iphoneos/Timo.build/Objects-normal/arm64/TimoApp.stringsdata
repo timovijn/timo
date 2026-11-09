@@ -1,0 +1,168 @@
+{
+  "source": "/Users/timovijn/Timo/GitHub/timo/Timo/TimoApp.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Your plan",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 13
+        }
+      },
+      {
+        "comment": "",
+        "key": "OK",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 14
+        }
+      },
+      {
+        "comment": "",
+        "key": "Settings",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 76
+        }
+      },
+      {
+        "comment": "",
+        "key": "Timo",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 65
+        }
+      },
+      {
+        "comment": "",
+        "key": "Settings",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 68
+        }
+      },
+      {
+        "comment": "",
+        "key": "Settings",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 120
+        }
+      },
+      {
+        "comment": "",
+        "key": "Appearance",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 115
+        }
+      },
+      {
+        "comment": "",
+        "key": "System follows your device’s Light and Dark appearance.",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 117
+        }
+      },
+      {
+        "comment": "",
+        "key": "Done",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 124
+        }
+      },
+      {
+        "comment": "",
+        "key": "Devices",
+        "location": {
+          "startingColumn": 21,
+          "startingLine": 163
+        }
+      },
+      {
+        "comment": "",
+        "key": "Open Settings",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 155
+        }
+      },
+      {
+        "comment": "",
+        "key": "Sync with iCloud",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 144
+        }
+      },
+      {
+        "comment": "",
+        "key": "iCloud",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 158
+        }
+      },
+      {
+        "comment": "",
+        "key": "Your plan is kept in your private iCloud, so it’s backed up and the same on each of your devices. Turning this off keeps the plan on this %@.",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 160
+        }
+      },
+      {
+        "comment": "",
+        "key": "iOS %@",
+        "location": {
+          "startingColumn": 56,
+          "startingLine": 172
+        }
+      },
+      {
+        "comment": "",
+        "key": "iOS %@ · seen %@",
+        "location": {
+          "startingColumn": 81,
+          "startingLine": 172
+        }
+      },
+      {
+        "comment": "",
+        "key": "Live Activities are turned off for Timo.",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 225
+        }
+      },
+      {
+        "comment": "",
+        "key": "Open Settings",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 229
+        }
+      },
+      {
+        "comment": "",
+        "key": "Guide my day",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 218
+        }
+      },
+      {
+        "comment": "",
+        "key": "When a timed item starts, it appears on the Lock Screen and in the Dynamic Island with the time left and what’s next, so you can tick it off from there.",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 233
+        }
+      }
+    ]
+  },
+  "version": 1
+}

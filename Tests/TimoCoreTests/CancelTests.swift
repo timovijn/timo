@@ -89,4 +89,27 @@ final class CancelTests: XCTestCase {
         let open = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(PlanItem(title: "Open", day: day(26)))) as? [String: Any])
         XCTAssertNil(open["cancelledAt"])
     }
+    func testDuplicateIsAnOpenUnlinkedCopy() {
+        var item = PlanItem(title: "Run", notes: "5k", day: day(26), minute: 9 * 60, locations: ["Park"], people: ["Bo"])
+        item.personas = [.health]
+        item.repeatRule = .weekly
+        item.seriesID = UUID()
+        item.occurrenceDay = day(26)
+        item.completedAt = date(26, hour: 10)
+        item.suggestionDismissed = true
+        let copy = item.duplicate(now: date(27))
+        XCTAssertNotEqual(copy.id, item.id)
+        XCTAssertEqual([copy.title, copy.notes], ["Run", "5k"])
+        XCTAssertEqual(copy.day, item.day)
+        XCTAssertEqual(copy.minute, item.minute)
+        XCTAssertEqual(copy.locations, ["Park"])
+        XCTAssertEqual(copy.people, ["Bo"])
+        XCTAssertEqual(copy.personas, [.health])
+        XCTAssertEqual(copy.repeatRule, .weekly)
+        XCTAssertNil(copy.seriesID)
+        XCTAssertNil(copy.occurrenceDay)
+        XCTAssertFalse(copy.isSettled)
+        XCTAssertFalse(copy.suggestionDismissed)
+        XCTAssertEqual(copy.createdAt, date(27))
+    }
 }

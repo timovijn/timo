@@ -7,7 +7,15 @@
         "key": "Moves this item to start today at the current time, keeping its duration",
         "location": {
           "startingColumn": 32,
-          "startingLine": 76
+          "startingLine": 78
+        }
+      },
+      {
+        "comment": "",
+        "key": "Opens a copy of this item to change and save",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 87
         }
       },
       {
@@ -15,7 +23,7 @@
         "key": "Showing choices",
         "location": {
           "startingColumn": 48,
-          "startingLine": 106
+          "startingLine": 119
         }
       },
       {
@@ -23,7 +31,7 @@
         "key": "",
         "location": {
           "startingColumn": 68,
-          "startingLine": 106
+          "startingLine": 119
         }
       },
       {
@@ -31,7 +39,15 @@
         "key": "Start now",
         "location": {
           "startingColumn": 23,
-          "startingLine": 74
+          "startingLine": 76
+        }
+      },
+      {
+        "comment": "",
+        "key": "Duplicate",
+        "location": {
+          "startingColumn": 19,
+          "startingLine": 85
         }
       },
       {
@@ -39,7 +55,7 @@
         "key": "Share",
         "location": {
           "startingColumn": 23,
-          "startingLine": 82
+          "startingLine": 93
         }
       },
       {
@@ -47,7 +63,7 @@
         "key": "Uncancel",
         "location": {
           "startingColumn": 47,
-          "startingLine": 93
+          "startingLine": 106
         }
       },
       {
@@ -55,7 +71,7 @@
         "key": "Cancel",
         "location": {
           "startingColumn": 60,
-          "startingLine": 93
+          "startingLine": 106
         }
       },
       {
@@ -63,7 +79,7 @@
         "key": "Delete",
         "location": {
           "startingColumn": 26,
-          "startingLine": 105
+          "startingLine": 118
         }
       },
       {
@@ -71,7 +87,7 @@
         "key": "Show details and actions",
         "location": {
           "startingColumn": 41,
-          "startingLine": 181
+          "startingLine": 194
         }
       }
     ]

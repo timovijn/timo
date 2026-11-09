@@ -1,4 +1,5 @@
 import CloudKit
+import OSLog
 import SwiftUI
 import UIKit
 
@@ -6,18 +7,29 @@ import UIKit
 final class TimoAppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, configurationForConnecting session: UISceneSession,
                      options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        if options.cloudKitShareMetadata != nil { Logger.sharing.info("Connecting a scene for a share link") }
         let configuration = UISceneConfiguration(name: nil, sessionRole: session.role)
         configuration.delegateClass = TimoSceneDelegate.self
         return configuration
     }
+    /// Only reached if a scene doesn't take the link; kept so one can't be lost.
+    func application(_ application: UIApplication, userDidAcceptCloudKitShareWith metadata: CKShare.Metadata) {
+        Logger.sharing.info("Share link reached the app delegate")
+        Task { @MainActor in await PlanStore.shared.cloud.accept(metadata) }
+    }
 }
 
 final class TimoSceneDelegate: NSObject, UIWindowSceneDelegate {
-    /// A link that opens the app arrives here rather than below.
+    /// A link that launches the app arrives here rather than below. The engines aren't up yet
+    /// then; `CloudSync.accept` holds the link until they are.
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options: UIScene.ConnectionOptions) {
-        if let metadata = options.cloudKitShareMetadata { accept(metadata) }
+        if let metadata = options.cloudKitShareMetadata {
+            Logger.sharing.info("Share link arrived with the launch")
+            accept(metadata)
+        }
     }
     func windowScene(_ windowScene: UIWindowScene, userDidAcceptCloudKitShareWith metadata: CKShare.Metadata) {
+        Logger.sharing.info("Share link arrived while running")
         accept(metadata)
     }
     private func accept(_ metadata: CKShare.Metadata) {

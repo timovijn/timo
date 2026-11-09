@@ -6,7 +6,7 @@
 	<integer>13</integer>
 	<key>logs</key>
 	<dict>
-		<key>7034DD55-05B7-469D-9B1B-33F925237101</key>
+		<key>19C7856B-6587-4CD0-B39F-A9C64CA14035</key>
 		<dict>
 			<key>className</key>
 			<string>IDECommandLineBuildLog</string>
@@ -15,7 +15,7 @@
 			<key>domainType</key>
 			<string>Xcode.IDEActivityLogDomainType.BuildLog</string>
 			<key>fileName</key>
-			<string>7034DD55-05B7-469D-9B1B-33F925237101.xcactivitylog</string>
+			<string>19C7856B-6587-4CD0-B39F-A9C64CA14035.xcactivitylog</string>
 			<key>hasPrimaryLog</key>
 			<true/>
 			<key>primaryObservable</key>
@@ -40,15 +40,15 @@
 			<key>signature</key>
 			<string>Building project Timo with scheme Timo</string>
 			<key>timeStartedRecording</key>
-			<real>815787821.60871398</real>
+			<real>815953017.33881199</real>
 			<key>timeStoppedRecording</key>
-			<real>815787844.13605797</real>
+			<real>815953039.25897002</real>
 			<key>title</key>
 			<string>Building project Timo with scheme Timo</string>
 			<key>uniqueIdentifier</key>
-			<string>7034DD55-05B7-469D-9B1B-33F925237101</string>
+			<string>19C7856B-6587-4CD0-B39F-A9C64CA14035</string>
 		</dict>
-		<key>A5205126-7B8E-4130-AAB7-EC6CBE3F4450</key>
+		<key>B25458F9-2D2B-48BE-87A8-05FDA81AA3AC</key>
 		<dict>
 			<key>className</key>
 			<string>IDECommandLineBuildLog</string>
@@ -57,7 +57,7 @@
 			<key>domainType</key>
 			<string>Xcode.IDEActivityLogDomainType.BuildLog</string>
 			<key>fileName</key>
-			<string>A5205126-7B8E-4130-AAB7-EC6CBE3F4450.xcactivitylog</string>
+			<string>B25458F9-2D2B-48BE-87A8-05FDA81AA3AC.xcactivitylog</string>
 			<key>hasPrimaryLog</key>
 			<true/>
 			<key>primaryObservable</key>
@@ -82,13 +82,13 @@
 			<key>signature</key>
 			<string>Building project Timo with scheme Timo</string>
 			<key>timeStartedRecording</key>
-			<real>815789921.02288306</real>
+			<real>815941707.68250203</real>
 			<key>timeStoppedRecording</key>
-			<real>815789928.22968197</real>
+			<real>815941714.06163895</real>
 			<key>title</key>
 			<string>Building project Timo with scheme Timo</string>
 			<key>uniqueIdentifier</key>
-			<string>A5205126-7B8E-4130-AAB7-EC6CBE3F4450</string>
+			<string>B25458F9-2D2B-48BE-87A8-05FDA81AA3AC</string>
 		</dict>
 	</dict>
 </dict>

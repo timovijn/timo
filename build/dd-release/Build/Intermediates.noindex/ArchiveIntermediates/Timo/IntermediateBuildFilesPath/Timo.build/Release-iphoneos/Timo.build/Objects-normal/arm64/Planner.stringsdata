@@ -1,0 +1,32 @@
+{
+  "source": "/Users/timovijn/Timo/GitHub/timo/Sources/TimoCore/Planner.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 40,
+          "startingLine": 1557
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 1557
+        }
+      },
+      {
+        "comment": "",
+        "key": "Item",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 1557
+        }
+      }
+    ]
+  },
+  "version": 1
+}

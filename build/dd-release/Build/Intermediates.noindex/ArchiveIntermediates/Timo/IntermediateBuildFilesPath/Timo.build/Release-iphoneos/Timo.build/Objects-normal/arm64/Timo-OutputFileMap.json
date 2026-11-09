@@ -1,0 +1,81 @@
+{
+  "" : {
+    "const-values" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/Timo-primary.swiftconstvalues",
+    "dependencies" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/Timo-primary.d",
+    "diagnostics" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/Timo-primary.dia",
+    "emit-module-dependencies" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/Timo-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/Timo-primary-emit-module.dia",
+    "pch" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/Timo-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/Timo-primary.swiftdeps"
+  },
+  "/Users/timovijn/Timo/GitHub/timo/Sources/TimoCore/Planner.swift" : {
+    "index-unit-output-path" : "/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/Planner.o",
+    "llvm-bc" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/Planner.bc",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/Planner.o"
+  },
+  "/Users/timovijn/Timo/GitHub/timo/Timo/CloudSharing.swift" : {
+    "index-unit-output-path" : "/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/CloudSharing.o",
+    "llvm-bc" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/CloudSharing.bc",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/CloudSharing.o"
+  },
+  "/Users/timovijn/Timo/GitHub/timo/Timo/CloudSync.swift" : {
+    "index-unit-output-path" : "/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/CloudSync.o",
+    "llvm-bc" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/CloudSync.bc",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/CloudSync.o"
+  },
+  "/Users/timovijn/Timo/GitHub/timo/Timo/DayGuideActivities.swift" : {
+    "index-unit-output-path" : "/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/DayGuideActivities.o",
+    "llvm-bc" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/DayGuideActivities.bc",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/DayGuideActivities.o"
+  },
+  "/Users/timovijn/Timo/GitHub/timo/Timo/DayView.swift" : {
+    "index-unit-output-path" : "/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/DayView.o",
+    "llvm-bc" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/DayView.bc",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/DayView.o"
+  },
+  "/Users/timovijn/Timo/GitHub/timo/Timo/FocusedItem.swift" : {
+    "index-unit-output-path" : "/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/FocusedItem.o",
+    "llvm-bc" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/FocusedItem.bc",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/FocusedItem.o"
+  },
+  "/Users/timovijn/Timo/GitHub/timo/Timo/GuideActivity.swift" : {
+    "index-unit-output-path" : "/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/GuideActivity.o",
+    "llvm-bc" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/GuideActivity.bc",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/GuideActivity.o"
+  },
+  "/Users/timovijn/Timo/GitHub/timo/Timo/ItemEditor.swift" : {
+    "index-unit-output-path" : "/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/ItemEditor.o",
+    "llvm-bc" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/ItemEditor.bc",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/ItemEditor.o"
+  },
+  "/Users/timovijn/Timo/GitHub/timo/Timo/PersonaViews.swift" : {
+    "index-unit-output-path" : "/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/PersonaViews.o",
+    "llvm-bc" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/PersonaViews.bc",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/PersonaViews.o"
+  },
+  "/Users/timovijn/Timo/GitHub/timo/Timo/PlanLocation.swift" : {
+    "index-unit-output-path" : "/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/PlanLocation.o",
+    "llvm-bc" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/PlanLocation.bc",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/PlanLocation.o"
+  },
+  "/Users/timovijn/Timo/GitHub/timo/Timo/PlanStore.swift" : {
+    "index-unit-output-path" : "/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/PlanStore.o",
+    "llvm-bc" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/PlanStore.bc",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/PlanStore.o"
+  },
+  "/Users/timovijn/Timo/GitHub/timo/Timo/SearchView.swift" : {
+    "index-unit-output-path" : "/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/SearchView.o",
+    "llvm-bc" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/SearchView.bc",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/SearchView.o"
+  },
+  "/Users/timovijn/Timo/GitHub/timo/Timo/TimoApp.swift" : {
+    "index-unit-output-path" : "/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/TimoApp.o",
+    "llvm-bc" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/TimoApp.bc",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/TimoApp.o"
+  },
+  "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "index-unit-output-path" : "/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/build/dd-release/Build/Intermediates.noindex/ArchiveIntermediates/Timo/IntermediateBuildFilesPath/Timo.build/Release-iphoneos/Timo.build/Objects-normal/arm64/GeneratedAssetSymbols.o"
+  }
+}

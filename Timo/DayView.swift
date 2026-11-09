@@ -11,6 +11,8 @@ struct DayView: View {
     private let reviewTint = Color.orange
     @State private var date = Calendar.current.startOfDay(for: Date())
     @State private var editing: PlanItem?
+    /// The ID of an unsaved copy made with Duplicate, which the editor opens as "Duplicate item".
+    @State private var duplicating: UUID?
     @StateObject private var daySwipeInteraction = DaySwipeInteraction()
     @State private var changingReminder: PlanItem?
     @State private var search = SearchPull()
@@ -244,8 +246,11 @@ struct DayView: View {
             .sheet(item: $editing) { item in
                 // A persona page or search can open an item from any day.
                 ItemEditor(item: item, viewingDay: persona == nil && !search.isOpen ? day : item.liveDay(now: now),
-                           openItem: openOnItsDay)
+                           isDuplicate: item.id == duplicating, openItem: openOnItsDay)
                     .environmentObject(store)
+                    // A fresh editor per item: opened while the last sheet is still closing, SwiftUI
+                    // can reuse it, keeping the previous item's edits in its state.
+                    .id(item.id)
             }
             .sheet(item: $changingReminder) { item in
                 ReminderTimeEditor(item: item).environmentObject(store)
@@ -446,21 +451,32 @@ struct DayView: View {
     /// the top of the glass as it grows and leaves as soon as it starts to fold.
     @ViewBuilder private var calendarTodayButton: some View {
         if pickingDate {
-            Button { pickFromCalendar(Calendar.current.startOfDay(for: Date())) } label: {
-                Text("Today")
-                    .font(.subheadline.weight(.medium))
-                    .padding(.horizontal, 18)
-                    .frame(minHeight: 44)
-                    .contentShape(.capsule)
+            HStack(spacing: 8) {
+                calendarJumpButton("Yesterday", days: -1, label: "Go to yesterday")
+                calendarJumpButton("Today", days: 0, label: "Go to today")
+                calendarJumpButton("Tomorrow", days: 1, label: "Go to tomorrow")
             }
-            .buttonStyle(.plain)
-            .glassEffect(.regular.interactive(), in: .capsule)
-            .glassEffectTransition(.materialize)
-            // A zero-height frame on the glass's top edge, so the button sits wholly above it.
+            // A zero-height frame on the glass's top edge, so the buttons sit wholly above it.
             .padding(.bottom, 10)
             .frame(height: 0, alignment: .bottom)
-            .accessibilityLabel("Go to today")
         }
+    }
+    /// A day relative to today, not to the day being viewed.
+    private func calendarJumpButton(_ title: LocalizedStringKey, days: Int, label: LocalizedStringKey) -> some View {
+        Button {
+            let today = Calendar.current.startOfDay(for: Date())
+            pickFromCalendar(Calendar.current.date(byAdding: .day, value: days, to: today) ?? today)
+        } label: {
+            Text(title)
+                .font(.subheadline.weight(.medium))
+                .padding(.horizontal, 18)
+                .frame(minHeight: 44)
+                .contentShape(.capsule)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .glassEffectTransition(.materialize)
+        .accessibilityLabel(label)
     }
     private func pickFromCalendar(_ picked: Date) {
         pickedFromCalendar = true
@@ -1328,7 +1344,10 @@ struct DayView: View {
                 .allowsHitTesting(showsPanel)
                 .accessibilityHidden(!showsPanel)
             InlineFocusedDetails(item: item, day: day, expanded: inlineExpanded, token: inlineToken,
-                                 close: closeFocus, collapsed: finishInlineFocus,
+                                 close: closeFocus, duplicate: { copy in
+                duplicating = copy.id
+                editing = copy
+            }, collapsed: finishInlineFocus,
                                  contentChanged: {
                 if isFocusSource { focused?.detailsRevision += 1 }
             }, heightChanged: { height in
