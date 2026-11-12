@@ -1,4 +1,0 @@
-Target dependency graph (2 targets)
-Target 'Timo' in project 'Timo'
-➜ Explicit dependency on target 'TimoWidget' in project 'Timo'
-Target 'TimoWidget' in project 'Timo' (no dependencies)

@@ -4,10 +4,26 @@
     "Localizable": [
       {
         "comment": "",
-        "key": "%@–%@",
+        "key": "Upcoming",
         "location": {
-          "startingColumn": 26,
-          "startingLine": 75
+          "startingColumn": 43,
+          "startingLine": 82
+        }
+      },
+      {
+        "comment": "",
+        "key": "Ongoing",
+        "location": {
+          "startingColumn": 76,
+          "startingLine": 82
+        }
+      },
+      {
+        "comment": "",
+        "key": "Past",
+        "location": {
+          "startingColumn": 88,
+          "startingLine": 82
         }
       },
       {
@@ -15,15 +31,7 @@
         "key": "Complete %@",
         "location": {
           "startingColumn": 37,
-          "startingLine": 111
-        }
-      },
-      {
-        "comment": "",
-        "key": "Next: %@ · %@",
-        "location": {
-          "startingColumn": 30,
-          "startingLine": 98
+          "startingLine": 120
         }
       },
       {
@@ -31,7 +39,47 @@
         "key": "Complete",
         "location": {
           "startingColumn": 27,
-          "startingLine": 105
+          "startingLine": 114
+        }
+      },
+      {
+        "comment": "",
+        "key": "Ended at %@",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 150
+        }
+      },
+      {
+        "comment": "",
+        "key": "At %@",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 155
+        }
+      },
+      {
+        "comment": "",
+        "key": "Ends at %@",
+        "location": {
+          "startingColumn": 58,
+          "startingLine": 155
+        }
+      },
+      {
+        "comment": "",
+        "key": "At %@",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 156
+        }
+      },
+      {
+        "comment": "",
+        "key": "Starts at %@",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 172
         }
       },
       {
@@ -39,39 +87,31 @@
         "key": "Ends at %@",
         "location": {
           "startingColumn": 42,
-          "startingLine": 130
+          "startingLine": 183
         }
       },
       {
         "comment": "",
-        "key": "Time’s up",
-        "location": {
-          "startingColumn": 37,
-          "startingLine": 125
-        }
-      },
-      {
-        "comment": "",
-        "key": "Time’s up",
-        "location": {
-          "startingColumn": 18,
-          "startingLine": 141
-        }
-      },
-      {
-        "comment": "",
-        "key": "Ends at %@",
+        "key": "Ended at %@",
         "location": {
           "startingColumn": 38,
-          "startingLine": 152
+          "startingLine": 196
         }
       },
       {
         "comment": "",
         "key": "left",
         "location": {
+          "startingColumn": 26,
+          "startingLine": 180
+        }
+      },
+      {
+        "comment": "",
+        "key": "ago",
+        "location": {
           "startingColumn": 22,
-          "startingLine": 149
+          "startingLine": 193
         }
       }
     ]

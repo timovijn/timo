@@ -18,7 +18,7 @@ public struct Day: Codable, Hashable, Comparable {
 }
 
 public enum RepeatRule: String, Codable, CaseIterable, Identifiable {
-    case never, daily, weekdays, weekly, custom
+    case never, daily, weekdays, weekly, monthEnd, custom
     public var id: String { rawValue }
     public var title: String {
         switch self {
@@ -26,6 +26,7 @@ public enum RepeatRule: String, Codable, CaseIterable, Identifiable {
         case .daily: return "Every day"
         case .weekdays: return "Every weekday"
         case .weekly: return "Every week"
+        case .monthEnd: return "Last day of the month"
         case .custom: return "Custom days"
         }
     }
@@ -37,8 +38,17 @@ public enum RepeatRule: String, Codable, CaseIterable, Identifiable {
         case .daily: return true
         case .weekdays: return (2...6).contains(weekday)
         case .weekly: return weekday == calendar.component(.weekday, from: start.date(calendar: calendar))
+        case .monthEnd: return day.isLastOfMonth(calendar: calendar)
         case .custom: return weekdays.contains(weekday)
         }
+    }
+}
+
+extension Day {
+    /// The 28th to the 31st, whichever ends its month: the next day is in another month.
+    public func isLastOfMonth(calendar: Calendar = .current) -> Bool {
+        let next = calendar.date(byAdding: .day, value: 1, to: date(calendar: calendar))!
+        return calendar.component(.month, from: next) != calendar.component(.month, from: date(calendar: calendar))
     }
 }
 
@@ -118,6 +128,114 @@ public struct LinkedItemEntry: Identifiable, Equatable {
     public var id: UUID { PlanItem.occurrenceID(series: origin.seriesID, day: origin.day) }
 }
 
+/// Something kept with an item: a link, a piece of text or a file such as a photo or PDF. Links
+/// and text are stored in the plan itself; a file's bytes sit beside the plan, in a folder named
+/// after the attachment's ID, so copies of an item (a repeat's days, a duplicate) share one file.
+public struct Attachment: Identifiable, Codable, Equatable, Hashable {
+    public enum Kind: String, Codable { case link, text, file }
+    public var id: UUID
+    public var kind: Kind
+    /// What it's called on the item: a link's host, a file's name, the text's first line.
+    public var title: String
+    public var url: URL?
+    public var text: String?
+    /// A file's name inside its folder, its uniform type identifier and its size.
+    public var fileName: String?
+    public var contentType: String?
+    public var byteCount: Int?
+    public var addedAt: Date
+
+    public init(id: UUID = UUID(), kind: Kind, title: String, url: URL? = nil, text: String? = nil,
+                fileName: String? = nil, contentType: String? = nil, byteCount: Int? = nil, addedAt: Date = Date()) {
+        self.id = id; self.kind = kind; self.title = title; self.url = url; self.text = text
+        self.fileName = fileName; self.contentType = contentType; self.byteCount = byteCount; self.addedAt = addedAt
+    }
+    /// A web address, titled by its host without "www.".
+    public static func link(_ url: URL, now: Date = Date()) -> Attachment {
+        let host = url.host.map { $0.hasPrefix("www.") ? String($0.dropFirst(4)) : $0 }
+        return Attachment(kind: .link, title: host ?? url.absoluteString, url: url, addedAt: now)
+    }
+    /// Words to keep, titled by their first line (shortened when long).
+    public static func text(_ text: String, now: Date = Date()) -> Attachment {
+        let firstLine = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? text
+        let trimmed = firstLine.trimmingCharacters(in: .whitespaces)
+        let title = trimmed.count > 60 ? String(trimmed.prefix(59)).trimmingCharacters(in: .whitespaces) + "…" : trimmed
+        return Attachment(kind: .text, title: title, text: text, addedAt: now)
+    }
+    /// What a typed or pasted line is: a link when it's a web address, otherwise text. Nil when blank.
+    public static func reading(_ typed: String, now: Date = Date()) -> Attachment? {
+        let trimmed = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if !trimmed.contains(where: \.isWhitespace) {
+            // "example.com/page" without a scheme still reads as a link.
+            let candidate = trimmed.contains("://") ? trimmed : "https://" + trimmed
+            if let url = URL(string: candidate), let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme),
+               let host = url.host, !host.hasPrefix("."), let ending = host.split(separator: ".").last, ending != Substring(host),
+               // Ends in a real domain ending, so "v1.2" or "3.5" stay text.
+               ending.count >= 2, ending.allSatisfy(\.isLetter) {
+                return .link(url, now: now)
+            }
+        }
+        return .text(trimmed, now: now)
+    }
+    /// The words search looks in: the title, a link's address, the text.
+    public var searchableText: [String] {
+        [title, url?.absoluteString, text].compactMap { $0 }
+    }
+}
+
+/// One line of an item's checklist, such as one thing to buy on a shopping trip. It's ticked off
+/// on its own; ticking every entry doesn't complete the item, nor does completing the item tick them.
+public struct ChecklistEntry: Identifiable, Codable, Equatable, Hashable {
+    public var id: UUID
+    public var title: String
+    /// When it was ticked off; nil while open.
+    public var doneAt: Date?
+    public var isDone: Bool { doneAt != nil }
+    public init(id: UUID = UUID(), title: String, doneAt: Date? = nil) {
+        self.id = id; self.title = title; self.doneAt = doneAt
+    }
+    /// `entries` as defined (titles and order) with each one's tick taken from `source`, matched
+    /// by ID; an entry `source` doesn't have is open. A repeating item's days share the entries
+    /// but each keeps its own ticks.
+    public static func ticks(from source: [ChecklistEntry], onto entries: [ChecklistEntry]) -> [ChecklistEntry] {
+        let done = Dictionary(source.map { ($0.id, $0.doneAt) }, uniquingKeysWith: { first, _ in first })
+        return entries.map { var entry = $0; entry.doneAt = done[$0.id] ?? nil; return entry }
+    }
+    /// The entries with nothing ticked: what a new day of a repeating item, or a copy, starts with.
+    public static func untouched(_ entries: [ChecklistEntry]) -> [ChecklistEntry] {
+        entries.map { var entry = $0; entry.doneAt = nil; return entry }
+    }
+    /// Combines two edits of one checklist made apart from each other, entry by entry, from the
+    /// version both started from: a tick or a new title on either side is kept, entries added on
+    /// either side are both kept, and an entry deleted on either side goes. The order comes from
+    /// whichever side reordered, else from `theirs`; entries only `mine` added follow at the end.
+    public static func merged(base: [ChecklistEntry], mine: [ChecklistEntry], theirs: [ChecklistEntry]) -> [ChecklistEntry] {
+        func byID(_ entries: [ChecklistEntry]) -> [UUID: ChecklistEntry] {
+            Dictionary(entries.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        }
+        let original = byID(base), mineByID = byID(mine), theirsByID = byID(theirs)
+        func order(_ entries: [ChecklistEntry], among others: [ChecklistEntry]) -> [UUID] {
+            let shared = Set(others.map(\.id))
+            return entries.map(\.id).filter(shared.contains)
+        }
+        let mineReordered = order(mine, among: base) != order(base, among: mine)
+        let (first, second) = mineReordered ? (mine, theirs) : (theirs, mine)
+        var ids = first.map(\.id)
+        ids += second.map(\.id).filter { !ids.contains($0) && original[$0] == nil }
+        return ids.compactMap { id in
+            // Deleted on either side.
+            if original[id] != nil && (mineByID[id] == nil || theirsByID[id] == nil) { return nil }
+            guard let mineEntry = mineByID[id] else { return theirsByID[id] }
+            guard let theirEntry = theirsByID[id], let baseEntry = original[id] else { return mineEntry }
+            var entry = theirEntry
+            if mineEntry.title != baseEntry.title { entry.title = mineEntry.title }
+            if mineEntry.doneAt != baseEntry.doneAt { entry.doneAt = mineEntry.doneAt }
+            return entry
+        }
+    }
+}
+
 /// One day's check-off on a single full-day event. Open entries are retained for sync merges.
 public struct DateRangeDayStatus: Codable, Equatable, Identifiable {
     public var id: Day { day }
@@ -141,6 +259,14 @@ public struct PlanItem: Identifiable, Codable, Equatable {
     public var excludedRangeDays: [Day]?
     /// The personas this item belongs to; it can be in several, or none.
     public var personas: [Persona] = []
+    /// Links, text and files kept with the item, in the order they were added.
+    public var attachments: [Attachment] = []
+    /// Things to tick off within the item, in order: the groceries on a shopping trip.
+    public var checklist: [ChecklistEntry] = []
+    /// How many entries are ticked off, of how many; nil without a checklist.
+    public var checklistProgress: (done: Int, total: Int)? {
+        checklist.isEmpty ? nil : (checklist.filter(\.isDone).count, checklist.count)
+    }
     public var title: String
     public var notes: String
     public var locations: [String]
@@ -215,6 +341,7 @@ public struct PlanItem: Identifiable, Codable, Equatable {
         copy.excludedRangeDays = nil
         copy.carriedFrom = nil
         copy.suggestionDismissed = false
+        copy.checklist = ChecklistEntry.untouched(copy.checklist)
         copy.originalDay = copy.day
         copy.createdAt = now
         return copy
@@ -245,7 +372,7 @@ public struct PlanItem: Identifiable, Codable, Equatable {
     }
     // Read the original task/event format without changing IDs or scheduling choices.
     private enum CodingKeys: String, CodingKey {
-        case id, title, notes, locations, people, day, minute, end, endDay, reminders, deadline, completedAt, cancelledAt, parentID, originalDay, carriedFrom, suggestionDismissed, createdAt, movesToNextDay, repeatRule, repeatWeekdays, seriesID, occurrenceDay, detachedFrom, personas, mergedRangeSeriesIDs, dailyStatuses, excludedRangeDays
+        case id, title, notes, locations, people, day, minute, end, endDay, reminders, deadline, completedAt, cancelledAt, parentID, originalDay, carriedFrom, suggestionDismissed, createdAt, movesToNextDay, repeatRule, repeatWeekdays, seriesID, occurrenceDay, detachedFrom, personas, mergedRangeSeriesIDs, dailyStatuses, excludedRangeDays, attachments, checklist
     }
     private enum LegacyKeys: String, CodingKey { case kind, reminderAt, persona }
     public init(from decoder: Decoder) throws {
@@ -268,6 +395,8 @@ public struct PlanItem: Identifiable, Codable, Equatable {
         }
         title = try c.decode(String.self, forKey: .title)
         notes = try c.decode(String.self, forKey: .notes)
+        attachments = try c.decodeIfPresent([Attachment].self, forKey: .attachments) ?? []
+        checklist = try c.decodeIfPresent([ChecklistEntry].self, forKey: .checklist) ?? []
         locations = try c.decodeIfPresent([String].self, forKey: .locations) ?? []
         people = try c.decodeIfPresent([String].self, forKey: .people) ?? []
         day = try c.decode(Day.self, forKey: .day)
@@ -330,6 +459,9 @@ public struct PlanItem: Identifiable, Codable, Equatable {
         try c.encodeIfPresent(excludedRangeDays, forKey: .excludedRangeDays)
         try c.encodeIfPresent(wholeCompletedAt, forKey: .completedAt)
         try c.encodeIfPresent(wholeCancelledAt, forKey: .cancelledAt)
+        // Left out when empty, so items without attachments are saved and synced as before.
+        if !attachments.isEmpty { try c.encode(attachments, forKey: .attachments) }
+        if !checklist.isEmpty { try c.encode(checklist, forKey: .checklist) }
     }
     /// The ID of a repeating item's occurrence on `day`: the same on every device, from the
     /// series and the day alone. Two 64-bit FNV-1a hashes keep it Foundation-only; the version
@@ -363,7 +495,7 @@ public struct PlanItem: Identifiable, Codable, Equatable {
         return calendar.date(bySettingHour: minute / 60, minute: minute % 60, second: 0, of: day.date(calendar: calendar))
     }
     // About the time, not the item: a range ticked off early still runs until its end,
-    // so it stays in the In progress group. Only cancelling takes it out.
+    // so it stays in the Ongoing group. Only cancelling takes it out.
     public func isInProgress(now: Date, calendar: Calendar = .current) -> Bool {
         guard !isCancelled, let start = start(calendar: calendar), let end else { return false }
         return start <= now && now < end
@@ -485,7 +617,8 @@ extension PlanItem {
         }
         take(\.title); take(\.notes); take(\.locations); take(\.people); take(\.deadline)
         take(\.parentID); take(\.movesToNextDay); take(\.carriedFrom); take(\.excludedRangeDays)
-        take(\.reminders); take(\.personas); take(\.suggestionDismissed)
+        take(\.reminders); take(\.personas); take(\.suggestionDismissed); take(\.attachments)
+        if mine.checklist != base.checklist { result.checklist = ChecklistEntry.merged(base: base.checklist, mine: mine.checklist, theirs: theirs.checklist) }
         if changed({ [$0.day, $0.minute, $0.end, $0.endDay, $0.originalDay] }) {
             result.day = mine.day; result.minute = mine.minute; result.end = mine.end; result.endDay = mine.endDay; result.originalDay = mine.originalDay
         }
@@ -570,14 +703,13 @@ public enum Planner {
                     occurrence.occurrenceDay = cursor
                     updateStart(&occurrence, day: cursor, minute: occurrence.minute, calendar: calendar)
                     occurrence.originalDay = cursor
-                    // Each occurrence is due the same number of days after its own day.
-                    let offset = calendar.dateComponents([.day], from: plan.template.day.date(calendar: calendar), to: cursor.date(calendar: calendar)).day ?? 0
-                    occurrence.deadline = plan.template.deadline.flatMap { calendar.date(byAdding: .day, value: offset, to: $0) }
+                    occurrence.deadline = deadline(of: plan.template, on: cursor, calendar: calendar)
                     occurrence = occurrence.unprojected
                     occurrence.dailyStatuses = nil
                     occurrence.completedAt = nil
                     occurrence.cancelledAt = nil
                     occurrence.parentID = nil
+                    occurrence.checklist = ChecklistEntry.untouched(occurrence.checklist)
                     items.append(occurrence)
                     existing.insert(cursor)
                     changed = true
@@ -721,17 +853,22 @@ public enum Planner {
             case .daily: return true
             case .weekdays: return (2...6).contains(weekday)
             case .weekly: return weekday == weeklyDay
+            case .monthEnd: return day.isLastOfMonth(calendar: calendar)
             case .custom: return edited.repeatWeekdays.contains(weekday)
             }
         }
+        // A week finds any weekday; a month finds its last day.
         var start = earliest
-        for offset in 0..<7 {
+        for offset in 0..<31 {
             let candidate = Day(calendar.date(byAdding: .day, value: offset, to: earliest.date(calendar: calendar))!, calendar: calendar)
             if matches(candidate) { start = candidate; break }
         }
         var definition = edited
         updateStart(&definition, day: start, minute: edited.minute, calendar: calendar)
+        definition.deadline = deadline(of: edited, on: start, calendar: calendar)
         var plan = RepeatingPlan(template: definition)
+        // The template holds the entries; every day keeps its own ticks.
+        plan.template.checklist = ChecklistEntry.untouched(definition.checklist)
         if let first = plans.min(by: { $0.template.day < $1.template.day }) {
             plan.id = first.id
             plan.familyID = first.familyID
@@ -752,6 +889,7 @@ public enum Planner {
             guard plan.includes(day, calendar: calendar) else { continue }
             var updated = definition
             updateStart(&updated, day: day, minute: definition.minute, calendar: calendar)
+            updated.deadline = deadline(of: definition, on: day, calendar: calendar)
             updated.id = old.id
             updated.seriesID = plan.id
             updated.occurrenceDay = day
@@ -761,6 +899,7 @@ public enum Planner {
             updated.completedAt = old.id == edited.id ? edited.completedAt : old.completedAt
             updated.cancelledAt = old.id == edited.id ? edited.cancelledAt : old.cancelledAt
             updated.parentID = old.parentID
+            if old.id != edited.id { updated.checklist = ChecklistEntry.ticks(from: old.checklist, onto: definition.checklist) }
             let scheduleChanged = old.day != updated.day || old.minute != updated.minute || old.end != updated.end || old.endDay != updated.endDay
             updated.suggestionDismissed = scheduleChanged ? false : old.suggestionDismissed
             items.append(updated)
@@ -814,15 +953,22 @@ public enum Planner {
             }
         }
     }
+    /// Each occurrence is due the same number of days after its own day as the original is after
+    /// its day, so a deadline on the day itself stays on each occurrence's own day.
+    static func deadline(of template: PlanItem, on day: Day, calendar: Calendar) -> Date? {
+        guard let deadline = template.deadline else { return nil }
+        let shift = calendar.dateComponents([.day], from: template.day.date(calendar: calendar), to: day.date(calendar: calendar)).day ?? 0
+        return calendar.date(byAdding: .day, value: shift, to: deadline)
+    }
     private static func defaultLinkedItem(_ plan: RepeatingPlan, on day: Day, calendar: Calendar) -> PlanItem {
         var value = plan.template
         updateStart(&value, day: day, minute: value.minute, calendar: calendar)
-        let shift = calendar.dateComponents([.day], from: plan.template.day.date(calendar: calendar), to: day.date(calendar: calendar)).day ?? 0
-        value.deadline = plan.template.deadline.flatMap { calendar.date(byAdding: .day, value: shift, to: $0) }
+        value.deadline = deadline(of: plan.template, on: day, calendar: calendar)
         value.id = PlanItem.occurrenceID(series: plan.id, day: day)
         value.seriesID = plan.id; value.occurrenceDay = day; value.originalDay = day
         value.detachedFrom = nil; value.carriedFrom = nil; value.parentID = nil
         value.completedAt = nil; value.cancelledAt = nil; value.suggestionDismissed = false
+        value.checklist = ChecklistEntry.untouched(value.checklist)
         return value
     }
     private static func linkedItem(_ origin: LinkedItemOrigin, plan: RepeatingPlan, items: [PlanItem]) -> PlanItem? {
@@ -840,6 +986,8 @@ public enum Planner {
             && item.day == expected.day && item.minute == expected.minute && item.end == expected.end && item.endDay == expected.endDay
             && item.movesToNextDay == expected.movesToNextDay && item.repeatRule == expected.repeatRule && item.repeatWeekdays == expected.repeatWeekdays
             && item.personas == expected.personas && Set(item.reminders) == Set(expected.reminders) && item.deadline == expected.deadline
+            && item.attachments == expected.attachments
+            && ChecklistEntry.untouched(item.checklist) == ChecklistEntry.untouched(expected.checklist)
     }
     /// Finite groups show their full range. Open-ended repeats show generated and excluded
     /// dates plus the requested horizon; merely opening the overview never creates records.
@@ -1044,6 +1192,12 @@ public enum Planner {
         return calendar.date(bySettingHour: time.hour ?? 12, minute: time.minute ?? 0, second: time.second ?? 0,
                              of: day.date(calendar: calendar)) ?? now
     }
+    /// Ticks one checklist entry off, or opens it again, on this item alone: on a repeating item
+    /// it's this day's tick, never the series'. Unknown entries are left alone.
+    public static func setEntry(_ entryID: UUID, done: Bool, in item: inout PlanItem, now: Date) {
+        guard let index = item.checklist.firstIndex(where: { $0.id == entryID }) else { return }
+        item.checklist[index].doneAt = done ? now : nil
+    }
     /// Cancels an item while viewing `day`, or restores it. Like completion, cancelling counts on
     /// a past day when done from it, so a carried item stops there. The two never stand together:
     /// cancelling clears completion, and restoring leaves the item open.
@@ -1142,7 +1296,7 @@ public enum Planner {
     }
     /// Items matching `query`, grouped by the day each is shown as itself, newest day first (like
     /// a persona's history, but each item once). Every plain word has to appear in the title, notes,
-    /// a location or a person, ignoring case and accents, and every date the query names (see
+    /// a location, a person, an attachment or a checklist entry, ignoring case and accents, and every date the query names (see
     /// `SearchQuery`) has to fall on a day the item is listed on (its own, or one it was carried on
     /// from, as a "Carried to" entry), or its words appear in that text. Such an item is listed
     /// under the day the date matched, preferring its own. A repeating item lists its days up to
@@ -1174,7 +1328,8 @@ public enum Planner {
         var listing: [UUID: Day] = [:]
         let found = items.filter { item in
             if let persona, !item.personas.contains(persona) { return false }
-            let fields = [item.title, item.notes] + item.locations + item.people
+            let fields = [item.title, item.notes] + item.locations + item.people + item.attachments.flatMap(\.searchableText)
+                + item.checklist.map(\.title)
             let mentions = { (word: String) in
                 fields.contains { $0.range(of: word, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
             }
@@ -1345,38 +1500,39 @@ public struct DayProgress: Equatable {
     }
 }
 
-/// A time range the day guide follows on the lock screen, from its start to its end, with the
-/// timed item that comes after it.
+/// A timed item the day guide follows on the lock screen: a time range from its start to its end,
+/// or a single moment, which has no end.
 public struct GuideStop: Equatable {
     public let item: PlanItem
     public let start: Date
-    public let end: Date
-    /// The next timed item to start after this one today, shown as "Next" beneath it.
-    public let next: PlanItem?
-    public let nextStart: Date?
+    public let end: Date?
+    /// When the item's time is over: its end, or the moment itself.
+    public var finish: Date { end ?? start }
 }
 
 public enum DayGuide {
-    /// Today's unfinished time ranges in order of their start: those running or still to come, and
-    /// those whose time ended today without being ticked off, so they can still be completed.
-    /// Anytime items, single moments and carried items aren't followed; their reminders cover them.
-    /// Neither are ranges that began before yesterday, like a trip of several days: they're the
-    /// backdrop of the day rather than something under way in it.
+    /// Today's unfinished timed items in order of their start: those running or still to come, and
+    /// those whose time passed today without being ticked off, so they can still be completed.
+    /// Anytime items and carried items aren't followed; their reminders cover them. Neither are
+    /// ranges that began before yesterday, like a trip of several days: they're the backdrop of
+    /// the day rather than something under way in it.
     public static func stops(in items: [PlanItem], now: Date, calendar: Calendar = .current) -> [GuideStop] {
         let today = calendar.startOfDay(for: now)
         let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
         let midnight = calendar.date(byAdding: .day, value: 1, to: today)!
         let open = items.filter { !$0.isSettled && !$0.isCarried(now: now, calendar: calendar) }
-        let timed = open.compactMap { item in item.start(calendar: calendar).map { (item: item, start: $0) } }
-            .filter { $0.start < midnight && $0.start >= yesterday }
-            .sorted {
-                if $0.start != $1.start { return $0.start < $1.start }
-                return $0.item.createdAt < $1.item.createdAt
+        return open.compactMap { item -> GuideStop? in
+            guard let start = item.start(calendar: calendar), start < midnight, start >= yesterday else { return nil }
+            guard let end = item.end else {
+                // A moment of yesterday is over; only a range can still be running from there.
+                return start >= today ? GuideStop(item: item, start: start, end: nil) : nil
             }
-        return timed.compactMap { entry in
-            guard let end = entry.item.end, end > entry.start, end > today else { return nil }
-            let next = timed.first { $0.start > entry.start && $0.item.id != entry.item.id }
-            return GuideStop(item: entry.item, start: entry.start, end: end, next: next?.item, nextStart: next?.start)
+            guard end > start, end > today else { return nil }
+            return GuideStop(item: item, start: start, end: end)
+        }
+        .sorted {
+            if $0.start != $1.start { return $0.start < $1.start }
+            return $0.item.createdAt < $1.item.createdAt
         }
     }
 }

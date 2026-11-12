@@ -4,8 +4,6 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
-	<key>CKSharingSupported</key>
-	<true/>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -17,16 +15,18 @@
 			</array>
 		</dict>
 	</array>
+	<key>CKSharingSupported</key>
+	<true/>
 	<key>TimoICloud</key>
 	<string>$(TIMO_ICLOUD)</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>
 		<string>LaunchBackground</string>
 	</dict>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>remote-notification</string>
-	</array>
 </dict>
 </plist>

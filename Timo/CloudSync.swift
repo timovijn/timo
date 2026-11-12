@@ -40,6 +40,8 @@ extension Logger {
     /// The devices syncing this plan, this one first. iCloud doesn't list them, so each one
     /// keeps a record of itself in the "Plan" zone.
     private(set) var devices: [Device] = []
+    /// Counts attachment files that arrived from iCloud, so the pills showing them redraw.
+    private(set) var filesArrived = 0
 
     @ObservationIgnored private weak var store: PlanStore?
     @ObservationIgnored private var engine: CKSyncEngine?
@@ -54,6 +56,8 @@ extension Logger {
     @ObservationIgnored private var accepting: Set<String> = []
     /// Share links opened before the engines were up, accepted as soon as they are.
     @ObservationIgnored private var pendingLinks: [CKShare.Metadata] = []
+    /// `File` records queued to go up and not sent yet, as `fileKey`s.
+    @ObservationIgnored private var pendingFiles: Set<String> = []
     @ObservationIgnored private let cacheURL = URL.applicationSupportDirectory
         .appending(path: "Timo", directoryHint: .isDirectory).appending(path: "sync.json")
 
@@ -64,7 +68,7 @@ extension Logger {
     private static let enabledKey = "iCloudSync"
     private static let containerID = "iCloud.com.timovijn.timo"
     nonisolated private static let zoneID = CKRecordZone.ID(zoneName: "Plan")
-    private enum RecordType { static let item = "Item", series = "Series", overlay = "Overlay", invitation = "Invitation", device = "Device" }
+    private enum RecordType { static let item = "Item", series = "Series", overlay = "Overlay", invitation = "Invitation", device = "Device", file = "File" }
     private static let devicePrefix = "device-"
     /// A device that has been away this long is taken for gone from the list.
     private static let deviceExpiry: TimeInterval = 60 * 86400
@@ -78,6 +82,12 @@ extension Logger {
         return id
     }()
     private static let overlayPrefix = "overlay-"
+    /// An attachment's file is a `File` record named this and the attachment ID, in the zone of
+    /// the items that have it (so sharing an item shares its files), with fixed fields: `asset`,
+    /// `attachment` and `name`.
+    private static let filePrefix = "file-"
+    /// Larger files stay on the device they were added on.
+    private static let largestSyncedFile = 100_000_000
     private static let sharePrefix = "Share-"
     /// Not stored: `isAvailable` guards everything that reaches it.
     private static var container: CKContainer { CKContainer(identifier: containerID) }
@@ -116,6 +126,8 @@ extension Logger {
         var devices: [Device]?
         /// Per record name: invitations to this person not accepted yet.
         var invitations: [String: Invitation]?
+        /// The attachment files iCloud has, as `fileKey`s: one `File` record per zone and attachment.
+        var files: Set<String>?
     }
     private struct Known: Codable {
         var systemFields: Data
@@ -201,6 +213,7 @@ extension Logger {
             await syncNow()
             await acceptInvitations()
             checkIn()
+            queueMissingFiles()
         }
     }
 
@@ -216,6 +229,7 @@ extension Logger {
         sharedEngine = nil
         queued = []
         queuedShared = []
+        pendingFiles = []
         cache = Cache()
         sharedZones = []
         people = []
@@ -283,9 +297,16 @@ extension Logger {
         guard isEnabled else { return }
         var changes = self.changes(old, new, series: \.seriesID, personal: \.personal, sharing: \.forSharing)
         changes += self.changes(oldSeries, newSeries, series: { _ in nil }, personal: \.template.personal, sharing: \.forSharing)
-        guard !changes.isEmpty else { return }
-        queue(changes)
-        sendSoon()
+        // A file no item in its zone has any more leaves iCloud too.
+        let kept = fileReferences(items: new, series: newSeries)
+        for key in fileReferences(items: old, series: oldSeries).keys where kept[key] == nil && cache.files?.contains(key) == true {
+            if let id = Self.fileRecordID(key) { changes.append(.deleteRecord(id)) }
+        }
+        if !changes.isEmpty {
+            queue(changes)
+            sendSoon()
+        }
+        queueMissingFiles(items: new, series: newSeries)
     }
 
     private static var deviceRecordID: CKRecord.ID {
@@ -480,6 +501,7 @@ extension Logger {
 
     private func record(for id: CKRecord.ID) -> CKRecord? {
         guard let store else { return nil }
+        if id.recordName.hasPrefix(Self.filePrefix) { return fileRecord(for: id) }
         if id == Self.deviceRecordID {
             guard let payload = try? Self.encoder.encode(Self.thisDevice) else { return nil }
             let record = cache.records[id.recordName].flatMap { Self.record(fromSystemFields: $0.systemFields) }
@@ -511,6 +533,86 @@ extension Logger {
         return record
     }
 
+    // MARK: Attachment files
+
+    private static func fileKey(_ zone: CKRecordZone.ID, _ attachment: UUID) -> String {
+        "\(zone.ownerName)/\(zone.zoneName)/\(attachment.uuidString)"
+    }
+    private static func fileKey(of id: CKRecord.ID) -> String? {
+        UUID(uuidString: String(id.recordName.dropFirst(filePrefix.count))).map { fileKey(id.zoneID, $0) }
+    }
+    private static func fileRecordID(_ key: String) -> CKRecord.ID? {
+        let parts = key.split(separator: "/", maxSplits: 2).map(String.init)
+        guard parts.count == 3 else { return nil }
+        return CKRecord.ID(recordName: filePrefix + parts[2], zoneID: CKRecordZone.ID(zoneName: parts[1], ownerName: parts[0]))
+    }
+
+    /// Every file attachment by the zone its items are in, as `fileKey`s.
+    private func fileReferences(items: [PlanItem], series: [RepeatingPlan]) -> [String: Attachment] {
+        var references: [String: Attachment] = [:]
+        func add(_ id: UUID, series: UUID?, _ attachments: [Attachment]) {
+            let zone = recordID(id, series: series).zoneID
+            for attachment in attachments where attachment.kind == .file { references[Self.fileKey(zone, attachment.id)] = attachment }
+        }
+        for plan in series { add(plan.id, series: nil, plan.template.attachments) }
+        for item in items { add(item.id, series: item.seriesID, item.attachments) }
+        return references
+    }
+
+    /// Queues a `File` record for each attachment file iCloud doesn't have yet in its zone: one
+    /// added here, or one whose item was just shared into a zone of its own. Only a device with
+    /// the file can send it, and once per zone, however many days or copies of an item have it.
+    private func queueMissingFiles(items: [PlanItem]? = nil, series: [RepeatingPlan]? = nil) {
+        guard isEnabled, let store else { return }
+        var changes: [CKSyncEngine.PendingRecordZoneChange] = []
+        for (key, attachment) in fileReferences(items: items ?? store.items, series: series ?? store.repeatingPlans) {
+            guard cache.files?.contains(key) != true, !pendingFiles.contains(key), let id = Self.fileRecordID(key),
+                  let url = AttachmentFiles.url(for: attachment),
+                  let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize,
+                  size <= Self.largestSyncedFile else { continue }
+            pendingFiles.insert(key)
+            changes.append(.saveRecord(id))
+        }
+        guard !changes.isEmpty else { return }
+        queue(changes)
+        sendSoon()
+    }
+
+    private func fileRecord(for id: CKRecord.ID) -> CKRecord? {
+        guard let store, let key = Self.fileKey(of: id) else { return nil }
+        let references = fileReferences(items: store.items, series: store.repeatingPlans)
+        guard let attachment = references[key], let url = AttachmentFiles.url(for: attachment), let name = attachment.fileName,
+              FileManager.default.fileExists(atPath: url.path) else {
+            engine(for: id.zoneID)?.state.remove(pendingRecordZoneChanges: [.saveRecord(id)])
+            pendingFiles.remove(key)
+            return nil
+        }
+        let record = CKRecord(recordType: RecordType.file, recordID: id)
+        record["asset"] = CKAsset(fileURL: url)
+        record["attachment"] = attachment.id.uuidString
+        record["name"] = name
+        record["schema"] = 1
+        return record
+    }
+
+    /// Keeps a file from iCloud that this device doesn't have yet.
+    private func receiveFile(_ record: CKRecord) {
+        guard let key = Self.fileKey(of: record.recordID) else { return }
+        cache.files = (cache.files ?? []).union([key])
+        pendingFiles.remove(key)
+        guard let source = (record["asset"] as? CKAsset)?.fileURL, let name = record["name"] as? String,
+              let attachment = (record["attachment"] as? String).flatMap(UUID.init(uuidString:)),
+              let destination = AttachmentFiles.url(for: Attachment(id: attachment, kind: .file, title: name, fileName: name)),
+              !FileManager.default.fileExists(atPath: destination.path) else { return }
+        do {
+            try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try FileManager.default.copyItem(at: source, to: destination)
+            filesArrived += 1
+        } catch {
+            Logger.sharing.error("Attachment file \(attachment.uuidString, privacy: .public) could not be kept: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     private func apply(_ changes: CKSyncEngine.Event.FetchedRecordZoneChanges, from engine: CKSyncEngine) {
         guard let store else { return }
         var items = store.items, series = store.repeatingPlans
@@ -530,6 +632,7 @@ extension Logger {
                 }
                 continue
             }
+            if record.recordType == RecordType.file { receiveFile(record); continue }
             guard let payload = record["payload"] as? Data else { continue }
             let name = record.recordID.recordName
             let base = cache.records[name]
@@ -586,6 +689,11 @@ extension Logger {
         for deletion in changes.deletions {
             let name = deletion.recordID.recordName, zone = deletion.recordID.zoneID
             if deletion.recordType == CKRecord.SystemType.share { setShared(false, zone); continue }
+            if name.hasPrefix(Self.filePrefix) {
+                // The local copy stays until no item has it; the app tidies up when it opens.
+                if let key = Self.fileKey(of: deletion.recordID) { cache.files?.remove(key) }
+                continue
+            }
             if name.hasPrefix(Self.devicePrefix) {
                 cache.devices?.removeAll { $0.id == String(name.dropFirst(Self.devicePrefix.count)) }
                 cache.records[name] = nil
@@ -607,6 +715,7 @@ extension Logger {
         }
         saveCache()
         store.applyFromCloud(items: items, series: series)
+        queueMissingFiles()
         Task { await acceptInvitations() }
     }
 
@@ -621,6 +730,8 @@ extension Logger {
         setShared(false, zone)
         let names = Set(cache.records.filter { $0.value.zone == zone }.keys)
         for name in names { cache.records[name] = nil }
+        let prefix = "\(zone.ownerName)/\(zone.zoneName)/"
+        cache.files = cache.files?.filter { !$0.hasPrefix(prefix) }
         if reset {
             queue(store.items.filter { names.contains($0.id.uuidString) }.map { .saveRecord(recordID($0.id, series: nil)) })
         } else {
@@ -639,16 +750,29 @@ extension Logger {
     private func handleSent(_ sent: CKSyncEngine.Event.SentRecordZoneChanges, by engine: CKSyncEngine) {
         guard let store else { return }
         for record in sent.savedRecords {
+            if record.recordType == RecordType.file, let key = Self.fileKey(of: record.recordID) {
+                cache.files = (cache.files ?? []).union([key])
+                pendingFiles.remove(key)
+                continue
+            }
             guard let payload = record["payload"] as? Data else { continue }
             cache.records[record.recordID.recordName] = Known(systemFields: Self.systemFields(of: record), payload: payload,
                                                               zone: record.recordID.zoneID)
         }
         // The old record of a newly shared item goes while the new one stays known.
         for id in sent.deletedRecordIDs where cache.records[id.recordName]?.zone == id.zoneID { cache.records[id.recordName] = nil }
+        for id in sent.deletedRecordIDs where id.recordName.hasPrefix(Self.filePrefix) {
+            if let key = Self.fileKey(of: id) { cache.files?.remove(key) }
+        }
         var retry: [CKSyncEngine.PendingRecordZoneChange] = []
         var items = store.items
         for failure in sent.failedRecordSaves {
             let id = failure.record.recordID, name = id.recordName
+            if name.hasPrefix(Self.filePrefix), let key = Self.fileKey(of: id) {
+                pendingFiles.remove(key)
+                // Already there: another device sent the same file first.
+                if failure.error.code == .serverRecordChanged { cache.files = (cache.files ?? []).union([key]); continue }
+            }
             switch failure.error.code {
             case .serverRecordChanged:
                 // Another device saved first: merge with what iCloud has now and send that.
@@ -712,6 +836,7 @@ extension Logger {
         share.publicPermission = .none
         var records: [CKRecord] = []
         var moved: [CKRecord.ID] = []
+        let filesBefore = fileReferences(items: store.items, series: store.repeatingPlans)
         var overlays: [CKSyncEngine.PendingRecordZoneChange] = []
         if !Self.isShared(current) {
             _ = try await database.modifyRecordZones(saving: [CKRecordZone(zoneID: zone)], deleting: [])
@@ -743,9 +868,14 @@ extension Logger {
             cache.records[record.recordID.recordName] = Known(systemFields: Self.systemFields(of: record), payload: payload, zone: zone)
         }
         engine?.state.remove(pendingRecordZoneChanges: moved.map { .saveRecord($0) })
-        queue(moved.map { .deleteRecord($0) } + overlays)
+        // Its files move with it: up again into the new zone, and out of the old one when no
+        // other item there has them.
+        let filesAfter = fileReferences(items: store.items, series: store.repeatingPlans)
+        let leftBehind = filesBefore.keys.filter { filesAfter[$0] == nil && cache.files?.contains($0) == true }.compactMap(Self.fileRecordID)
+        queue(moved.map { .deleteRecord($0) } + overlays + leftBehind.map { .deleteRecord($0) })
         saveCache()
         sendSoon()
+        queueMissingFiles()
         return (savedShare, Self.container)
     }
 

@@ -217,6 +217,37 @@ final class RepeatingTests: XCTestCase {
         Planner.materialize(series, in: &items, from: day(31), through: day(8, month: 11), calendar: calendar)
         XCTAssertEqual(items.count, 5)
     }
+    func testMonthEndSeriesStartsOnTheMonthsLastDayAndKeepsToIt() {
+        let item = template(.monthEnd, day: 10)
+        var items: [PlanItem] = []
+        var series: [RepeatingPlan] = []
+        Planner.saveRepeating(item, items: &items, series: &series, calendar: calendar)
+        XCTAssertEqual(items.map(\.day), [day(31)])
+        XCTAssertEqual(items[0].end, date(31, hour: 17))
+        Planner.materialize(series, in: &items, from: day(31), through: Day(calendar.date(from: DateComponents(year: 2027, month: 3, day: 31))!, calendar: calendar), calendar: calendar)
+        let days = items.map { calendar.dateComponents([.month, .day], from: $0.day.date(calendar: calendar)) }.map { [$0.month!, $0.day!] }
+        XCTAssertEqual(days, [[10, 31], [11, 30], [12, 31], [1, 31], [2, 28], [3, 31]])
+    }
+    func testDeadlineAndReminderAddedToTheOriginalFallOnEachOccurrencesOwnDay() {
+        let item = template(.monthEnd, day: 31)
+        var items: [PlanItem] = []
+        var series: [RepeatingPlan] = []
+        Planner.saveRepeating(item, items: &items, series: &series, calendar: calendar)
+        let through = day(31, month: 12)
+        Planner.materialize(series, in: &items, from: day(31), through: through, calendar: calendar)
+        var original = items.first { $0.day == day(31) }!
+        original.deadline = date(31, hour: 18)
+        original.reminders = [date(31, hour: 8)]
+        Planner.saveRepeating(original, items: &items, series: &series, calendar: calendar)
+        Planner.materialize(series, in: &items, from: day(31), through: through, calendar: calendar)
+        let sorted = items.sorted { $0.day < $1.day }
+        XCTAssertEqual(sorted.map(\.deadline), [date(31, hour: 18), date(30, hour: 18, month: 11), date(31, hour: 18, month: 12)])
+        XCTAssertEqual(sorted.map(\.reminders), [[date(31, hour: 8)], [date(30, hour: 8, month: 11)], [date(31, hour: 8, month: 12)]])
+        // Later occurrences, generated after the edit, too.
+        Planner.materialize(series, in: &items, from: day(31), through: day(31, month: 1).addingYear(calendar), calendar: calendar)
+        let january = items.first { $0.day == day(31, month: 1).addingYear(calendar) }!
+        XCTAssertEqual(january.reminders, [calendar.date(from: DateComponents(year: 2027, month: 1, day: 31, hour: 8))!])
+    }
     func testRepeatedEditsAlwaysUpdateEveryOccurrenceWithoutDuplicates() throws {
         var series = [RepeatingPlan(template: template(.daily))]
         var items: [PlanItem] = []
@@ -503,4 +534,8 @@ final class RepeatingTests: XCTestCase {
         XCTAssertTrue(total.isTotal)
         XCTAssertNil(Planner.linkedCount(of: PlanItem(title: "Single", day: day(26)), in: series, today: day(27)))
     }
+}
+
+private extension Day {
+    func addingYear(_ calendar: Calendar) -> Day { Day(calendar.date(byAdding: .year, value: 1, to: date(calendar: calendar))!, calendar: calendar) }
 }

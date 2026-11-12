@@ -12,29 +12,27 @@ final class DayGuideTests: XCTestCase {
         return PlanItem(title: title, day: day, minute: start * 60, end: at(end, on: day), movesToNextDay: false)
     }
 
-    func testFollowsOnlyUnfinishedRangesInOrder() {
+    func testFollowsUnfinishedTimedItemsInOrder() {
         var done = range("Done", 8, 9); done.completedAt = at(8, 30)
         var cancelled = range("Cancelled", 9, 10); cancelled.cancelledAt = at(8)
         let items = [range("Sport", 18, 19), PlanItem(title: "Call Mum", day: today), range("Work", 9, 17),
                      PlanItem(title: "Shave", day: today, minute: 8 * 60), done, cancelled]
-        XCTAssertEqual(DayGuide.stops(in: items, now: at(7)).map(\.item.title), ["Work", "Sport"])
+        let stops = DayGuide.stops(in: items, now: at(7))
+        XCTAssertEqual(stops.map(\.item.title), ["Shave", "Work", "Sport"])
+        XCTAssertNil(stops.first?.end)
+        XCTAssertEqual(stops.first?.finish, at(8))
     }
 
-    func testNextIsTheFollowingTimedItemToday() {
-        let tomorrow = Day(calendar.date(byAdding: .day, value: 1, to: Date())!)
-        let items = [range("Work", 9, 17), PlanItem(title: "Read", day: today, minute: 21 * 60),
-                     range("Sport", 17, 18), range("Run", 7, 8, on: tomorrow)]
-        let stops = DayGuide.stops(in: items, now: at(10))
-        XCTAssertEqual(stops.map { $0.next?.title }, ["Sport", "Read"])
-        XCTAssertEqual(stops.last?.nextStart, at(21))
+    func testKeepsMomentsThatPassedTodayUntilTicked() {
+        let yesterday = Day(calendar.date(byAdding: .day, value: -1, to: Date())!)
+        let items = [PlanItem(title: "Shave", day: today, minute: 8 * 60, movesToNextDay: false),
+                     PlanItem(title: "Old call", day: yesterday, minute: 23 * 60, movesToNextDay: false)]
+        XCTAssertEqual(DayGuide.stops(in: items, now: at(20)).map(\.item.title), ["Shave"])
     }
 
-    func testOverlappingRangeIsNext() {
-        let items = [range("Work", 9, 17), range("Lunch", 12, 13)]
-        let stops = DayGuide.stops(in: items, now: at(12, 30))
-        XCTAssertEqual(stops.map(\.item.title), ["Work", "Lunch"])
-        XCTAssertEqual(stops.first?.next?.title, "Lunch")
-        XCTAssertNil(stops.last?.next)
+    func testOverlappingRangesEachGetAStop() {
+        let items = [range("Lunch", 12, 13), range("Work", 9, 17)]
+        XCTAssertEqual(DayGuide.stops(in: items, now: at(12, 30)).map(\.item.title), ["Work", "Lunch"])
     }
 
     func testKeepsRangesThatEndedTodayUntilTicked() {

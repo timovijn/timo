@@ -1,6 +1,16 @@
 [
   {
     "isFramework" : true,
+    "moduleName" : "AVFAudio",
+    "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/AVFAudio.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
+  },
+  {
+    "isFramework" : false,
+    "moduleName" : "AVFoundation",
+    "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/AVFoundation.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
+  },
+  {
+    "isFramework" : true,
     "moduleName" : "Accessibility",
     "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/Accessibility.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
   },
@@ -18,6 +28,11 @@
     "isFramework" : true,
     "moduleName" : "AppIntentsTypeSupport",
     "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/AppIntentsTypeSupport.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
+  },
+  {
+    "isFramework" : true,
+    "moduleName" : "AudioToolbox",
+    "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/AudioToolbox.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
   },
   {
     "isFramework" : true,
@@ -58,6 +73,11 @@
     "isFramework" : false,
     "moduleName" : "CoreLocation",
     "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/CoreLocation.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
+  },
+  {
+    "isFramework" : false,
+    "moduleName" : "CoreMIDI",
+    "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/CoreMIDI.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
   },
   {
     "isFramework" : true,
@@ -121,6 +141,11 @@
   },
   {
     "isFramework" : true,
+    "moduleName" : "ExtensionKit",
+    "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/ExtensionKit.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
+  },
+  {
+    "isFramework" : true,
     "moduleName" : "FileProvider",
     "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/FileProvider.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
   },
@@ -138,6 +163,11 @@
     "isFramework" : false,
     "moduleName" : "Intents",
     "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/Intents.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
+  },
+  {
+    "isFramework" : true,
+    "moduleName" : "MediaToolbox",
+    "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/MediaToolbox.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
   },
   {
     "isFramework" : false,
@@ -165,9 +195,34 @@
     "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/Observation.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
   },
   {
+    "isFramework" : true,
+    "moduleName" : "PDFKit",
+    "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/PDFKit.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
+  },
+  {
+    "isFramework" : true,
+    "moduleName" : "Photos",
+    "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/Photos.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
+  },
+  {
+    "isFramework" : true,
+    "moduleName" : "PhotosUI",
+    "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/PhotosUI.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
+  },
+  {
     "isFramework" : false,
     "moduleName" : "QuartzCore",
     "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/QuartzCore.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
+  },
+  {
+    "isFramework" : true,
+    "moduleName" : "QuickLook",
+    "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/QuickLook.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
+  },
+  {
+    "isFramework" : true,
+    "moduleName" : "QuickLookThumbnailing",
+    "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/QuickLookThumbnailing.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
   },
   {
     "isFramework" : true,
@@ -221,6 +276,11 @@
   },
   {
     "isFramework" : true,
+    "moduleName" : "VideoToolbox",
+    "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/VideoToolbox.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
+  },
+  {
+    "isFramework" : true,
     "moduleName" : "WidgetKit",
     "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/WidgetKit.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
   },
@@ -233,6 +293,11 @@
     "isFramework" : true,
     "moduleName" : "_AppIntents_SwiftUI",
     "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/_AppIntents_SwiftUI.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
+  },
+  {
+    "isFramework" : true,
+    "moduleName" : "_AppIntents_UIKit",
+    "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/_AppIntents_UIKit.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
   },
   {
     "isFramework" : false,
@@ -260,6 +325,16 @@
     "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/_DarwinFoundation3.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
   },
   {
+    "isFramework" : true,
+    "moduleName" : "_PhotosUI_SwiftUI",
+    "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/_PhotosUI_SwiftUI.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
+  },
+  {
+    "isFramework" : true,
+    "moduleName" : "_QuickLook_SwiftUI",
+    "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/_QuickLook_SwiftUI.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
+  },
+  {
     "isFramework" : false,
     "moduleName" : "_StringProcessing",
     "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/_StringProcessing.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
@@ -273,6 +348,27 @@
     "isFramework" : false,
     "moduleName" : "simd",
     "modulePath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Toolchains\/XcodeDefault.xctoolchain\/usr\/lib\/swift\/iphonesimulator\/prebuilt-modules\/27.1\/simd.swiftmodule\/arm64-apple-ios-simulator.swiftmodule"
+  },
+  {
+    "clangModuleMapPath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Platforms\/iPhoneSimulator.platform\/Developer\/SDKs\/iPhoneSimulator.sdk\/System\/Library\/Frameworks\/AVFAudio.framework\/Modules\/module.modulemap",
+    "clangModulePath" : "\/Users\/timovijn\/Timo\/GitHub\/timo\/build\/dd\/SDKExplicitPrecompiledModules\/AVFAudio-3R90LTSB2WCHIQHXJPARV7PHT.pcm",
+    "isBridgingHeaderDependency" : false,
+    "isFramework" : false,
+    "moduleName" : "AVFAudio"
+  },
+  {
+    "clangModuleMapPath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Platforms\/iPhoneSimulator.platform\/Developer\/SDKs\/iPhoneSimulator.sdk\/System\/Library\/Frameworks\/AVFoundation.framework\/Modules\/module.modulemap",
+    "clangModulePath" : "\/Users\/timovijn\/Timo\/GitHub\/timo\/build\/dd\/SDKExplicitPrecompiledModules\/AVFoundation-94CLU7N8EHPAFSMIQBF2MKAGG.pcm",
+    "isBridgingHeaderDependency" : false,
+    "isFramework" : false,
+    "moduleName" : "AVFoundation"
+  },
+  {
+    "clangModuleMapPath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Platforms\/iPhoneSimulator.platform\/Developer\/SDKs\/iPhoneSimulator.sdk\/System\/Library\/Frameworks\/AVRouting.framework\/Modules\/module.modulemap",
+    "clangModulePath" : "\/Users\/timovijn\/Timo\/GitHub\/timo\/build\/dd\/SDKExplicitPrecompiledModules\/AVRouting-4N1DF6ZOHMQM4S5YI7QZMF1EG.pcm",
+    "isBridgingHeaderDependency" : false,
+    "isFramework" : false,
+    "moduleName" : "AVRouting"
   },
   {
     "clangModuleMapPath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Platforms\/iPhoneSimulator.platform\/Developer\/SDKs\/iPhoneSimulator.sdk\/System\/Library\/Frameworks\/Accessibility.framework\/Modules\/module.modulemap",
@@ -301,6 +397,13 @@
     "isBridgingHeaderDependency" : false,
     "isFramework" : false,
     "moduleName" : "AppIntentsTypeSupport"
+  },
+  {
+    "clangModuleMapPath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Platforms\/iPhoneSimulator.platform\/Developer\/SDKs\/iPhoneSimulator.sdk\/System\/Library\/Frameworks\/AudioToolbox.framework\/Modules\/module.modulemap",
+    "clangModulePath" : "\/Users\/timovijn\/Timo\/GitHub\/timo\/build\/dd\/SDKExplicitPrecompiledModules\/AudioToolbox-EGEIKMEK9BHM9P97J8OLPAHQF.pcm",
+    "isBridgingHeaderDependency" : false,
+    "isFramework" : false,
+    "moduleName" : "AudioToolbox"
   },
   {
     "clangModuleMapPath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Platforms\/iPhoneSimulator.platform\/Developer\/SDKs\/iPhoneSimulator.sdk\/System\/Library\/Frameworks\/CFNetwork.framework\/Modules\/module.modulemap",
@@ -364,6 +467,13 @@
     "isBridgingHeaderDependency" : false,
     "isFramework" : false,
     "moduleName" : "CoreLocation"
+  },
+  {
+    "clangModuleMapPath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Platforms\/iPhoneSimulator.platform\/Developer\/SDKs\/iPhoneSimulator.sdk\/System\/Library\/Frameworks\/CoreMIDI.framework\/Modules\/module.modulemap",
+    "clangModulePath" : "\/Users\/timovijn\/Timo\/GitHub\/timo\/build\/dd\/SDKExplicitPrecompiledModules\/CoreMIDI-4O8YVQPG9E8ZW4TBZLSZS4DLB.pcm",
+    "isBridgingHeaderDependency" : false,
+    "isFramework" : false,
+    "moduleName" : "CoreMIDI"
   },
   {
     "clangModuleMapPath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Platforms\/iPhoneSimulator.platform\/Developer\/SDKs\/iPhoneSimulator.sdk\/System\/Library\/Frameworks\/CoreMedia.framework\/Modules\/module.modulemap",
@@ -443,6 +553,13 @@
     "moduleName" : "ExtensionFoundation"
   },
   {
+    "clangModuleMapPath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Platforms\/iPhoneSimulator.platform\/Developer\/SDKs\/iPhoneSimulator.sdk\/System\/Library\/Frameworks\/ExtensionKit.framework\/Modules\/module.modulemap",
+    "clangModulePath" : "\/Users\/timovijn\/Timo\/GitHub\/timo\/build\/dd\/SDKExplicitPrecompiledModules\/ExtensionKit-70BUTEGJ7BGEJXX7R7ANP6AE7.pcm",
+    "isBridgingHeaderDependency" : false,
+    "isFramework" : false,
+    "moduleName" : "ExtensionKit"
+  },
+  {
     "clangModuleMapPath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Platforms\/iPhoneSimulator.platform\/Developer\/SDKs\/iPhoneSimulator.sdk\/System\/Library\/Frameworks\/FileProvider.framework\/Modules\/module.modulemap",
     "clangModulePath" : "\/Users\/timovijn\/Timo\/GitHub\/timo\/build\/dd\/SDKExplicitPrecompiledModules\/FileProvider-EYE39DDWGC5EEA06AJE0QYLG1.pcm",
     "isBridgingHeaderDependency" : false,
@@ -485,6 +602,13 @@
     "moduleName" : "MachO"
   },
   {
+    "clangModuleMapPath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Platforms\/iPhoneSimulator.platform\/Developer\/SDKs\/iPhoneSimulator.sdk\/System\/Library\/Frameworks\/MediaToolbox.framework\/Modules\/module.modulemap",
+    "clangModulePath" : "\/Users\/timovijn\/Timo\/GitHub\/timo\/build\/dd\/SDKExplicitPrecompiledModules\/MediaToolbox-EL61SSVHCK468CHIT79TZTOZM.pcm",
+    "isBridgingHeaderDependency" : false,
+    "isFramework" : false,
+    "moduleName" : "MediaToolbox"
+  },
+  {
     "clangModuleMapPath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Platforms\/iPhoneSimulator.platform\/Developer\/SDKs\/iPhoneSimulator.sdk\/System\/Library\/Frameworks\/Metal.framework\/Modules\/module.modulemap",
     "clangModulePath" : "\/Users\/timovijn\/Timo\/GitHub\/timo\/build\/dd\/SDKExplicitPrecompiledModules\/Metal-7RUL9TPPJ09M8WD9QGBU7TFEN.pcm",
     "isBridgingHeaderDependency" : false,
@@ -520,11 +644,46 @@
     "moduleName" : "OpenGLES"
   },
   {
+    "clangModuleMapPath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Platforms\/iPhoneSimulator.platform\/Developer\/SDKs\/iPhoneSimulator.sdk\/System\/Library\/Frameworks\/PDFKit.framework\/Modules\/module.modulemap",
+    "clangModulePath" : "\/Users\/timovijn\/Timo\/GitHub\/timo\/build\/dd\/SDKExplicitPrecompiledModules\/PDFKit-C71YRPLD0M7CA359PYUUWOU45.pcm",
+    "isBridgingHeaderDependency" : false,
+    "isFramework" : false,
+    "moduleName" : "PDFKit"
+  },
+  {
+    "clangModuleMapPath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Platforms\/iPhoneSimulator.platform\/Developer\/SDKs\/iPhoneSimulator.sdk\/System\/Library\/Frameworks\/Photos.framework\/Modules\/module.modulemap",
+    "clangModulePath" : "\/Users\/timovijn\/Timo\/GitHub\/timo\/build\/dd\/SDKExplicitPrecompiledModules\/Photos-4U3PHM1TCU0SQWVUXXIY9KYGF.pcm",
+    "isBridgingHeaderDependency" : false,
+    "isFramework" : false,
+    "moduleName" : "Photos"
+  },
+  {
+    "clangModuleMapPath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Platforms\/iPhoneSimulator.platform\/Developer\/SDKs\/iPhoneSimulator.sdk\/System\/Library\/Frameworks\/PhotosUI.framework\/Modules\/module.modulemap",
+    "clangModulePath" : "\/Users\/timovijn\/Timo\/GitHub\/timo\/build\/dd\/SDKExplicitPrecompiledModules\/PhotosUI-19T225F8WPN28TA2JFP217YWD.pcm",
+    "isBridgingHeaderDependency" : false,
+    "isFramework" : false,
+    "moduleName" : "PhotosUI"
+  },
+  {
     "clangModuleMapPath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Platforms\/iPhoneSimulator.platform\/Developer\/SDKs\/iPhoneSimulator.sdk\/System\/Library\/Frameworks\/QuartzCore.framework\/Modules\/module.modulemap",
     "clangModulePath" : "\/Users\/timovijn\/Timo\/GitHub\/timo\/build\/dd\/SDKExplicitPrecompiledModules\/QuartzCore-FN6AGBPIGR3ASNVJW67AESRP.pcm",
     "isBridgingHeaderDependency" : false,
     "isFramework" : false,
     "moduleName" : "QuartzCore"
+  },
+  {
+    "clangModuleMapPath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Platforms\/iPhoneSimulator.platform\/Developer\/SDKs\/iPhoneSimulator.sdk\/System\/Library\/Frameworks\/QuickLook.framework\/Modules\/module.modulemap",
+    "clangModulePath" : "\/Users\/timovijn\/Timo\/GitHub\/timo\/build\/dd\/SDKExplicitPrecompiledModules\/QuickLook-AWTKRCGFNFO4WTAUASQXYKOQF.pcm",
+    "isBridgingHeaderDependency" : false,
+    "isFramework" : false,
+    "moduleName" : "QuickLook"
+  },
+  {
+    "clangModuleMapPath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Platforms\/iPhoneSimulator.platform\/Developer\/SDKs\/iPhoneSimulator.sdk\/System\/Library\/Frameworks\/QuickLookThumbnailing.framework\/Modules\/module.modulemap",
+    "clangModulePath" : "\/Users\/timovijn\/Timo\/GitHub\/timo\/build\/dd\/SDKExplicitPrecompiledModules\/QuickLookThumbnailing-85ZAEC5JVKE0UA3QAXK81E19U.pcm",
+    "isBridgingHeaderDependency" : false,
+    "isFramework" : false,
+    "moduleName" : "QuickLookThumbnailing"
   },
   {
     "clangModuleMapPath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Platforms\/iPhoneSimulator.platform\/Developer\/SDKs\/iPhoneSimulator.sdk\/System\/Library\/Frameworks\/RelevanceKit.framework\/Modules\/module.modulemap",
@@ -602,6 +761,13 @@
     "isBridgingHeaderDependency" : false,
     "isFramework" : false,
     "moduleName" : "UserNotifications"
+  },
+  {
+    "clangModuleMapPath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Platforms\/iPhoneSimulator.platform\/Developer\/SDKs\/iPhoneSimulator.sdk\/System\/Library\/Frameworks\/VideoToolbox.framework\/Modules\/module.modulemap",
+    "clangModulePath" : "\/Users\/timovijn\/Timo\/GitHub\/timo\/build\/dd\/SDKExplicitPrecompiledModules\/VideoToolbox-C4O0P5XMNUHPF4WH70ATV8KJ8.pcm",
+    "isBridgingHeaderDependency" : false,
+    "isFramework" : false,
+    "moduleName" : "VideoToolbox"
   },
   {
     "clangModuleMapPath" : "\/Applications\/Xcode.app\/Contents\/Developer\/Platforms\/iPhoneSimulator.platform\/Developer\/SDKs\/iPhoneSimulator.sdk\/System\/Library\/Frameworks\/WidgetKit.framework\/Modules\/module.modulemap",

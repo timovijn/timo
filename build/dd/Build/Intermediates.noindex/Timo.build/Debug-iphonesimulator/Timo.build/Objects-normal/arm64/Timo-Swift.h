@@ -344,6 +344,7 @@ extern "C" {
 #if __has_warning("-Watimport-in-framework-header")
 #pragma clang diagnostic ignored "-Watimport-in-framework-header"
 #endif
+@import CoreFoundation;
 @import ObjectiveC;
 @import UIKit;
 #endif
@@ -372,6 +373,15 @@ extern "C" {
 SWIFT_CLASS("_TtC4Timo14FrameRateBoost")
 @interface FrameRateBoost : NSObject
 - (nonnull instancetype)init OBJC_DESIGNATED_INITIALIZER;
+@end
+
+@class NSCoder;
+/// Takes the keyboard once it’s in a window: a new pill’s field is asked to before it’s shown.
+SWIFT_CLASS("_TtC4Timo13PillTextField")
+@interface PillTextField : UITextField
+- (void)didMoveToWindow;
+- (nonnull instancetype)initWithFrame:(CGRect)frame OBJC_DESIGNATED_INITIALIZER;
+- (nullable instancetype)initWithCoder:(NSCoder * _Nonnull)coder OBJC_DESIGNATED_INITIALIZER;
 @end
 
 @class UICloudSharingController;

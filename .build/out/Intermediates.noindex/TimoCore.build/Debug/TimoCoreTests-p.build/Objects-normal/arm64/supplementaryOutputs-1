@@ -1,0 +1,23 @@
+{
+  "/Users/timovijn/Timo/GitHub/timo/Tests/TimoCoreTests/AttachmentTests.swift" : {
+    "const-values" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/AttachmentTests.swiftconstvalues",
+    "dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/AttachmentTests.d",
+    "diagnostics" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/AttachmentTests.dia",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/AttachmentTests.o",
+    "swift-dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/AttachmentTests.swiftdeps"
+  },
+  "/Users/timovijn/Timo/GitHub/timo/Tests/TimoCoreTests/CancelTests.swift" : {
+    "const-values" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/CancelTests.swiftconstvalues",
+    "dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/CancelTests.d",
+    "diagnostics" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/CancelTests.dia",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/CancelTests.o",
+    "swift-dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/CancelTests.swiftdeps"
+  },
+  "/Users/timovijn/Timo/GitHub/timo/Tests/TimoCoreTests/ChecklistTests.swift" : {
+    "const-values" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/ChecklistTests.swiftconstvalues",
+    "dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/ChecklistTests.d",
+    "diagnostics" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/ChecklistTests.dia",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/ChecklistTests.o",
+    "swift-dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/ChecklistTests.swiftdeps"
+  }
+}

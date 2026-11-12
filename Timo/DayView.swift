@@ -308,7 +308,7 @@ struct DayView: View {
             }
             .onReceive(timer) { refresh($0) }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active { refresh(Date()); store.refreshReminders(); store.cloud.resume() }
+                if phase == .active { store.applySharedInbox(); refresh(Date()); store.refreshReminders(); store.cloud.resume() }
                 else { daySwipeInteraction.cancelExternalDrag() }
             }
         }
@@ -1058,7 +1058,7 @@ struct DayView: View {
                     .accessibilitySortPriority(-Double(order))
             }
             if !inProgress.isEmpty {
-                compactSectionDivider("In progress")
+                compactSectionDivider("Ongoing")
                     .modifier(FilterCollapse(collapsed: !showNow))
                     .animation(FocusedItemMotion.animation(reduceMotion: reduceMotion), value: inlineFocusPhase(on: day))
                     .layoutValue(key: TimelineCompactOrderKey.self, value: activeTop)
@@ -1217,6 +1217,7 @@ struct DayView: View {
         let carried = carriedDestination(item, from: day)
         let originDate = item.day.date()
         let originStyle = Date.FormatStyle.dateTime.weekday(.abbreviated).day().month(.abbreviated)
+        let detail = detailStyle(item, day: day)
         let carriedFrom = carried == nil && item.isCarried(now: now) && day == item.liveDay(now: now)
             ? originDate.formatted(Calendar.current.isDate(originDate, equalTo: now, toGranularity: .year) ? originStyle : originStyle.year())
             : nil
@@ -1265,16 +1266,16 @@ struct DayView: View {
                             }
                             if let carriedFrom {
                                 Text("Carried from \(carriedFrom)")
-                                    .font(.caption).foregroundStyle(.tertiary)
+                                    .font(.caption).foregroundStyle(detail)
                             }
                             if let endDay = item.endDay, endDay > item.day {
                                 Text(item.day.date().formatted(date: .abbreviated, time: .omitted) + " – " + endDay.date().formatted(date: .abbreviated, time: .omitted))
-                                    .font(.caption).foregroundStyle(.tertiary)
+                                    .font(.caption).foregroundStyle(detail)
                             }
                             if visiting, item.start() == nil {
                                 // A timed visitor's time already names its day.
                                 Text("Anytime, \(item.day.date().formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))")
-                                    .font(.caption).foregroundStyle(.tertiary)
+                                    .font(.caption).foregroundStyle(detail)
                             }
                             if timeBelowTitle, let start = item.start(), showsTime {
                                 // Time view has room beside the time for its note.
@@ -1287,8 +1288,8 @@ struct DayView: View {
                                     .alignmentGuide(.scheduleLeading) { $0[.leading] }
                                     .alignmentGuide(.scheduleTop) { $0[.top] }
                             }
-                            if !item.people.isEmpty || !item.locations.isEmpty || store.cloud.isShared(item) {
-                                itemDetailsLine(item)
+                            if !item.people.isEmpty || !item.locations.isEmpty || !item.attachments.isEmpty || !item.checklist.isEmpty || store.cloud.isShared(item) {
+                                itemDetailsLine(item, style: detail)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1412,7 +1413,7 @@ struct DayView: View {
             .animation(.easeInOut(duration: 0.25), value: visible)
             .frame(width: visible ? 6 : 0, alignment: .trailing)
     }
-    private func itemDetailsLine(_ item: PlanItem) -> some View {
+    private func itemDetailsLine(_ item: PlanItem, style: HierarchicalShapeStyle) -> some View {
         HStack(spacing: 5) {
             if !item.people.isEmpty {
                 Text(item.people.joined(separator: ", "))
@@ -1435,15 +1436,45 @@ struct DayView: View {
                 }
                 Text("Shared").layoutPriority(1)
             }
+            if let progress = item.checklistProgress {
+                if !item.people.isEmpty || !item.locations.isEmpty || store.cloud.isShared(item) {
+                    Circle()
+                        .fill(.tertiary)
+                        .frame(width: 2, height: 2)
+                        .accessibilityHidden(true)
+                }
+                // Ticked off of all, kept whole while names before it shorten.
+                HStack(spacing: 2) {
+                    Image(systemName: progress.done == progress.total ? "checklist.checked" : "checklist").imageScale(.small)
+                    Text(verbatim: "\(progress.done)/\(progress.total)").monospacedDigit()
+                }
+                .layoutPriority(1)
+            }
+            if !item.attachments.isEmpty {
+                if !item.people.isEmpty || !item.locations.isEmpty || !item.checklist.isEmpty || store.cloud.isShared(item) {
+                    Circle()
+                        .fill(.tertiary)
+                        .frame(width: 2, height: 2)
+                        .accessibilityHidden(true)
+                }
+                // A paperclip with the count, kept whole while names before it shorten.
+                HStack(spacing: 1) {
+                    Image(systemName: "paperclip").imageScale(.small)
+                    Text("\(item.attachments.count)")
+                }
+                .layoutPriority(1)
+            }
         }
         // The size of every small line in a row: carried, time, and the filters' blue, red and orange.
-        .font(.caption).foregroundStyle(.tertiary)
+        .font(.caption).foregroundStyle(style)
         .lineLimit(1).truncationMode(.tail)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel([
             item.people.isEmpty ? nil : "People: " + item.people.joined(separator: ", "),
             item.locations.isEmpty ? nil : "Locations: " + item.locations.joined(separator: ", "),
-            store.cloud.isShared(item) ? "Shared" : nil
+            store.cloud.isShared(item) ? "Shared" : nil,
+            item.checklistProgress.map { "Checklist: \($0.done) of \($0.total) done" },
+            item.attachments.isEmpty ? nil : item.attachments.count == 1 ? "1 attachment" : "\(item.attachments.count) attachments"
         ].compactMap { $0 }.joined(separator: ". "))
     }
     // Retained for a future use; review and reminder status currently use row dots.
@@ -1556,9 +1587,20 @@ struct DayView: View {
             .settledTitleStyle(item, isCarriedEntry: isCarriedEntry)
     }
     private func scheduleLabel(_ item: PlanItem, start: Date, day: Day, inline: Bool = false) -> ScheduleLabel {
-        ScheduleLabel(time: timeLabel(item, start: start, day: day), note: timeNote(item, day: day), inline: inline)
+        ScheduleLabel(time: timeLabel(item, start: start, day: day), note: timeNote(item, day: day), inline: inline,
+                      style: detailStyle(item, day: day))
     }
-    // Today only: how long an item in progress has left, or how soon an upcoming one starts.
+    /// The grey of a row's small lines (time, people, places, carried). Items still to do or under
+    /// way, Ongoing, Upcoming and Anytime, get a darker one than past, settled and carried-to
+    /// entries, so what's ahead reads first.
+    private func detailStyle(_ item: PlanItem, day: Day) -> HierarchicalShapeStyle {
+        guard carriedDestination(item, from: day) == nil, !item.isSettled else { return .tertiary }
+        // A carried item has no time on its live day, so it counts as Anytime there.
+        let start = item.isCarried(now: now) ? nil : item.start()
+        let past = item.isInProgress(now: now) ? false : start.map { $0 <= now } ?? (day < Day(now))
+        return past ? .tertiary : .secondary
+    }
+    // Today only: how long an ongoing item has left, or how soon an upcoming one starts.
     // Ticking an item off early keeps the note; cancelling drops it.
     private func timeNote(_ item: PlanItem, day: Day, width: Duration.UnitsFormatStyle.UnitWidth = .narrow) -> String? {
         guard day == Day(now), !item.isCancelled, let start = item.start() else { return nil }
@@ -2573,8 +2615,9 @@ private struct ScheduleLabel: View {
     let time: String
     let note: String?
     var inline: Bool
+    /// The same grey as the row's other small lines (people, places, carried).
+    var style: HierarchicalShapeStyle = .tertiary
     var body: some View {
-        // The same light grey as the row's other small text (people, places, carried).
         ScheduleLabelLayout(inline: inline ? 1 : 0) {
             Text(time).font(.caption.monospacedDigit())
             if let note {
@@ -2582,7 +2625,7 @@ private struct ScheduleLabel: View {
                 Text(note).font(.caption.monospacedDigit()).lineLimit(1)
             }
         }
-        .foregroundStyle(.tertiary)
+        .foregroundStyle(style)
     }
 }
 

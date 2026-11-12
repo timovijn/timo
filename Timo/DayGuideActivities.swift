@@ -2,22 +2,27 @@ import ActivityKit
 import Foundation
 
 /// Keeps the "Guide my day" Live Activities in step with the plan: one per timed item of today,
-/// scheduled to start at the item's start so it appears while the app isn't running, updated when
-/// the item changes and ended once it's ticked off, cancelled, moved or deleted.
+/// scheduled to start a little before the item so it appears while the app isn't running, updated
+/// when the item changes and ended once it's ticked off, cancelled, moved or deleted.
 @MainActor final class DayGuideActivities {
     static let settingKey = "guideMyDay"
     /// How many items to come are scheduled ahead; the system limits how many can wait.
     static let lookahead = 4
+    static let lead = GuideAttributes.lead
     static var isEnabled: Bool { UserDefaults.standard.bool(forKey: settingKey) }
     private var latest: [PlanItem] = []
     private var revision = 0
     private var worker: Task<Void, Never>?
 
-    /// The items followed now: those running or ended unticked today, and the next few to come.
+    /// When an item's activity appears.
+    static func shown(_ stop: GuideStop) -> Date { stop.start - lead }
+
+    /// The items followed now: those shown already (starting soon, running, or over unticked
+    /// today), and the next few to come.
     static func followed(_ items: [PlanItem], now: Date) -> [GuideStop] {
         guard isEnabled, ActivityAuthorizationInfo().areActivitiesEnabled else { return [] }
         let stops = DayGuide.stops(in: items, now: now)
-        return stops.filter { $0.start <= now } + stops.filter { $0.start > now }.prefix(lookahead)
+        return stops.filter { shown($0) <= now } + stops.filter { shown($0) > now }.prefix(lookahead)
     }
 
     func refresh(_ items: [PlanItem]) {
@@ -46,30 +51,33 @@ import Foundation
                 continue
             }
             let state = GuideAttributes.ContentState(stop)
-            if activity.content.state != state || activity.content.staleDate != stop.end {
-                await activity.update(ActivityContent(state: state, staleDate: stop.end))
+            let staleDate = GuideAttributes.ContentState.staleDate(for: stop, now: now)
+            if activity.content.state != state || activity.content.staleDate != staleDate {
+                await activity.update(ActivityContent(state: state, staleDate: staleDate))
             }
         }
-        // An item whose time already ended keeps the activity it had, but doesn't get a new one.
-        for (attributes, stop) in wanted where stop.end > now {
-            let content = ActivityContent(state: GuideAttributes.ContentState(stop), staleDate: stop.end)
+        // An item whose time is already over keeps the activity it had, but doesn't get a new one.
+        for (attributes, stop) in wanted where stop.finish > now {
+            let state = GuideAttributes.ContentState(stop)
+            let content = ActivityContent(state: state, staleDate: GuideAttributes.ContentState.staleDate(for: stop, now: now))
             do {
-                if stop.start <= now {
+                if Self.shown(stop) <= now {
                     _ = try Activity.request(attributes: attributes, content: content)
                 } else {
-                    // A scheduled activity announces itself when it starts; reminders at that
-                    // moment are left out (`announcedStarts`), so the item isn't announced twice.
-                    let range = "\(stop.start.formatted(date: .omitted, time: .shortened))–\(stop.end.formatted(date: .omitted, time: .shortened))"
+                    // A scheduled activity announces its item when it appears; a reminder at that
+                    // moment is left out (`announcements`), so the item isn't announced twice.
                     _ = try Activity.request(attributes: attributes, content: content, style: .standard,
-                                             alertConfiguration: AlertConfiguration(title: "\(stop.item.title)", body: "\(range)", sound: .default),
-                                             start: stop.start)
+                                             alertConfiguration: AlertConfiguration(title: "\(stop.item.title)", body: "\(state.range)", sound: .default),
+                                             start: Self.shown(stop))
                 }
             } catch { /* Over the system's limit; the rest are scheduled on a later refresh. */ }
         }
     }
 
-    /// Items whose start the guide announces, so a reminder at that same moment can be skipped.
-    static func announcedStarts(_ items: [PlanItem], now: Date) -> Set<UUID> {
-        Set(followed(items, now: now).filter { $0.start > now }.map(\.item.id))
+    /// When the guide announces each item it has scheduled, so a reminder at that same moment can
+    /// be skipped.
+    static func announcements(_ items: [PlanItem], now: Date) -> [UUID: Date] {
+        Dictionary(followed(items, now: now).filter { shown($0) > now }.map { ($0.item.id, shown($0)) },
+                   uniquingKeysWith: { first, _ in first })
     }
 }

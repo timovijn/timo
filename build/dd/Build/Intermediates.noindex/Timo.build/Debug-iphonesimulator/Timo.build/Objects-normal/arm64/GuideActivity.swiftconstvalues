@@ -4,7 +4,7 @@
     "mangledTypeName": "4Timo23CompleteGuideItemIntentV",
     "kind": "struct",
     "file": "/Users/timovijn/Timo/GitHub/timo/Timo/GuideActivity.swift",
-    "line": 48,
+    "line": 73,
     "conformances": [
       "AppIntents.LiveActivityIntent",
       "AppIntents.SystemIntent",
@@ -72,7 +72,7 @@
         "isStatic": "false",
         "isComputed": "false",
         "file": "/Users/timovijn/Timo/GitHub/timo/Timo/GuideActivity.swift",
-        "line": 51,
+        "line": 76,
         "valueKind": "InitCall",
         "value": {
           "type": "AppIntents.IntentParameter<Swift.String>",
@@ -118,7 +118,7 @@
         "isStatic": "true",
         "isComputed": "false",
         "file": "/Users/timovijn/Timo/GitHub/timo/Timo/GuideActivity.swift",
-        "line": 49,
+        "line": 74,
         "valueKind": "RawLiteral",
         "value": "Complete Item"
       },
@@ -129,7 +129,7 @@
         "isStatic": "true",
         "isComputed": "false",
         "file": "/Users/timovijn/Timo/GitHub/timo/Timo/GuideActivity.swift",
-        "line": 50,
+        "line": 75,
         "valueKind": "RawLiteral",
         "value": "false"
       },
@@ -140,7 +140,7 @@
         "isStatic": "false",
         "isComputed": "true",
         "file": "/Users/timovijn/Timo/GitHub/timo/Timo/GuideActivity.swift",
-        "line": 51,
+        "line": 76,
         "valueKind": "InitCall",
         "value": {
           "type": "AppIntents.IntentParameter<Swift.String>",
@@ -182,7 +182,7 @@
           {
             "type": "AppIntents.IntentParameter",
             "file": "/Users/timovijn/Timo/GitHub/timo/Timo/GuideActivity.swift",
-            "line": 51,
+            "line": 76,
             "arguments": [
               {
                 "label": "title",
@@ -201,7 +201,7 @@
         "isStatic": "false",
         "isComputed": "true",
         "file": "/Users/timovijn/Timo/GitHub/timo/Timo/GuideActivity.swift",
-        "line": 51,
+        "line": 76,
         "valueKind": "Runtime"
       }
     ]

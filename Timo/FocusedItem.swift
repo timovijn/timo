@@ -24,10 +24,20 @@ struct InlineFocusedDetails: View {
     var body: some View {
         let displayedItem = item
         return VStack(alignment: .leading, spacing: 10) {
-            FlowLayout(spacing: 6) { actions(displayedItem) }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            // Move the action container as one unit, including a relabelled Cancel pill.
-            .geometryGroup()
+            // Attachments sit one pill gap above the actions, like a wrapped row of them.
+            VStack(alignment: .leading, spacing: 6) {
+                if !displayedItem.checklist.isEmpty {
+                    ChecklistCard(item: displayedItem)
+                }
+                if !displayedItem.attachments.isEmpty {
+                    AttachmentPills(attachments: .constant(displayedItem.attachments))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                FlowLayout(spacing: 6) { actions(displayedItem) }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                // Move the action container as one unit, including a relabelled Cancel pill.
+                .geometryGroup()
+            }
             if choosingDeletion {
                 VStack(alignment: .leading, spacing: 6) {
                     RepeatDeletionButtons(item: item) { delete($0) }

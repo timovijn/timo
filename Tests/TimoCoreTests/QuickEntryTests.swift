@@ -130,6 +130,19 @@ final class QuickEntryTests: XCTestCase {
         XCTAssertEqual(entry("bins on tuesdays").repeatRule, .weekly)
         XCTAssertEqual(entry("bins on tuesdays").day, day(2026, 11, 10))
     }
+    func testMonthEndRepeats() {
+        for text in ["pay rent every last day of the month", "pay rent on the last day of every month",
+                     "pay rent every month end", "pay rent at the end of each month"] {
+            let e = entry(text)
+            XCTAssertEqual(e.repeatRule, .monthEnd, text)
+            XCTAssertEqual(e.day, day(2026, 11, 30), text)
+            XCTAssertEqual(e.title, "Pay rent", text)
+        }
+        // One deadline, not a repeat.
+        let once = entry("report by the end of the month")
+        XCTAssertEqual(once.repeatRule, .never)
+        XCTAssertEqual(once.title, "Report by the end of the month")
+    }
     func testPersonas() {
         let e = entry("run 5k #health #fam")
         XCTAssertEqual(e.personas, [.health, .family])

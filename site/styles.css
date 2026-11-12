@@ -1089,20 +1089,6 @@ em {
   background:#91a67c;
   border-radius:4px;
 }
-.activity-next {
-  border-top:1px solid #e4e6dc;
-  padding-top:14px;
-  margin-top:19px;
-  display:flex;
-  justify-content:space-between;
-  font-size:9px;
-  color:#818c76;
-}
-.activity-next strong {
-  color:#48563c;
-  font-weight:500;
-  margin-left:6px;
-}
 .activity-figure figcaption {
   font-size:8px;
   color:#7c8372;

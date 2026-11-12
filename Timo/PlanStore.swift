@@ -29,7 +29,7 @@ import WidgetKit
     private var reminderWorker: Task<Void, Never>?
     private let notificationCenter = UNUserNotificationCenter.current()
     private struct Document: Codable {
-        var version = 9
+        var version = 11
         var items: [PlanItem]
         var series: [RepeatingPlan]
         private enum CodingKeys: String, CodingKey { case version, items, series }
@@ -57,7 +57,7 @@ import WidgetKit
             if FileManager.default.fileExists(atPath: url.path) {
                 let data = try Data(contentsOf: url)
                 let document = try JSONDecoder().decode(Document.self, from: data)
-                guard (1...9).contains(document.version) else { throw CocoaError(.fileReadCorruptFile) }
+                guard (1...11).contains(document.version) else { throw CocoaError(.fileReadCorruptFile) }
                 items = document.items
                 series = document.series
                 savedData = data
@@ -71,6 +71,11 @@ import WidgetKit
         // The sync engine starts asynchronously after this initialization returns.
         if canWrite { cloud.attach(self) }
         reconcile()
+        if canWrite {
+            applySharedInbox()
+            let used = Set((items.flatMap(\.attachments) + series.flatMap(\.template.attachments)).map(\.id))
+            Task.detached(priority: .utility) { AttachmentFiles.removeUnused(keeping: used) }
+        }
         refreshReminders()
         #if targetEnvironment(simulator)
         if canWrite { watchPlanFile() }
@@ -96,7 +101,7 @@ import WidgetKit
     private func reloadFromOtherDevice() {
         guard let data = try? Data(contentsOf: url), data != savedData,
               let document = try? JSONDecoder().decode(Document.self, from: data),
-              (1...9).contains(document.version) else { return }
+              (1...11).contains(document.version) else { return }
         savedData = data
         series = document.series
         items = document.items
@@ -208,11 +213,11 @@ import WidgetKit
                         return item.on(Day(date)).isSettled
                     })
                 guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else { continue }
-                let announced = DayGuideActivities.announcedStarts(snapshot, now: Date())
+                let announced = DayGuideActivities.announcements(snapshot, now: Date())
                 for reminder in Planner.upcomingReminders(in: snapshot, now: Date()) {
                     let item = reminder.item, date = reminder.date
                     guard date > Date() else { continue }
-                    if announced.contains(item.id) && date == item.start() { continue }
+                    if announced[item.id] == date { continue }
                     let content = UNMutableNotificationContent()
                     content.title = item.title
                     content.body = reminderBody(for: item, at: date)
@@ -287,6 +292,8 @@ import WidgetKit
         previousDefinition?.completedAt = item.completedAt
         previousDefinition?.cancelledAt = item.cancelledAt
         previousDefinition?.suggestionDismissed = item.suggestionDismissed
+        // Ticking entries off is this day's, like completion: not a change to the series.
+        previousDefinition?.checklist = ChecklistEntry.ticks(from: item.checklist, onto: previous?.checklist ?? [])
         if (item.repeatRule != .never || previous?.seriesID != nil) && previousDefinition != item {
             Planner.saveRepeating(item, items: &updated, series: &plans)
         } else if let i = updated.firstIndex(where: { $0.id == item.id }) {
@@ -296,6 +303,29 @@ import WidgetKit
         }
         materialize(&updated, series: plans, now: Date())
         commit(updated, series: plans)
+    }
+    /// Saves what was sent to Timo from another app's share sheet (see `ShareInbox`). Attachments
+    /// for an item are added the way the editor would save them: to a single day of a repeating
+    /// item on its own, to the original for all its days. An item deleted since gets a new item
+    /// rather than losing what was shared.
+    func applySharedInbox(now: Date = Date()) {
+        guard canWrite else { return }
+        for entry in ShareInbox.pending() {
+            defer { ShareInbox.remove(entry) }
+            do {
+                if let id = entry.itemID, var item = item(id) {
+                    let known = Set(item.attachments.map(\.id))
+                    item.attachments += entry.attachments.filter { !known.contains($0.id) }
+                    if item.seriesID != nil && !isOriginal(item) { try saveDetached(item) } else { try save(item) }
+                } else {
+                    var fresh = entry.newItem ?? PlanItem(title: entry.attachments.first?.title ?? "Shared", day: Day(now))
+                    if entry.newItem == nil { fresh.attachments = entry.attachments }
+                    try save(fresh)
+                }
+            } catch {
+                errorMessage = "What you shared couldn’t be added. \(error.localizedDescription)"
+            }
+        }
     }
     func startNow(_ item: PlanItem) {
         var updated = items
@@ -312,6 +342,15 @@ import WidgetKit
         let projected = updated[i].on(day)
         guard !projected.isCancelled else { return setCancelled(item, false, on: day) }
         Planner.setComplete(!projected.isComplete, &updated[i], on: day, now: Date())
+        commit(updated)
+    }
+    /// Ticks a checklist entry off, or opens it again, on this item alone (on a repeating item,
+    /// only this day), saved straight away like ticking the item itself.
+    func toggleEntry(_ entryID: UUID, of item: PlanItem) {
+        var updated = items
+        guard let i = updated.firstIndex(where: { $0.id == item.id }),
+              let entry = updated[i].checklist.first(where: { $0.id == entryID }) else { return }
+        Planner.setEntry(entryID, done: !entry.isDone, in: &updated[i], now: Date())
         commit(updated)
     }
     /// Cancels or restores a single item; for a repeating item, only this occurrence.

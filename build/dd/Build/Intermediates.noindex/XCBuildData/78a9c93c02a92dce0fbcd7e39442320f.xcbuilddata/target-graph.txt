@@ -1,0 +1,6 @@
+Target dependency graph (3 targets)
+Target 'Timo' in project 'Timo'
+➜ Explicit dependency on target 'TimoWidget' in project 'Timo'
+➜ Explicit dependency on target 'TimoShare' in project 'Timo'
+Target 'TimoShare' in project 'Timo' (no dependencies)
+Target 'TimoWidget' in project 'Timo' (no dependencies)

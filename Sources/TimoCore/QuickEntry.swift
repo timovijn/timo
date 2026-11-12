@@ -86,6 +86,10 @@ public struct QuickEntry: Equatable {
         if minute != nil || repeatRule != .never { endDay = nil }
         // "every monday" with no day of its own starts on the coming Monday; a day of another
         // weekday keeps its day and repeats on the days named.
+        // "every last day of the month" with no day of its own starts on this month's last day.
+        if repeatRule == .monthEnd, !found.contains(.day) {
+            while !day.isLastOfMonth(calendar: calendar) { day = reader.shifted(day, by: 1, .day) }
+        }
         if !repeatWeekdays.isEmpty {
             if !found.contains(.day) { day = reader.coming(weekdays: repeatWeekdays) }
             if repeatRule == .weekly, calendar.component(.weekday, from: day.date(calendar: calendar)) != repeatWeekdays[0] {
@@ -456,9 +460,11 @@ extension QuickEntry {
 
         // MARK: Repeats
 
-        /// "daily", "every weekday", "weekly", "every monday", "every mon and wed", "on mondays".
+        /// "daily", "every weekday", "weekly", "every monday", "every mon and wed", "on mondays",
+        /// "every last day of the month".
         func repeats(at i: Int) -> (RepeatRule, [Int], Int)? {
             guard let k = key(i) else { return nil }
+            if let end = monthEnd(at: i) { return (.monthEnd, [], end) }
             if ["daily", "everyday"].contains(k) { return (.daily, [], i + 1) }
             if k == "weekly" { return (.weekly, [], i + 1) }
             if k == "weekdays" { return (.weekdays, [], i + 1) }
@@ -483,6 +489,22 @@ extension QuickEntry {
             }
             guard !days.isEmpty else { return nil }
             return (days.count == 1 ? .weekly : .custom, days.count == 1 ? days : days.sorted(), end)
+        }
+
+        /// "every last day of the month", "on the last day of every month", "every month end",
+        /// "at the end of each month". Only with "every" or "each": "by the end of the month" is
+        /// one deadline, not a repeat.
+        func monthEnd(at i: Int) -> Int? {
+            var j = i, repeats = false
+            if let k = key(j), ["every", "each"].contains(k) { repeats = true; j += 1 }
+            else if let k = key(j), ["on", "at"].contains(k) { j += 1 }
+            if key(j) == "the" { j += 1 }
+            if key(j) == "month", key(j + 1) == "end" { return repeats ? j + 2 : nil }
+            if key(j) == "last", key(j + 1) == "day" { j += 2 } else if key(j) == "end" { j += 1 } else { return nil }
+            guard key(j) == "of" else { return nil }
+            j += 1
+            if let k = key(j), ["every", "each"].contains(k) { repeats = true; j += 1 } else if key(j) == "the" { j += 1 }
+            return repeats && key(j) == "month" ? j + 1 : nil
         }
 
         // MARK: Personas, people and places

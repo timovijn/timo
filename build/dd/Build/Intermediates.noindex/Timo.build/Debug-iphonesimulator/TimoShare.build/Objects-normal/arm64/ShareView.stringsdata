@@ -1,0 +1,120 @@
+{
+  "source": "/Users/timovijn/Timo/GitHub/timo/TimoShare/ShareView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Search items",
+        "location": {
+          "startingColumn": 102,
+          "startingLine": 33
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add to Timo",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 34
+        }
+      },
+      {
+        "comment": "",
+        "key": "Couldn’t add this",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 44
+        }
+      },
+      {
+        "comment": "",
+        "key": "Adding",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 18
+        }
+      },
+      {
+        "comment": "",
+        "key": "New item",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 25
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nothing here can be added to an item.",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 60
+        }
+      },
+      {
+        "comment": "",
+        "key": "Open Timo once, then share again.",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 21
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 38
+        }
+      },
+      {
+        "comment": "",
+        "key": "Reading what you shared…",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 57
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@: %@",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 68
+        }
+      },
+      {
+        "comment": "",
+        "key": "Title, such as “tomorrow at 9 dentist”",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 77
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 80
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add as a new item",
+        "location": {
+          "startingColumn": 37,
+          "startingLine": 84
+        }
+      },
+      {
+        "comment": "",
+        "key": "Added to “%@”",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 109
+        }
+      }
+    ]
+  },
+  "version": 1
+}

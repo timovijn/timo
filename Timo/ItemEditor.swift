@@ -13,6 +13,7 @@ struct ItemEditor: View {
     /// even though the pill only adds it once its field loses focus.
     @State private var locationDraft = ""
     @State private var personDraft = ""
+    @State private var checklistDraft = ""
     /// The item as the editor opened with it, to tell whether there is anything to lose on closing.
     private let opened: PlanItem
     /// A copy made with Duplicate: unsaved, so there is something to keep from the start, and its
@@ -56,6 +57,16 @@ struct ItemEditor: View {
     @State private var openInfo: Set<String> = []
     /// Set on deleting, so the closing sheet doesn't turn into "New item" without its Delete row.
     @State private var deleted = false
+    /// Whether the keyboard is up (so the sheet is at full height).
+    @State private var keyboardUp = false
+    /// Until when the keyboard is still coming up, and the sheet growing with it.
+    @State private var keyboardSettles = Date.distantPast
+    /// Where the form and the keyboard are on screen, and how much of the form the keyboard covers.
+    @State private var formFrame = CGRect.zero
+    @State private var keyboardFrame = CGRect.zero
+    @State private var keyboardOverlap: CGFloat = 0
+    @State private var editorGeometry = EditorGeometry()
+    @State private var revealTask: Task<Void, Never>?
     @State private var showingLinkedItems = false
     private var existing: Bool { deleted || store.item(item.id) != nil }
     private var kindTitle: LocalizedStringKey { existing ? "Edit item" : isDuplicate ? "Duplicate item" : "New item" }
@@ -91,7 +102,10 @@ struct ItemEditor: View {
         .padding(.horizontal, 8)
     }
     var body: some View {
-        editor
+        // A flexible presentation root must reach the bottom safe-area boundary; ignoring
+        // the keyboard only on the nested Form still lets the sheet shrink its proposal.
+        GeometryReader { _ in editor }
+        .ignoresSafeArea(.keyboard, edges: .bottom)
         // One size, so there's nothing to drag: as tall as a sheet goes while it's still a floating
         // glass card (at full height iOS makes it an edge-to-edge page). The keyboard is left to
         // iOS, which takes the sheet to full height while it's up and back again after.
@@ -109,6 +123,8 @@ struct ItemEditor: View {
             ScrollViewReader { form in Form {
                 Section {
                     ItemTitleField(text: $item.title, focused: $titleFocused)
+                        .id("title")
+
                         .onScrollVisibilityChange(threshold: 0.1) { visible in
                             withAnimation(reduceMotion ? nil : .smooth(duration: 0.25)) { titleScrolledAway = !visible }
                         }
@@ -300,14 +316,38 @@ struct ItemEditor: View {
                     }
                 }
                 Section("Locations") {
-                    TextPills(kind: .location, entries: $locations, draft: $locationDraft) { reveal("locations", in: form) }
+                    TextPills(kind: .location, entries: $locations, draft: $locationDraft)
                         .id("locations")
+
                 }
                 Section("People") {
-                    TextPills(kind: .person, entries: $people, draft: $personDraft) { reveal("people", in: form) }
+                    TextPills(kind: .person, entries: $people, draft: $personDraft)
                         .id("people")
+
                 }
-                Section("Notes") { TextField("Anything to remember", text: $item.notes, axis: .vertical).lineLimit(3...8) }
+                Section {
+                    ChecklistEditor(entries: $item.checklist, draft: $checklistDraft)
+                } header: {
+                    InfoHeader("Checklist", isExpanded: infoBinding("checklist"))
+                } footer: {
+                    InfoFooter(isExpanded: openInfo.contains("checklist")) {
+                        Text("Things to tick off within the item, like groceries. Return keeps one and starts the next, and pasting several lines adds one for each. Tick them off here or from the item’s long press. Ticking them all doesn’t complete the item; on a repeating item, each day starts with nothing ticked.")
+                    }
+                }
+                Section("Notes") {
+                    TextField("Anything to remember", text: $item.notes, axis: .vertical).lineLimit(3...8)
+                        .id("notes")
+
+                }
+                Section {
+                    AttachmentPills(attachments: $item.attachments, editable: true)
+                } header: {
+                    InfoHeader("Attachments", isExpanded: infoBinding("attachments"))
+                } footer: {
+                    InfoFooter(isExpanded: openInfo.contains("attachments")) {
+                        Text("Keep links, text, photos and files with the item. Tap one to open it. With iCloud sync on, files go to your other devices and to people you share the item with.")
+                    }
+                }
                 if existing && CloudSync.isAvailable { sharingSection }
                 if existing {
                     Section {
@@ -355,6 +395,48 @@ struct ItemEditor: View {
                     }
                 }
             }
+            // The form runs on behind the keyboard rather than shrinking to the space above it:
+            // shrunk at once while the keyboard was still sliding up, it left an empty band between
+            // the two. The keyboard's height is scroll room at the bottom instead, so there is always
+            // content under the keyboard as it rises, and the shared input scroll places
+            // the field being typed in, where the list's keyboard avoidance would otherwise push it.
+            .ignoresSafeArea(.keyboard, edges: .bottom)
+            .contentMargins(.bottom, keyboardOverlap, for: .scrollContent)
+            .onPreferenceChange(EditorKeyboardRegionsKey.self) { editorGeometry.keyboardRetainingRegions = $0 }
+            // Observe the actual native field, including SwiftUI's location/person and notes
+            // fields. No row anchors or second scroll-to-visible pass compete with this path.
+            .onReceive(NotificationCenter.default.publisher(for: UITextField.textDidBeginEditingNotification)
+                .merge(with: NotificationCenter.default.publisher(for: UITextView.textDidBeginEditingNotification))) { note in
+                if let field = note.object as? UIView { revealTextInput(field) }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { note in
+                if let end = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue { keyboardFrame = end }
+                guard keyboardFrame.height > 0, keyboardFrame.minY < (editorGeometry.window?.bounds.maxY ?? formFrame.maxY) else { return }
+                let duration = (note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.35
+                keyboardSettles = Date().addingTimeInterval(duration)
+                keyboardUp = true
+                cancelInputScroll()
+                withAnimation(keyboardAnimation(note)) { updateKeyboardOverlap() }
+            }
+            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }) { frame in
+                formFrame = frame
+                updateKeyboardOverlap()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)
+                .merge(with: NotificationCenter.default.publisher(for: UIResponder.keyboardDidChangeFrameNotification))) { _ in
+                guard keyboardUp else { return }
+                keyboardSettles = .distantPast
+                if let field = editorGeometry.focusedInput, field.isFirstResponder {
+                    revealTextInput(field)
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { note in
+                cancelInputScroll()
+                editorGeometry.focusedInput = nil
+                keyboardUp = false
+                keyboardFrame = .zero
+                withAnimation(keyboardAnimation(note)) { keyboardOverlap = 0 }
+            }
             .onChange(of: item.minute != nil || item.endDay != nil) { _, scheduledRange in
                 guard !existing, !isDuplicate, !carryChosen else { return }
                 item.movesToNextDay = !scheduledRange
@@ -383,6 +465,7 @@ struct ItemEditor: View {
             // Popovers let the editor behind them be used, so close one once the form is dragged.
             .environment(\.popoverShown, PopoverShownAction { popoverShown = $0 })
             .onScrollPhaseChange { _, phase in
+                if phase == .interacting { cancelInputScroll() }
                 guard phase == .interacting, let field = editingField else { return }
                 Task { @MainActor in
                     await Task.yield()
@@ -396,7 +479,8 @@ struct ItemEditor: View {
             .scrollEdgeEffectStyle(.soft, for: .top)
             // The same gap above the Title header as between the sections below.
             .contentMargins(.top, 10, for: .scrollContent)
-            .background(KeyboardDismissal())
+            .background(KeyboardDismissal(geometry: editorGeometry))
+            .onDisappear { cancelInputScroll() }
             .background(PopoverDismissal(isActive: editingField != nil) { editingField = nil })
             // A popover replaces the keyboard, whichever field was being typed in.
             .onChange(of: editingField) { _, field in
@@ -457,14 +541,89 @@ struct ItemEditor: View {
                 Text(unlinkMessage(saved))
             }
         }
+        // The whole editor, not only the form, keeps its size as the keyboard comes up (see the
+        // form's keyboard handling); otherwise the navigation stack shrinks it anyway.
+        .ignoresSafeArea(.keyboard, edges: .bottom)
     }
-    /// Brings a row being typed in to the middle of the space above the keyboard, once the
-    /// keyboard is up; the form's own scrolling only just uncovers the text cursor.
-    private func reveal(_ row: String, in form: ScrollViewProxy) {
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(350))
-            withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) { form.scrollTo(row, anchor: .center) }
+    /// All inputs put the caret at the same height in the usable viewport. Keyboard avoidance
+    /// finishes first, so its final inset/offset cannot undo it.
+    private func revealTextInput(_ field: UIView) {
+        guard field.window === editorGeometry.window, field.isFirstResponder else { return }
+        editorGeometry.focusedInput = field
+        cancelInputScroll()
+        guard keyboardUp, keyboardSettles.timeIntervalSinceNow <= 0 else { return }
+        revealTask = Task { @MainActor [weak field] in
+            // Focus notifications precede the form's own caret/inset layout. Two main-queue
+            // turns coalesce those callbacks; there is one animation after that layout.
+            for _ in 0..<2 {
+                await withCheckedContinuation { continuation in
+                    DispatchQueue.main.async { continuation.resume() }
+                }
+                guard !Task.isCancelled else { return }
+            }
+            guard let field, field.isFirstResponder, editorGeometry.focusedInput === field,
+                  keyboardUp, keyboardSettles.timeIntervalSinceNow <= 0,
+                  let scroll = inputScrollView(for: field), let window = field.window,
+                  !scroll.isDragging, !scroll.isDecelerating else { return }
+            scroll.layoutIfNeeded()
+            let insets = scroll.adjustedContentInset
+            let top = scroll.convert(CGPoint(x: 0, y: scroll.bounds.minY + insets.top), to: window).y
+            let bottom = scroll.convert(CGPoint(x: 0, y: scroll.bounds.maxY - insets.bottom), to: window).y
+            let keyboard = window.convert(keyboardFrame, from: window.screen.coordinateSpace)
+            let visibleBottom = keyboardFrame == .zero ? bottom : min(bottom, keyboard.minY)
+            // Align the line being typed, rather than the centre of a tall Notes or pill row.
+            var caret = field.bounds
+            if let input = field as? UITextInput, let selection = input.selectedTextRange {
+                let rect = input.caretRect(for: selection.end)
+                if !rect.isNull, rect.height > 0, rect.midY.isFinite { caret = rect }
+            }
+            let caretY = field.convert(caret, to: window).midY
+            let desiredY = top + max(visibleBottom - top, 1) * 0.35
+            let minimum = -insets.top
+            let maximum = max(minimum, scroll.contentSize.height - scroll.bounds.height + insets.bottom)
+            let y = min(maximum, max(minimum, scroll.contentOffset.y + caretY - desiredY))
+            let offset = CGPoint(x: scroll.contentOffset.x, y: y)
+            guard abs(offset.y - scroll.contentOffset.y) > 1 else { return }
+            if reduceMotion {
+                scroll.setContentOffset(offset, animated: false)
+            } else {
+                let animator = UIViewPropertyAnimator(duration: 0.3, curve: .easeInOut) {
+                    scroll.contentOffset = offset
+                }
+                editorGeometry.scrollAnimator = animator
+                animator.startAnimation()
+            }
         }
+    }
+    private func inputScrollView(for field: UIView) -> UIScrollView? {
+        var ancestor = field.superview
+        while let view = ancestor {
+            if let scroll = view as? UIScrollView { return scroll }
+            ancestor = view.superview
+        }
+        return nil
+    }
+    private func cancelInputScroll() {
+        revealTask?.cancel()
+        if let animator = editorGeometry.scrollAnimator, animator.state == .active {
+            animator.stopAnimation(false)
+            animator.finishAnimation(at: .current)
+        }
+        editorGeometry.scrollAnimator = nil
+    }
+    private func keyboardAnimation(_ note: Notification) -> Animation? {
+        guard !reduceMotion else { return nil }
+        let duration = (note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.35
+        let curve = (note.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? Int) ?? 0
+        switch curve {
+        case 1: return .easeIn(duration: duration)
+        case 2: return .easeOut(duration: duration)
+        case 3: return .linear(duration: duration)
+        default: return .timingCurve(0.42, 0, 0.58, 1, duration: duration)
+        }
+    }
+    private func updateKeyboardOverlap() {
+        keyboardOverlap = keyboardFrame == .zero ? 0 : max(0, formFrame.maxY - keyboardFrame.minY)
     }
     private func infoBinding(_ section: String) -> Binding<Bool> {
         Binding(get: { openInfo.contains(section) }, set: { open in
@@ -691,13 +850,18 @@ struct ItemEditor: View {
                 Text("Every " + item.day.date().formatted(.dateTime.weekday(.wide)))
                     .font(.caption).foregroundStyle(.secondary)
             }
+            if item.repeatRule == .monthEnd, !item.day.isLastOfMonth() {
+                // Saving moves the item to the month's last day, so say which day that is.
+                Text("Starts on " + monthEnd(of: item.day).date().formatted(.dateTime.day().month(.wide)))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         } header: {
             InfoHeader("Repeat", isExpanded: infoBinding("repeat"))
         } footer: {
             InfoFooter(isExpanded: openInfo.contains("repeat")) {
                 Text(item.repeatRule != .never || item.seriesID != nil
                      ? "Starts on the first matching day on or after the selected date. Changes to the original item, including how it repeats, apply to all its linked items. Changing how a linked item repeats unlinks it and makes it a new original item. Completion is separate for each item. The Carry over setting controls whether unfinished items move to the next day."
-                     : "Repeat this item every day, every weekday, every week or on days you choose. Each occurrence is completed separately. The Carry over setting controls whether unfinished items move to the next day.")
+                     : "Repeat this item every day, every weekday, every week, on the last day of each month or on days you choose. Each occurrence is completed separately. The Carry over setting controls whether unfinished items move to the next day.")
             }
         }
         .onChange(of: item.repeatRule) { _, rule in
@@ -782,6 +946,11 @@ struct ItemEditor: View {
         guard let stored = store.item(item.id), stored.seriesID != nil, !store.isOriginal(stored) else { return nil }
         return stored
     }
+    private func monthEnd(of day: Day) -> Day {
+        var day = day
+        while !day.isLastOfMonth() { day = Day(Calendar.current.date(byAdding: .day, value: 1, to: day.date())!) }
+        return day
+    }
     private func repeatSummary(_ item: PlanItem) -> String {
         switch item.repeatRule {
         case .weekly: return "Every " + item.day.date().formatted(.dateTime.weekday(.wide))
@@ -802,6 +971,12 @@ struct ItemEditor: View {
         var edited = item
         edited.locations = texts(locations, locationDraft)
         edited.people = texts(people, personDraft)
+        // Entries left empty aren't kept; one still being typed is.
+        edited.checklist = (item.checklist + [ChecklistEntry(title: checklistDraft)]).compactMap { entry in
+            var entry = entry
+            entry.title = entry.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            return entry.title.isEmpty ? nil : entry
+        }
         return edited
     }
     private var hasChanges: Bool {
@@ -890,6 +1065,7 @@ struct ItemEditor: View {
         let edited = edited
         item.locations = edited.locations
         item.people = edited.people
+        item.checklist = edited.checklist
         // Retain existing relationships unless their saved parent no longer exists.
         if let parentID = item.parentID, store.item(parentID) == nil { item.parentID = nil }
         // Deduplicate a copy, so the editor's reminders keep matching their button identities.
@@ -899,7 +1075,14 @@ struct ItemEditor: View {
             // A linked item is only changed after a warning that saving unlinks it.
             var unchanged = stored
             unchanged.reminders = Array(Set(stored.reminders)).sorted()
-            guard saved != unchanged else { dismiss(); return }
+            // Ticking entries off is this day's own, so it saves without unlinking.
+            unchanged.checklist = ChecklistEntry.ticks(from: saved.checklist, onto: stored.checklist)
+            guard saved != unchanged else {
+                if saved.checklist != stored.checklist {
+                    do { try store.save(saved) } catch { issue = error.localizedDescription; return }
+                }
+                dismiss(); return
+            }
             pendingDetach = saved
             return
         }
@@ -1356,8 +1539,6 @@ private struct TextPills: View {
     @Binding var entries: [ItemTextEntry]
     /// The new pill's text, owned by the editor so Save can include it before the pill is added.
     @Binding var draft: String
-    /// Called when one of the pills starts being typed in.
-    var onEditing: () -> Void = {}
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var focus: Field?
     @State private var adding = false
@@ -1408,6 +1589,7 @@ private struct TextPills: View {
                 }
                 .buttonStyle(.borderless)
                 .accessibilityLabel(kind.addTitle)
+                .background(EditorKeyboardRegion())
                 .transition(.opacity)
             }
         }
@@ -1416,7 +1598,6 @@ private struct TextPills: View {
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboardShown = true }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { _ in keyboardShown = false }
         .onChange(of: focus) { old, new in
-            if new != nil { onEditing() }
             // Settle a pill once its field loses focus: keep new text, and drop any left empty.
             if old == .new, new != .new, !discardingDraft {
                 animate {
@@ -1500,7 +1681,7 @@ private struct TextPills: View {
 
 /// An add button in the editor's pill rows: a dashed outline with a plus, so it reads as
 /// a place for something new rather than a value already set.
-private struct AddPillLabel: View {
+struct AddPillLabel: View {
     let title: LocalizedStringKey
     var body: some View {
         HStack(spacing: 6) {
@@ -1596,11 +1777,17 @@ private struct PopoverPassthrough: UIViewRepresentable {
 /// Closes the keyboard when a tap lands anywhere except a text field, without taking the tap
 /// from the button or row underneath.
 private struct KeyboardDismissal: UIViewRepresentable {
-    func makeUIView(context: Context) -> InstallerView { InstallerView() }
-    func updateUIView(_ uiView: InstallerView, context: Context) {}
+    let geometry: EditorGeometry
+    func makeUIView(context: Context) -> InstallerView {
+        let view = InstallerView()
+        view.geometry = geometry
+        return view
+    }
+    func updateUIView(_ uiView: InstallerView, context: Context) { uiView.geometry = geometry }
     static func dismantleUIView(_ uiView: InstallerView, coordinator: ()) { uiView.uninstall() }
 
     final class InstallerView: UIView, UIGestureRecognizerDelegate {
+        var geometry: EditorGeometry?
         private lazy var tap: UITapGestureRecognizer = {
             let tap = UITapGestureRecognizer(target: self, action: #selector(dismissKeyboard))
             tap.cancelsTouchesInView = false
@@ -1610,6 +1797,7 @@ private struct KeyboardDismissal: UIViewRepresentable {
 
         override func didMoveToWindow() {
             super.didMoveToWindow()
+            geometry?.window = window
             uninstall()
             window?.addGestureRecognizer(tap)
         }
@@ -1618,6 +1806,7 @@ private struct KeyboardDismissal: UIViewRepresentable {
         @objc private func dismissKeyboard() { window?.endEditing(true) }
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            if geometry?.keyboardRetainingRegions.contains(where: { $0.contains(touch.location(in: window)) }) == true { return false }
             var view = touch.view
             while let current = view {
                 if current is UITextField || current is UITextView { return false }
@@ -1641,4 +1830,24 @@ extension ShapeStyle where Self == Color {
     static var pillFill: Color { Color(.secondarySystemFill) }
     static var pillText: Color { Color(.label) }
     static var pillSecondaryText: Color { Color(.secondaryLabel) }
+}
+
+/// Updated by layout without publishing every scrolling frame back through the editor's body.
+private final class EditorGeometry {
+    weak var window: UIWindow?
+    weak var focusedInput: UIView?
+    var scrollAnimator: UIViewPropertyAnimator?
+    var keyboardRetainingRegions: [CGRect] = []
+}
+
+struct EditorKeyboardRegionsKey: PreferenceKey {
+    static let defaultValue: [CGRect] = []
+    static func reduce(value: inout [CGRect], nextValue: () -> [CGRect]) { value += nextValue() }
+}
+struct EditorKeyboardRegion: View {
+    var body: some View {
+        GeometryReader { geometry in
+            Color.clear.preference(key: EditorKeyboardRegionsKey.self, value: [geometry.frame(in: .global)])
+        }.allowsHitTesting(false)
+    }
 }

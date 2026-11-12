@@ -1,0 +1,23 @@
+{
+  "/Users/timovijn/Timo/GitHub/timo/Tests/TimoCoreTests/DateRangeTests.swift" : {
+    "const-values" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/DateRangeTests.swiftconstvalues",
+    "dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/DateRangeTests.d",
+    "diagnostics" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/DateRangeTests.dia",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/DateRangeTests.o",
+    "swift-dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/DateRangeTests.swiftdeps"
+  },
+  "/Users/timovijn/Timo/GitHub/timo/Tests/TimoCoreTests/DateSearchTests.swift" : {
+    "const-values" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/DateSearchTests.swiftconstvalues",
+    "dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/DateSearchTests.d",
+    "diagnostics" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/DateSearchTests.dia",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/DateSearchTests.o",
+    "swift-dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/DateSearchTests.swiftdeps"
+  },
+  "/Users/timovijn/Timo/GitHub/timo/Tests/TimoCoreTests/DayGuideTests.swift" : {
+    "const-values" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/DayGuideTests.swiftconstvalues",
+    "dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/DayGuideTests.d",
+    "diagnostics" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/DayGuideTests.dia",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/DayGuideTests.o",
+    "swift-dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/DayGuideTests.swiftdeps"
+  }
+}

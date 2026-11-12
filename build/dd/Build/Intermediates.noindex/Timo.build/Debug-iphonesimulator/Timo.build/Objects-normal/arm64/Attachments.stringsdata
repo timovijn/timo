@@ -1,0 +1,184 @@
+{
+  "source": "/Users/timovijn/Timo/GitHub/timo/Timo/Attachments.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Not on this device yet",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 31
+        }
+      },
+      {
+        "comment": "",
+        "key": "Couldn’t add the attachment",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 36
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add link or text",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 39
+        }
+      },
+      {
+        "comment": "",
+        "key": "This file was added on another device and hasn’t arrived from iCloud yet. Files larger than 100 MB stay on the device they were added on.",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 33
+        }
+      },
+      {
+        "comment": "",
+        "key": "This file was added on another device. Turn on iCloud sync to get it here.",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 34
+        }
+      },
+      {
+        "comment": "",
+        "key": "Link or text",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 40
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 42
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 43
+        }
+      },
+      {
+        "comment": "",
+        "key": "A web address becomes a link; anything else is kept as text.",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 48
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@: %@",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 86
+        }
+      },
+      {
+        "comment": "",
+        "key": "Opens the link",
+        "location": {
+          "startingColumn": 59,
+          "startingLine": 87
+        }
+      },
+      {
+        "comment": "",
+        "key": "Opens the attachment",
+        "location": {
+          "startingColumn": 78,
+          "startingLine": 87
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add attachment",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 129
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@: %@",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 101
+        }
+      },
+      {
+        "comment": "",
+        "key": "Opens the link",
+        "location": {
+          "startingColumn": 59,
+          "startingLine": 102
+        }
+      },
+      {
+        "comment": "",
+        "key": "Opens the attachment",
+        "location": {
+          "startingColumn": 78,
+          "startingLine": 102
+        }
+      },
+      {
+        "comment": "",
+        "key": "Remove attachment: %@",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 113
+        }
+      },
+      {
+        "comment": "",
+        "key": "Photos",
+        "location": {
+          "startingColumn": 61,
+          "startingLine": 122
+        }
+      },
+      {
+        "comment": "",
+        "key": "Files",
+        "location": {
+          "startingColumn": 60,
+          "startingLine": 123
+        }
+      },
+      {
+        "comment": "",
+        "key": "Link or Text",
+        "location": {
+          "startingColumn": 53,
+          "startingLine": 124
+        }
+      },
+      {
+        "comment": "",
+        "key": "Attachment",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 126
+        }
+      },
+      {
+        "comment": "",
+        "key": "Done",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 175
+        }
+      }
+    ]
+  },
+  "version": 1
+}

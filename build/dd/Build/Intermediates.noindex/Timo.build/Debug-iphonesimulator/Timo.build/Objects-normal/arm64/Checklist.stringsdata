@@ -1,0 +1,88 @@
+{
+  "source": "/Users/timovijn/Timo/GitHub/timo/Timo/Checklist.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Add checklist entry",
+        "location": {
+          "startingColumn": 41,
+          "startingLine": 54
+        }
+      },
+      {
+        "comment": "",
+        "key": "Remove entry: %@",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 34
+        }
+      },
+      {
+        "comment": "",
+        "key": "Done",
+        "location": {
+          "startingColumn": 56,
+          "startingLine": 29
+        }
+      },
+      {
+        "comment": "",
+        "key": "Not done",
+        "location": {
+          "startingColumn": 65,
+          "startingLine": 29
+        }
+      },
+      {
+        "comment": "",
+        "key": "Remove entry: %@",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 43
+        }
+      },
+      {
+        "comment": "",
+        "key": "Entry",
+        "location": {
+          "startingColumn": 67,
+          "startingLine": 52
+        }
+      },
+      {
+        "comment": "",
+        "key": "Entry",
+        "location": {
+          "startingColumn": 47,
+          "startingLine": 172
+        }
+      },
+      {
+        "comment": "",
+        "key": "Done",
+        "location": {
+          "startingColumn": 52,
+          "startingLine": 283
+        }
+      },
+      {
+        "comment": "",
+        "key": "Not done",
+        "location": {
+          "startingColumn": 61,
+          "startingLine": 283
+        }
+      },
+      {
+        "comment": "",
+        "key": "Show all %lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 289
+        }
+      }
+    ]
+  },
+  "version": 1
+}
