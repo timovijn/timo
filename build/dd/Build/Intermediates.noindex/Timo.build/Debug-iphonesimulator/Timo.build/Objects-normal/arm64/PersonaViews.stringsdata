@@ -102,32 +102,40 @@
         "comment": "",
         "key": "Original item only",
         "location": {
-          "startingColumn": 20,
-          "startingLine": 627
-        }
-      },
-      {
-        "comment": "",
-        "key": "This linked item only",
-        "location": {
-          "startingColumn": 20,
-          "startingLine": 629
-        }
-      },
-      {
-        "comment": "",
-        "key": "This and following linked items",
-        "location": {
-          "startingColumn": 20,
-          "startingLine": 630
+          "startingColumn": 17,
+          "startingLine": 632
         }
       },
       {
         "comment": "",
         "key": "Original and all linked items",
         "location": {
-          "startingColumn": 16,
+          "startingColumn": 54,
           "startingLine": 632
+        }
+      },
+      {
+        "comment": "",
+        "key": "This linked item only",
+        "location": {
+          "startingColumn": 17,
+          "startingLine": 633
+        }
+      },
+      {
+        "comment": "",
+        "key": "This and following linked items",
+        "location": {
+          "startingColumn": 57,
+          "startingLine": 633
+        }
+      },
+      {
+        "comment": "",
+        "key": "Original and all linked items",
+        "location": {
+          "startingColumn": 17,
+          "startingLine": 634
         }
       },
       {
@@ -135,7 +143,7 @@
         "key": "Deleted “%@”",
         "location": {
           "startingColumn": 22,
-          "startingLine": 647
+          "startingLine": 649
         }
       },
       {
@@ -143,7 +151,7 @@
         "key": "Undo",
         "location": {
           "startingColumn": 24,
-          "startingLine": 650
+          "startingLine": 652
         }
       },
       {
@@ -151,7 +159,7 @@
         "key": "Puts back what was deleted",
         "location": {
           "startingColumn": 36,
-          "startingLine": 654
+          "startingLine": 656
         }
       }
     ]

@@ -15,9 +15,9 @@ import WidgetKit
     @Published var errorMessage: String?
     /// Kept until the day view is ready, including when a reminder launches the app.
     @Published var reminderItemToFocus: UUID?
-    /// The most recent deletion, offered for undoing until it is undone or dismissed.
-    @Published var lastDeletion: PlanDeletion?
-    private weak var deletionUndoManager: UndoManager?
+    /// The most recent Delete or Push, offered until it is undone or dismissed.
+    @Published var lastUndo: PlanUndo?
+    private weak var actionUndoManager: UndoManager?
     private let url: URL
     private var canWrite = true
     /// What this store last read or wrote, so its own saves aren't taken for another device's.
@@ -333,6 +333,17 @@ import WidgetKit
         guard Planner.startNow(item.id, items: &updated, series: &plans, now: Date()) else { return }
         commit(updated, series: plans)
     }
+    /// Moves an item on a day, week or month from the day it's shown on (see `Planner.push`).
+    func push(_ item: PlanItem, from day: Day, by interval: PushInterval, undoManager: UndoManager? = nil) {
+        let before = (items: items, series: series)
+        var updated = items
+        var plans = series
+        guard Planner.push(item.id, from: day, by: interval, items: &updated, series: &plans),
+              let change = Planner.pushUndo(for: item.id, before: before, after: (updated, plans)) else { return }
+        commit(updated, series: plans)
+        guard items == updated, series == plans else { return }
+        offerUndo(.push(change), manager: undoManager)
+    }
     /// Ticks an item off, or undoes it. Ticked off while viewing a past day, it counts as done on
     /// that day, so a carried item stops there instead of showing on the days after. The circle of
     /// a cancelled item restores it instead, so it is never completed by accident.
@@ -384,22 +395,31 @@ import WidgetKit
         let deletion = Planner.deletion(of: item.title, before: (items, series), after: (updated, plans))
         commit(updated, series: plans)
         guard items == updated else { return }
-        lastDeletion = deletion
-        deletionUndoManager = undoManager
-        undoManager?.registerUndo(withTarget: self) { store in
-            MainActor.assumeIsolated { store.undo(deletion) }
-        }
-        undoManager?.setActionName("Delete")
+        offerUndo(.deletion(deletion), manager: undoManager)
     }
-    /// Puts back what a deletion removed.
-    func undo(_ deletion: PlanDeletion) {
+    private func offerUndo(_ action: PlanUndo, manager: UndoManager?) {
+        lastUndo = action
+        actionUndoManager = manager
+        manager?.registerUndo(withTarget: self) { store in
+            MainActor.assumeIsolated { store.undo(action) }
+        }
+        switch action {
+        case .deletion: manager?.setActionName("Delete")
+        case .push: manager?.setActionName("Push")
+        }
+    }
+    /// Undo this action's changes without replacing the rest of the plan.
+    func undo(_ action: PlanUndo) {
         var updated = items
         var plans = series
-        Planner.undo(deletion, items: &updated, series: &plans)
+        switch action {
+        case .deletion(let deletion): Planner.undo(deletion, items: &updated, series: &plans)
+        case .push(let push): Planner.undo(push, items: &updated, series: &plans)
+        }
         commit(updated, series: plans)
-        if lastDeletion?.id == deletion.id { lastDeletion = nil }
-        // Undone from the button, the system's undo has nothing left to do.
-        if let manager = deletionUndoManager, !manager.isUndoing { manager.removeAllActions(withTarget: self) }
+        guard items == updated, series == plans else { return }
+        if lastUndo?.id == action.id { lastUndo = nil }
+        if let manager = actionUndoManager, !manager.isUndoing { manager.removeAllActions(withTarget: self) }
     }
     func linkedItems(of item: PlanItem, through last: Day) -> [LinkedItemEntry] {
         Planner.linkedItems(for: item, in: items, series: series, through: last)

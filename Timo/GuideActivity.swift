@@ -13,6 +13,7 @@ extension Persona {
         case .work: return [.cyan, .blue]
         case .family: return [.yellow, .orange]
         case .friends: return [.pink, .red]
+        case .travel: return [.orange, .brown]
         case .personal: return [.purple, .indigo]
         }
     }

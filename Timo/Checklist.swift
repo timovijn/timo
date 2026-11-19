@@ -15,23 +15,42 @@ struct ChecklistEditor: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var focus: Field?
     @State private var adding = false
+    /// Counts the times a typed draft became an entry. The new pill's field still has the
+    /// keyboard then, and a field with the keyboard owns its text, so this tells it to clear.
+    @State private var draftsKept = 0
+    /// The entry held and being dragged to a new place, where it was grabbed (from its corner)
+    /// and where the finger is, in the checklist's own space.
+    @State private var dragging: UUID?
+    @State private var grab = CGSize.zero
+    @State private var finger = CGPoint.zero
+    /// Whether the held pill is raised: it grows into the lift and settles back as it lands.
+    @State private var lifted = false
+    @State private var landing = false
+    @State private var dragSession = UUID()
+    @Namespace private var pillMotion
+    /// Measure intrinsic sizes, never transformed frames: lifting a pill must not change its slot.
+    /// This cache is not observed, so geometry measurement cannot trigger layout loops.
+    @State private var measurements = PillMeasurements()
+    /// Whether a hold is under way; unlike `onEnded`, this also resets when the touch is cancelled.
+    @GestureState private var holding = false
+    /// Keep the drag's order here so the form's binding updates cannot interrupt its animation.
+    /// The real pills stay in the layout, with stable IDs and native matched positions.
+    @State private var order: [UUID]?
+    private static let space = "checklist"
+    private static let spacing: CGFloat = 8
     private enum Field: Hashable { case entry(UUID), new }
 
+    private var displayedIDs: [UUID] {
+        guard let order else { return entries.map(\.id) }
+        let current = Set(entries.map(\.id))
+        return order.filter { current.contains($0) } + entries.map(\.id).filter { !order.contains($0) }
+    }
+
     var body: some View {
-        FlowLayout(spacing: 8) {
-            ForEach($entries) { $entry in
-                pill {
-                    Button { entry.doneAt = entry.isDone ? nil : Date() } label: {
-                        ChecklistCircle(done: entry.isDone, small: true)
-                    }
-                    .buttonStyle(.borderless)
-                    .accessibilityLabel(Text(verbatim: entry.title))
-                    .accessibilityValue(entry.isDone ? "Done" : "Not done")
-                    .accessibilityAddTraits(.isToggle)
-                    field(text: $entry.title, done: entry.isDone, as: .entry(entry.id),
-                          onReturn: { startAdding(); return nil },
-                          onLines: { lines in insert(lines.dropFirst(), after: entry.id); return lines.first ?? "" })
-                    removeButton(label: Text("Remove entry: \(entry.title)")) { remove(entry.id) }
+        FlowLayout(spacing: Self.spacing) {
+            ForEach(displayedIDs, id: \.self) { id in
+                if let entry = entries.first(where: { $0.id == id }) {
+                    entryPill(binding(for: id, fallback: entry))
                 }
             }
             if adding {
@@ -56,8 +75,26 @@ struct ChecklistEditor: View {
                     .transition(.opacity)
             }
         }
+        .coordinateSpace(.named(Self.space))
+        .onGeometryChange(for: CGFloat.self, of: \.size.width) { measurements.width = $0 }
+        // Install the animation inside the Form row, where the order actually changes.
+        .animation(reduceMotion ? nil : .smooth(duration: 0.28), value: displayedIDs)
+        .onChange(of: holding) { _, holding in
+            guard !holding, let id = dragging else { return }
+            let session = dragSession
+            landing = true
+            // Release the real pill into its layout position, retaining its identity throughout.
+            guard !reduceMotion, let slot = slots(displayedIDs)[id] else { return drop() }
+            withAnimation(.smooth(duration: 0.25)) {
+                finger = CGPoint(x: slot.minX + grab.width, y: slot.minY + grab.height)
+                lifted = false
+            } completion: {
+                if dragSession == session, dragging == id, !self.holding { drop() }
+            }
+        }
         .padding(.vertical, 2)
-        .sensoryFeedback(.selection, trigger: entries.count)
+        .sensoryFeedback(.impact(weight: .medium), trigger: dragging) { _, new in new != nil }
+        .sensoryFeedback(.selection, trigger: displayedIDs)
         .onChange(of: focus) { old, new in
             // Settle a pill once its field loses focus: keep the new one's text, drop an entry left empty.
             if old == .new, new != .new {
@@ -73,6 +110,57 @@ struct ChecklistEditor: View {
         }
     }
 
+    /// An entry's pill: tick, retitle or remove it, or hold it to move it.
+    private func entryPill(_ entry: Binding<ChecklistEntry>) -> some View {
+        let id = entry.wrappedValue.id
+        let done = entry.wrappedValue.isDone
+        let title = entry.wrappedValue.title
+        return pill {
+            Button { entry.wrappedValue.doneAt = done ? nil : Date() } label: {
+                ChecklistCircle(done: done, small: true)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel(Text(verbatim: title))
+            .accessibilityValue(done ? "Done" : "Not done")
+            .accessibilityAddTraits(.isToggle)
+            field(text: entry.title, done: done, as: .entry(id),
+                  onReturn: { startAdding(); return nil },
+                  onLines: { lines in insert(lines.dropFirst(), after: id); return lines.first ?? "" })
+            removeButton(label: Text("Remove entry: \(title)")) { remove(id) }
+        }
+        // The actual pill follows the finger; its place in the flow remains the landing gap.
+        .onGeometryChange(for: CGSize.self, of: \.size) { measurements[id] = $0 }
+        .matchedGeometryEffect(id: id, in: pillMotion, properties: dragging == id ? [] : .position)
+        .scaleEffect(!reduceMotion && dragging == id && lifted ? 1.06 : 1)
+        .shadow(color: .black.opacity(dragging == id && lifted ? 0.18 : 0), radius: 8, y: 3)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: lifted)
+        .offset(dragOffset(id))
+        .zIndex(dragging == id ? 1 : 0)
+        .transaction { transaction in
+            // Finger tracking is immediate, including when the flow changes the held pill's slot.
+            // On release it rejoins the native layout animation.
+            if dragging == id && !landing { transaction.animation = nil }
+        }
+        .gesture(reorder(id))
+        .accessibilityActions {
+            if entries.first?.id != id {
+                Button("Move earlier") { move(id, by: -1) }
+            }
+            if entries.last?.id != id {
+                Button("Move later") { move(id, by: 1) }
+            }
+        }
+    }
+    /// An entry by its ID rather than its place, which changes as entries move and go.
+    private func binding(for id: UUID, fallback: ChecklistEntry) -> Binding<ChecklistEntry> {
+        Binding(get: { entries.first { $0.id == id } ?? fallback },
+                set: { new in if let index = entries.firstIndex(where: { $0.id == id }) { entries[index] = new } })
+    }
+    private func dragOffset(_ id: UUID) -> CGSize {
+        guard dragging == id, let slot = slots(displayedIDs)[id] else { return .zero }
+        return CGSize(width: finger.x - grab.width - slot.minX,
+                      height: finger.y - grab.height - slot.minY)
+    }
     private func pill<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         HStack(spacing: 6) { content() }
             .foregroundStyle(.pillText)
@@ -93,6 +181,7 @@ struct ChecklistEditor: View {
             .hidden()
             .overlay {
                 ChecklistPillField(text: text, done: done, focused: focus == field, anyFocused: focus != nil,
+                                   resets: field == .new ? draftsKept : 0,
                                    onFocus: { focused in
                                        if focused { focus = field } else if focus == field { focus = nil }
                                    },
@@ -133,8 +222,60 @@ struct ChecklistEditor: View {
     }
     private func keepDraft() {
         let title = draft.trimmingCharacters(in: .whitespaces)
+        if !draft.isEmpty { draftsKept += 1 }
         draft = ""
         if !title.isEmpty { entries.append(ChecklistEntry(title: title)) }
+    }
+    /// Hold, then drag: the pill follows the finger and takes the place of the pill under it.
+    private func reorder(_ id: UUID) -> some Gesture {
+        LongPressGesture(minimumDuration: 0.35)
+            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.space)))
+            .updating($holding) { value, holding, _ in
+                if case .second(true, _) = value { holding = true }
+            }
+            .onChanged { value in
+                guard case .second(true, let drag) = value, let drag else { return }
+                if landing { drop() }
+                if dragging != id, let frame = slots(displayedIDs)[id] {
+                    dragSession = UUID()
+                    landing = false
+                    grab = CGSize(width: drag.startLocation.x - frame.minX, height: drag.startLocation.y - frame.minY)
+                    finger = drag.location
+                    dragging = id
+                    withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { lifted = true }
+                }
+                finger = drag.location
+                if order == nil { order = entries.map(\.id) }
+                if let ids = placement(of: id, at: drag.location) {
+                    withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) { order = ids }
+                }
+            }
+    }
+    private var reorderLayout: ChecklistReorderLayout {
+        ChecklistReorderLayout(sizes: measurements.sizes, width: measurements.width, spacing: Self.spacing)
+    }
+    private func placement(of id: UUID, at point: CGPoint) -> [UUID]? {
+        reorderLayout.placement(of: id, in: displayedIDs, at: point)
+    }
+    private func slots(_ ids: [UUID]) -> [UUID: CGRect] {
+        reorderLayout.slots(ids)
+    }
+    /// Commit the local order once the native drop animation has finished.
+    private func drop() {
+        let ids = displayedIDs
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            lifted = false
+            landing = false
+            dragging = nil
+            entries = ids.compactMap { id in entries.first { $0.id == id } } + entries.filter { !ids.contains($0.id) }
+            order = nil
+        }
+    }
+    private func move(_ id: UUID, by offset: Int) {
+        guard let index = entries.firstIndex(where: { $0.id == id }), entries.indices.contains(index + offset) else { return }
+        animate { entries.swapAt(index, index + offset) }
     }
     private func insert(_ titles: ArraySlice<String>, after id: UUID) {
         guard !titles.isEmpty, let index = entries.firstIndex(where: { $0.id == id }) else { return }
@@ -149,6 +290,16 @@ struct ChecklistEditor: View {
     }
 }
 
+/// Intrinsic pill sizes and the width available to the flow layout.
+final class PillMeasurements {
+    private(set) var sizes: [UUID: CGSize] = [:]
+    var width: CGFloat = .infinity
+    subscript(id: UUID) -> CGSize? {
+        get { sizes[id] }
+        set { sizes[id] = newValue }
+    }
+}
+
 /// A checklist pill's title: a UIKit text field, so Return can move on without ending editing
 /// (which would take the keyboard down and up again between entries). Return goes to `onReturn`
 /// and pasted lines to `onLines`; each returns what the field keeps (nil: leave it). Focus is the editor's `focused`; a field only gives up the
@@ -159,6 +310,8 @@ struct ChecklistPillField: UIViewRepresentable {
     let done: Bool
     let focused: Bool
     let anyFocused: Bool
+    /// Changes when the editor empties the field's text while it has the keyboard.
+    var resets = 0
     var onFocus: (Bool) -> Void
     var onReturn: () -> String?
     var onLines: ([String]) -> String
@@ -190,7 +343,12 @@ struct ChecklistPillField: UIViewRepresentable {
                 .strikethroughStyle: done ? NSUnderlineStyle.single.rawValue : 0,
             ]
         }
-        if !field.isFirstResponder, field.text != text { field.text = text }
+        if context.coordinator.resets != resets {
+            context.coordinator.resets = resets
+            field.text = text
+        } else if !field.isFirstResponder, field.text != text {
+            field.text = text
+        }
         field.wantsFocus = focused
         if focused {
             field.takeFocus()
@@ -204,7 +362,8 @@ struct ChecklistPillField: UIViewRepresentable {
     final class Coordinator: NSObject, UITextFieldDelegate {
         var parent: ChecklistPillField
         var style: Style?
-        init(_ parent: ChecklistPillField) { self.parent = parent }
+        var resets: Int
+        init(_ parent: ChecklistPillField) { self.parent = parent; resets = parent.resets }
 
         @objc func changed(_ field: UITextField) {
             if parent.text != field.text ?? "" { parent.text = field.text ?? "" }

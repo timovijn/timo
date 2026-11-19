@@ -6,7 +6,7 @@ SwiftUI day planner for iOS 26 with a Liquid Glass look. The README describes ev
 
 - `Sources/TimoCore/Planner.swift`: the Foundation-only model (`Day`, `PlanItem`, `RepeatingPlan`, `Persona`, `Planner`). It's compiled straight into the app target and, with `QuickEntry.swift`, is the code under test.
 - `Sources/TimoCore/QuickEntry.swift`: reads one typed line ("January 20 dinner with Sam at 18:00") into an item's title, day, time, repeat, people, places and personas; reuses `SearchQuery`'s date helpers. Compiled into the app target only (not the widget).
-- `Tests/TimoCoreTests/`: XCTest suite (`PlannerTests`, `RepeatingTests`, `PersonaTests`, `TimelineLaneTests`, `CancelTests`, `SyncTests`, `DayProgressTests`, `VisitTests`, `DayGuideTests`, `SearchTests`, `DateSearchTests`, `QuickEntryTests`, `AttachmentTests`, `ChecklistTests`).
+- `Tests/TimoCoreTests/`: XCTest suite (`PlannerTests`, `RepeatingTests`, `PersonaTests`, `TimelineLaneTests`, `CancelTests`, `SyncTests`, `DayProgressTests`, `VisitTests`, `DayGuideTests`, `SearchTests`, `DateSearchTests`, `QuickEntryTests`, `PushTests`, `AttachmentTests`, `ChecklistTests`).
 - `Timo/DayView.swift`: the main screen (day pager, dock, date control and calendar, list/time views, rows). It's large; search it with grep and read only the part you need.
 - `Timo/FocusedItem.swift`: the **focussed state**, Timo's name for the long-pressed state: the card expands in place with its history and Cancel and Delete. Holding an item or tapping its Live Activity brings it up.
 - `Timo/ItemEditor.swift`: the item editor (schedule/reminder pills, persona chips, location/people pills, (i) explanations).

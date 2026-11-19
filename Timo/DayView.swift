@@ -41,8 +41,8 @@ struct DayView: View {
     @State private var viewMode = ViewMode(persisted: true)
     // Neighbouring pages follow after the animation instead of during it.
     @State private var previewMode = ViewMode(persisted: false)
-    /// Counts the days picked in the calendar, so the relative date shows once it has folded.
-    @State private var calendarPicks = 0
+    /// Retriggers the relative-date pill after explicit calendar picks or a hold for Today.
+    @State private var datePillRequests = 0
     /// The item in its focussed state, from holding it or tapping its Live Activity.
     @State private var focused: Focused?
     private enum FocusSource { case day, persona, search }
@@ -142,8 +142,9 @@ struct DayView: View {
     }
     /// Whether the row for `item` on `day` shows the filter's dot in the full day. The orange
     /// dot stays while the item is unfinished and late, even once it has been left open. A
-    /// planned item's upcoming reminders and open deadline stay visible even on other dates.
-    /// Visitors only get the dot for the reminder or deadline that brings them to this day.
+    /// planned item's upcoming reminders stay visible even on other dates; its open deadline's
+    /// red dot shows only on the deadline's own day, where it counts (the row there, or a
+    /// visitor from another day), not on a "Carried to" entry.
     private func hasDot(_ item: PlanItem, _ filter: DayFilter, on day: Day) -> Bool {
         let carried = item.movedAway(from: day, now: now)
         switch filter {
@@ -152,7 +153,7 @@ struct DayView: View {
         case .reminders:
             return item.visits(day, now: now) ? item.reminds(on: day, now: now) : !carried && hasOpenReminder(item)
         case .deadlines:
-            return item.visits(day, now: now) ? item.isDue(on: day) : item.hasOpenDeadline
+            return !carried && item.isDue(on: day)
         }
     }
     private func hasOpenReminder(_ item: PlanItem) -> Bool {
@@ -177,14 +178,16 @@ struct DayView: View {
                              },
                              revision: DayPageRevision(items: store.items, series: store.repeatingPlans, sharedZones: store.cloud.sharedZones, filter: filter.rawValue, panelFilter: panelFilter.rawValue,
                                                        minute: Int(now.timeIntervalSinceReferenceDate / 60), typeSize: dynamicTypeSize,
-                                                       insets: viewport.safeAreaInsets, reduceMotion: reduceMotion, focusedID: focused?.id, focusEnding: focused?.ending ?? false, focusDetailsRevision: focused?.detailsRevision ?? 0),
+                                                       insets: viewport.safeAreaInsets, reduceMotion: reduceMotion, focusedID: focusedItemIsGone ? nil : focused?.id,
+                                                       focusEnding: !focusedItemIsGone && (focused?.ending ?? false),
+                                                       focusDetailsRevision: focusedItemIsGone ? 0 : (focused?.detailsRevision ?? 0)),
                              reduceMotion: reduceMotion,
                              onSwipe: { move($0) },
                              interaction: daySwipeInteraction)
                         .ignoresSafeArea(.container, edges: .vertical)
                     TimelineOverflowIndicators(overflow: timelineOverflow, insets: viewport.safeAreaInsets,
                                                date: date, relativeDateLabel: relativeDateLabel,
-                                               calendarPicks: calendarPicks, calendarIsOpen: calendarTransitionActive)
+                                               datePillRequests: datePillRequests, calendarIsOpen: calendarTransitionActive)
                     if pickingDate {
                         // Tapping anywhere outside the calendar closes it.
                         Color.black.opacity(0.08)
@@ -221,7 +224,7 @@ struct DayView: View {
                 }
                 .overlay(alignment: .bottom) {
                     // Above the dock, on the day view and on persona pages alike.
-                    UndoDeletionBar().padding(.bottom, 92 - DayDockLayout.lowering(for: viewport.safeAreaInsets.bottom))
+                    UndoActionBar().padding(.bottom, 92 - DayDockLayout.lowering(for: viewport.safeAreaInsets.bottom))
                 }
                 // Under the top controls, which stay in reach while searching.
                 .overlay { SearchBackdrop(search: search) }
@@ -606,7 +609,7 @@ struct DayView: View {
         // visible after the calendar has folded.
         if pickedFromCalendar {
             pickedFromCalendar = false
-            calendarPicks += 1
+            datePillRequests += 1
         }
     }
     private var relativeDateLabel: String {
@@ -645,7 +648,7 @@ struct DayView: View {
     }
 
     private func inlineFocusPhase(on day: Day) -> InlineFocusPhase {
-        guard let focused, focused.source == .day, focused.day == day else { return InlineFocusPhase() }
+        guard !focusedItemIsGone, let focused, focused.source == .day, focused.day == day else { return InlineFocusPhase() }
         return InlineFocusPhase(id: focused.id, ending: focused.ending, revision: focused.detailsRevision)
     }
 
@@ -690,7 +693,12 @@ struct DayView: View {
         }
     }
     private func goToToday() {
-        navigate(to: Calendar.current.startOfDay(for: Date()))
+        let today = Calendar.current.startOfDay(for: Date())
+        // A changed date already gets the dock's selection haptic. Confirm an unchanged day too.
+        if day == Day(today) { UISelectionFeedbackGenerator().selectionChanged() }
+        datePillRequests += 1
+        navigate(to: today)
+        if pickingDate { closeCalendar() }
     }
     /// The filter the top buttons show and set: the search's while searching, a persona page's on
     /// one, otherwise the day's.
@@ -926,6 +934,7 @@ struct DayView: View {
                 FilterScrollRoom(filtered: filter != .all)
             }
             .readableWidth()
+            .animation(FocusedItemMotion.animation(reduceMotion: reduceMotion), value: Set(filtered.map(\.id)))
             // One SwiftUI scroll surface resizes continuously with the rows.
             // A UIKit List cell used to resize separately and interrupt the morph.
             // The view-mode animation lives on the mode-reading views below.
@@ -945,11 +954,8 @@ struct DayView: View {
         .modifier(TimelineOverflowScroll(proxy: proxy))
         }
     }
-    /// A section whose last item was deleted leaves quickly: with the list's half-second
-    /// animation it lingered under the empty day that took its place.
-    private var sectionRemoval: AnyTransition {
-        .asymmetric(insertion: .opacity, removal: .opacity.animation(.easeOut(duration: 0.15)))
-    }
+    /// Section removal and Undo use the same transaction as their rows.
+    private var sectionRemoval: AnyTransition { .opacity }
     private func sectionHeading(_ title: String) -> some View {
         Text(title).font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -977,6 +983,8 @@ struct DayView: View {
                 }
             }
         }
+        // Membership changes take precedence over status/marker updates from the same save.
+        .animation(FocusedItemMotion.animation(reduceMotion: reduceMotion), value: Set(items.map(\.id)))
         // Blend the row copies with each other before compositing over the page.
         .compositingGroup()
         // An empty asynchronous canvas, like the scale and connectors behind Scheduled, has
@@ -1182,6 +1190,7 @@ struct DayView: View {
             // this the tracks and the review filter's orange swapped in one frame.
             .animation(reviewAnimation, value: filter)
         }
+        .animation(FocusedItemMotion.animation(reduceMotion: reduceMotion), value: Set(items.map(\.id)))
         .animation(ItemStatusMotion.animation(reduceMotion: reduceMotion), value: active.map(\.id))
         .accessibilityElement(children: .contain)
         // Drive the measured layout itself, including its first filter change.
@@ -2203,7 +2212,7 @@ private struct TimelineOverflowIndicators: View {
     let insets: EdgeInsets
     let date: Date
     let relativeDateLabel: String
-    let calendarPicks: Int
+    let datePillRequests: Int
     let calendarIsOpen: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showingRelativeDate = true
@@ -2214,7 +2223,7 @@ private struct TimelineOverflowIndicators: View {
     private var pillAnimation: Animation? { reduceMotion ? nil : .easeInOut(duration: 0.25) }
     private struct RelativeDateShowing: Equatable {
         let date: Date
-        let calendarPicks: Int
+        let datePillRequests: Int
         let calendarIsOpen: Bool
     }
     /// How far the counts sit from the glass of the top controls and the dock.
@@ -2255,7 +2264,7 @@ private struct TimelineOverflowIndicators: View {
         // bounds plus the margins again, a row still in plain view counted as out of sight.
         .onAppear { overflow.reach = EdgeInsets(top: 10, leading: 0, bottom: 26, trailing: 0) }
         // Only these small overlays observe the timer; it never rebuilds the pager or day list.
-        .task(id: RelativeDateShowing(date: date, calendarPicks: calendarPicks, calendarIsOpen: calendarIsOpen)) {
+        .task(id: RelativeDateShowing(date: date, datePillRequests: datePillRequests, calendarIsOpen: calendarIsOpen)) {
             guard !calendarIsOpen else { showingRelativeDate = false; return }
             showingRelativeDate = true
             do {
@@ -3432,13 +3441,16 @@ private struct DayPager: UIViewControllerRepresentable {
             guard !dragging, animator == nil, requestedDay == day, !interaction.holdsPageWork else { return }
             if displayedRevision != latestRevision {
                 let filterChanged = displayedRevision.map { $0.filter != latestRevision.filter } ?? false
+                let membershipChanged = displayedRevision.map {
+                    Set($0.items.map(\.id)) != Set(latestRevision.items.map(\.id))
+                } ?? false
                 let statusChanged = displayedRevision.map {
                     $0.items.map(\.isSettled) != latestRevision.items.map(\.isSettled)
                 } ?? false
-                if statusChanged && !reduceMotion {
+                if (statusChanged || membershipChanged) && !reduceMotion {
                     // Measuring two offscreen days competes with the visible tick/strike.
                     // Restart the quiet period on another toggle, without delaying the item.
-                    previewWarmAfter = .now.advanced(by: .milliseconds(450))
+                    previewWarmAfter = .now.advanced(by: .milliseconds(membershipChanged ? 700 : 450))
                     warmTask?.cancel()
                     warmTask = nil
                 }
@@ -3449,6 +3461,8 @@ private struct DayPager: UIViewControllerRepresentable {
                 let pageAnimation: Animation?
                 if filterChanged {
                     pageAnimation = reduceMotion ? nil : .smooth(duration: 0.5)
+                } else if membershipChanged {
+                    pageAnimation = FocusedItemMotion.animation(reduceMotion: reduceMotion)
                 } else if statusChanged {
                     pageAnimation = ItemStatusMotion.animation(reduceMotion: reduceMotion)
                 } else {

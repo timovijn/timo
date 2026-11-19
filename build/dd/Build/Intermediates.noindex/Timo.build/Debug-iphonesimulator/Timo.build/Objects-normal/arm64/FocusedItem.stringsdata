@@ -7,7 +7,31 @@
         "key": "Moves this item to start today at the current time, keeping its duration",
         "location": {
           "startingColumn": 32,
-          "startingLine": 88
+          "startingLine": 110
+        }
+      },
+      {
+        "comment": "",
+        "key": "Showing choices",
+        "location": {
+          "startingColumn": 52,
+          "startingLine": 119
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 72,
+          "startingLine": 119
+        }
+      },
+      {
+        "comment": "",
+        "key": "Moves this item to the next day, week or month",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 120
         }
       },
       {
@@ -15,23 +39,31 @@
         "key": "Opens a copy of this item to change and save",
         "location": {
           "startingColumn": 28,
-          "startingLine": 97
+          "startingLine": 129
         }
       },
       {
         "comment": "",
         "key": "Showing choices",
         "location": {
-          "startingColumn": 48,
-          "startingLine": 129
+          "startingColumn": 50,
+          "startingLine": 159
         }
       },
       {
         "comment": "",
         "key": "",
         "location": {
-          "startingColumn": 68,
-          "startingLine": 129
+          "startingColumn": 70,
+          "startingLine": 159
+        }
+      },
+      {
+        "comment": "",
+        "key": "Moves this item to %@",
+        "location": {
+          "startingColumn": 57,
+          "startingLine": 51
         }
       },
       {
@@ -39,7 +71,15 @@
         "key": "Start now",
         "location": {
           "startingColumn": 23,
-          "startingLine": 86
+          "startingLine": 108
+        }
+      },
+      {
+        "comment": "",
+        "key": "Push",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 114
         }
       },
       {
@@ -47,7 +87,7 @@
         "key": "Duplicate",
         "location": {
           "startingColumn": 19,
-          "startingLine": 95
+          "startingLine": 127
         }
       },
       {
@@ -55,7 +95,7 @@
         "key": "Share",
         "location": {
           "startingColumn": 23,
-          "startingLine": 103
+          "startingLine": 135
         }
       },
       {
@@ -63,7 +103,7 @@
         "key": "Uncancel",
         "location": {
           "startingColumn": 47,
-          "startingLine": 116
+          "startingLine": 148
         }
       },
       {
@@ -71,7 +111,7 @@
         "key": "Cancel",
         "location": {
           "startingColumn": 60,
-          "startingLine": 116
+          "startingLine": 148
         }
       },
       {
@@ -79,7 +119,7 @@
         "key": "Delete",
         "location": {
           "startingColumn": 26,
-          "startingLine": 128
+          "startingLine": 154
         }
       },
       {
@@ -87,7 +127,7 @@
         "key": "Show details and actions",
         "location": {
           "startingColumn": 41,
-          "startingLine": 204
+          "startingLine": 375
         }
       }
     ]

@@ -126,6 +126,16 @@
     "swift-dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/PlannerTests.swiftdeps",
     "swiftmodule" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/PlannerTests~partial.swiftmodule"
   },
+  "/Users/timovijn/Timo/GitHub/timo/Tests/TimoCoreTests/PushTests.swift" : {
+    "const-values" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/PushTests.swiftconstvalues",
+    "dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/PushTests.d",
+    "diagnostics" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/PushTests.dia",
+    "index-unit-output-path" : "/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/PushTests.o",
+    "llvm-bc" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/PushTests.bc",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/PushTests.o",
+    "swift-dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/PushTests.swiftdeps",
+    "swiftmodule" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/PushTests~partial.swiftmodule"
+  },
   "/Users/timovijn/Timo/GitHub/timo/Tests/TimoCoreTests/QuickEntryTests.swift" : {
     "const-values" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/QuickEntryTests.swiftconstvalues",
     "dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/QuickEntryTests.d",

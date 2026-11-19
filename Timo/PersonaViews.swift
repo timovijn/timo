@@ -623,50 +623,66 @@ struct RepeatDeletionButtons: View {
     @EnvironmentObject private var store: PlanStore
 
     var body: some View {
-        if store.startsSeries(item) {
-            Button("Original item only", role: .destructive) { perform(.occurrence) }
-        } else {
-            Button("This linked item only", role: .destructive) { perform(.occurrence) }
-            Button("This and following linked items", role: .destructive) { perform(.following) }
+        ForEach(Self.choices(startsSeries: store.startsSeries(item)), id: \.scope) { choice in
+            Button(choice.title, role: .destructive) { perform(choice.scope) }
         }
-        Button("Original and all linked items", role: .destructive) { perform(.all) }
+    }
+    static func choices(startsSeries: Bool) -> [(title: LocalizedStringKey, scope: RepeatDeletion)] {
+        startsSeries
+            ? [("Original item only", .occurrence), ("Original and all linked items", .all)]
+            : [("This linked item only", .occurrence), ("This and following linked items", .following),
+               ("Original and all linked items", .all)]
     }
 }
 
-/// The Undo offered after a deletion: a small glass capsule above the dock naming what went,
+/// The Undo offered after Delete or Push: a small glass capsule above the dock naming what went,
 /// like Mail's Undo Send. It stays a few seconds (longer with VoiceOver, which also announces
 /// it); the system's own undo (shake, or three fingers) works as well.
-struct UndoDeletionBar: View {
+struct UndoActionBar: View {
     @EnvironmentObject private var store: PlanStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
 
     var body: some View {
-        if let deletion = store.lastDeletion {
+        if let action = store.lastUndo {
             HStack(spacing: 14) {
-                Text("Deleted “\(deletion.title)”")
+                undoMessage(action)
                     .lineLimit(1)
                     .foregroundStyle(.secondary)
                 Button("Undo") {
-                    withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) { store.undo(deletion) }
+                    if !reduceMotion { FrameRateBoost.shared.request(for: .milliseconds(700)) }
+                    withAnimation(FocusedItemMotion.animation(reduceMotion: reduceMotion)) { store.undo(action) }
                 }
                 .fontWeight(.semibold)
-                .accessibilityHint("Puts back what was deleted")
+                .accessibilityHint("Reverses the last action")
             }
             .font(.subheadline)
             .padding(.horizontal, 18).padding(.vertical, 10)
             .glassEffect(.regular.interactive(), in: .capsule)
             .glassEffectTransition(.materialize)
             .padding(.horizontal, 24)
-            .task(id: deletion.id) {
-                AccessibilityNotification.Announcement("Deleted \(deletion.title). Undo available.").post()
+            .task(id: action.id) {
+                AccessibilityNotification.Announcement(announcement(action)).post()
                 try? await Task.sleep(for: .seconds(voiceOver ? 10 : 5))
-                if store.lastDeletion?.id == deletion.id {
-                    withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) { store.lastDeletion = nil }
+                if store.lastUndo?.id == action.id {
+                    withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) { store.lastUndo = nil }
                 }
             }
         }
     }
+    private func undoMessage(_ action: PlanUndo) -> Text {
+        switch action {
+        case .deletion: Text("Deleted “\(action.title)”")
+        case .push: Text("Pushed “\(action.title)”")
+        }
+    }
+    private func announcement(_ action: PlanUndo) -> String {
+        switch action {
+        case .deletion: String(localized: "Deleted \(action.title). Undo available.")
+        case .push: String(localized: "Pushed \(action.title). Undo available.")
+        }
+    }
+
 }
 
 extension View {

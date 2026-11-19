@@ -7,7 +7,7 @@
         "key": "Add checklist entry",
         "location": {
           "startingColumn": 41,
-          "startingLine": 54
+          "startingLine": 73
         }
       },
       {
@@ -15,31 +15,7 @@
         "key": "Remove entry: %@",
         "location": {
           "startingColumn": 46,
-          "startingLine": 34
-        }
-      },
-      {
-        "comment": "",
-        "key": "Done",
-        "location": {
-          "startingColumn": 56,
-          "startingLine": 29
-        }
-      },
-      {
-        "comment": "",
-        "key": "Not done",
-        "location": {
-          "startingColumn": 65,
-          "startingLine": 29
-        }
-      },
-      {
-        "comment": "",
-        "key": "Remove entry: %@",
-        "location": {
-          "startingColumn": 46,
-          "startingLine": 43
+          "startingLine": 62
         }
       },
       {
@@ -47,7 +23,47 @@
         "key": "Entry",
         "location": {
           "startingColumn": 67,
-          "startingLine": 52
+          "startingLine": 71
+        }
+      },
+      {
+        "comment": "",
+        "key": "Remove entry: %@",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 129
+        }
+      },
+      {
+        "comment": "",
+        "key": "Done",
+        "location": {
+          "startingColumn": 40,
+          "startingLine": 124
+        }
+      },
+      {
+        "comment": "",
+        "key": "Not done",
+        "location": {
+          "startingColumn": 49,
+          "startingLine": 124
+        }
+      },
+      {
+        "comment": "",
+        "key": "Move earlier",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 147
+        }
+      },
+      {
+        "comment": "",
+        "key": "Move later",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 150
         }
       },
       {
@@ -55,7 +71,7 @@
         "key": "Entry",
         "location": {
           "startingColumn": 47,
-          "startingLine": 172
+          "startingLine": 325
         }
       },
       {
@@ -63,7 +79,7 @@
         "key": "Done",
         "location": {
           "startingColumn": 52,
-          "startingLine": 283
+          "startingLine": 440
         }
       },
       {
@@ -71,7 +87,7 @@
         "key": "Not done",
         "location": {
           "startingColumn": 61,
-          "startingLine": 283
+          "startingLine": 440
         }
       },
       {
@@ -79,7 +95,7 @@
         "key": "Show all %lld",
         "location": {
           "startingColumn": 26,
-          "startingLine": 289
+          "startingLine": 446
         }
       }
     ]

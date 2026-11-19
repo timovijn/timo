@@ -1,0 +1,23 @@
+{
+  "/Users/timovijn/Timo/GitHub/timo/Tests/TimoCoreTests/DayProgressTests.swift" : {
+    "const-values" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/DayProgressTests.swiftconstvalues",
+    "dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/DayProgressTests.d",
+    "diagnostics" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/DayProgressTests.dia",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/DayProgressTests.o",
+    "swift-dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/DayProgressTests.swiftdeps"
+  },
+  "/Users/timovijn/Timo/GitHub/timo/Tests/TimoCoreTests/LinkedDateRangeTests.swift" : {
+    "const-values" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/LinkedDateRangeTests.swiftconstvalues",
+    "dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/LinkedDateRangeTests.d",
+    "diagnostics" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/LinkedDateRangeTests.dia",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/LinkedDateRangeTests.o",
+    "swift-dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/LinkedDateRangeTests.swiftdeps"
+  },
+  "/Users/timovijn/Timo/GitHub/timo/Tests/TimoCoreTests/LinkedRestoreTests.swift" : {
+    "const-values" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/LinkedRestoreTests.swiftconstvalues",
+    "dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/LinkedRestoreTests.d",
+    "diagnostics" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/LinkedRestoreTests.dia",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/LinkedRestoreTests.o",
+    "swift-dependencies" : "/Users/timovijn/Timo/GitHub/timo/.build/out/Intermediates.noindex/TimoCore.build/Debug/TimoCoreTests-p.build/Objects-normal/arm64/LinkedRestoreTests.swiftdeps"
+  }
+}

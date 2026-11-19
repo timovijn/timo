@@ -65,6 +65,10 @@ struct ItemEditor: View {
     @State private var formFrame = CGRect.zero
     @State private var keyboardFrame = CGRect.zero
     @State private var keyboardOverlap: CGFloat = 0
+    /// Extra scroll room below the form while typing, so a field near the end (a new item's
+    /// checklist, say) can still reach the reading line `revealTextInput` places it on, as an
+    /// existing item's further sections allow. Grows as needed and goes with the keyboard.
+    @State private var inputRoom: CGFloat = 0
     @State private var editorGeometry = EditorGeometry()
     @State private var revealTask: Task<Void, Never>?
     @State private var showingLinkedItems = false
@@ -401,7 +405,7 @@ struct ItemEditor: View {
             // content under the keyboard as it rises, and the shared input scroll places
             // the field being typed in, where the list's keyboard avoidance would otherwise push it.
             .ignoresSafeArea(.keyboard, edges: .bottom)
-            .contentMargins(.bottom, keyboardOverlap, for: .scrollContent)
+            .contentMargins(.bottom, keyboardOverlap + inputRoom, for: .scrollContent)
             .onPreferenceChange(EditorKeyboardRegionsKey.self) { editorGeometry.keyboardRetainingRegions = $0 }
             // Observe the actual native field, including SwiftUI's location/person and notes
             // fields. No row anchors or second scroll-to-visible pass compete with this path.
@@ -435,7 +439,7 @@ struct ItemEditor: View {
                 editorGeometry.focusedInput = nil
                 keyboardUp = false
                 keyboardFrame = .zero
-                withAnimation(keyboardAnimation(note)) { keyboardOverlap = 0 }
+                withAnimation(keyboardAnimation(note)) { keyboardOverlap = 0; inputRoom = 0 }
             }
             .onChange(of: item.minute != nil || item.endDay != nil) { _, scheduledRange in
                 guard !existing, !isDuplicate, !carryChosen else { return }
@@ -580,8 +584,22 @@ struct ItemEditor: View {
             let caretY = field.convert(caret, to: window).midY
             let desiredY = top + max(visibleBottom - top, 1) * 0.35
             let minimum = -insets.top
-            let maximum = max(minimum, scroll.contentSize.height - scroll.bounds.height + insets.bottom)
-            let y = min(maximum, max(minimum, scroll.contentOffset.y + caretY - desiredY))
+            var maximum = max(minimum, scroll.contentSize.height - scroll.bounds.height + insets.bottom)
+            let wanted = scroll.contentOffset.y + caretY - desiredY
+            if wanted > maximum + 1 {
+                // Too little form below the field to scroll it up to the line: add the
+                // difference as room at the bottom and let the form lay it out first.
+                inputRoom += wanted - maximum
+                for _ in 0..<2 {
+                    await withCheckedContinuation { continuation in
+                        DispatchQueue.main.async { continuation.resume() }
+                    }
+                    guard !Task.isCancelled else { return }
+                }
+                scroll.layoutIfNeeded()
+                maximum = max(minimum, scroll.contentSize.height - scroll.bounds.height + scroll.adjustedContentInset.bottom)
+            }
+            let y = min(maximum, max(minimum, wanted))
             let offset = CGPoint(x: scroll.contentOffset.x, y: y)
             guard abs(offset.y - scroll.contentOffset.y) > 1 else { return }
             if reduceMotion {

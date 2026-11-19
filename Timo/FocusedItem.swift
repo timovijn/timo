@@ -18,11 +18,17 @@ struct InlineFocusedDetails: View {
     @EnvironmentObject private var store: PlanStore
     @Environment(\.undoManager) private var undoManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var choosingDeletion = false
+    /// Both choice groups stay mounted so rapid taps can reverse the same native animation.
+    @State private var choices: Choices?
+    private enum Choices: Int { case push = 1, delete = 2 }
     @State private var naturalHeight: CGFloat = 0
+    @State private var presentedItem: PlanItem?
+    @State private var fullyClosed = true
 
     var body: some View {
-        let displayedItem = item
+        // Freeze only the closing phase. Once hidden, measure the current actions so the next
+        // opening reveals the new layout instead of rearranging the old one as it expands.
+        let displayedItem = expanded || fullyClosed ? item : (presentedItem ?? item)
         return VStack(alignment: .leading, spacing: 10) {
             // Attachments sit one pill gap above the actions, like a wrapped row of them.
             VStack(alignment: .leading, spacing: 6) {
@@ -33,16 +39,27 @@ struct InlineFocusedDetails: View {
                     AttachmentPills(attachments: .constant(displayedItem.attachments))
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                FlowLayout(spacing: 6) { actions(displayedItem) }
+                FocusedActionsLayout(spacing: 6) {
+                    actions(displayedItem)
+                    if !displayedItem.isSettled {
+                        choiceGroup(.push) {
+                            ForEach(PushInterval.allCases) { interval in
+                                Button(interval.title) { push(interval) }
+                                    .accessibilityHint(Text("Moves this item to \(interval.day(after: day).date().formatted(.dateTime.weekday(.wide).day().month(.wide)))"))
+                            }
+                        }
+                    }
+                    if displayedItem.seriesID != nil {
+                        choiceGroup(.delete) {
+                            ForEach(RepeatDeletionButtons.choices(startsSeries: store.startsSeries(item)), id: \.scope) { choice in
+                                Button(choice.title, role: .destructive) { delete(choice.scope) }
+                            }
+                        }
+                    }
+                }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 // Move the action container as one unit, including a relabelled Cancel pill.
                 .geometryGroup()
-            }
-            if choosingDeletion {
-                VStack(alignment: .leading, spacing: 6) {
-                    RepeatDeletionButtons(item: item) { delete($0) }
-                }
-                .transition(.opacity)
             }
         }
         .padding(.leading, 52).padding(.bottom, 12)
@@ -61,13 +78,31 @@ struct InlineFocusedDetails: View {
         .accessibilityHidden(!expanded)
         .accessibilityAction(.escape, close)
         .modifier(InlineFocusCompletion(progress: expanded ? 1 : 0) {
+            guard !expanded else { return }
+            refreshClosedContent()
             if let token { collapsed(token) }
         })
-        .onChange(of: expanded) { _, expanded in
-            if expanded { heightChanged(naturalHeight) }
+        .onChange(of: expanded, initial: true) { _, expanded in
+            if expanded {
+                fullyClosed = false
+                presentedItem = item
+                heightChanged(naturalHeight)
+            } else if reduceMotion {
+                refreshClosedContent()
+            }
         }
-        .onChange(of: token) { _, token in
-            if token == nil { choosingDeletion = false }
+        .onChange(of: item) { _, item in
+            if expanded { presentedItem = item }
+        }
+    }
+
+    private func refreshClosedContent() {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            fullyClosed = true
+            presentedItem = item
+            choices = nil
         }
     }
 
@@ -86,6 +121,16 @@ struct InlineFocusedDetails: View {
                 Label("Start now", systemImage: "play.circle")
             }
             .accessibilityHint("Moves this item to start today at the current time, keeping its duration")
+        }
+        if !displayedItem.isSettled {
+            Button { toggle(.push) } label: {
+                Label("Push", systemImage: choices == .push ? "arrow.forward.circle.fill" : "arrow.forward.circle")
+            }
+            .buttonStyle(FocusedButtonStyle(selected: choices == .push))
+            .layoutValue(key: FocusedActionsLayout.Owner.self, value: Choices.push.rawValue)
+            .accessibilityAddTraits(choices == .push ? .isSelected : [])
+            .accessibilityValue(choices == .push ? "Showing choices" : "")
+            .accessibilityHint("Moves this item to the next day, week or month")
         }
         Button {
             guard let current = store.item(item.id) else { return }
@@ -118,22 +163,110 @@ struct InlineFocusedDetails: View {
                 .contentTransition(.opacity)
         }
         Button(role: .destructive) {
-            if item.seriesID == nil { delete(.all) }
-            else {
-                withAnimation(FocusedItemMotion.animation(reduceMotion: reduceMotion)) {
-                    choosingDeletion.toggle()
-                    contentChanged()
-                }
-            }
-        } label: { Label("Delete", systemImage: "trash") }
-        .accessibilityValue(choosingDeletion ? "Showing choices" : "")
+            if item.seriesID == nil { delete(.all) } else { toggle(.delete) }
+        } label: { Label("Delete", systemImage: choices == .delete ? "trash.fill" : "trash") }
+        // Held down while its choices show, so it reads as the pill they belong to.
+        .buttonStyle(FocusedButtonStyle(selected: choices == .delete))
+        .layoutValue(key: FocusedActionsLayout.Owner.self, value: Choices.delete.rawValue)
+        .accessibilityAddTraits(choices == .delete ? .isSelected : [])
+        .accessibilityValue(choices == .delete ? "Showing choices" : "")
+    }
+
+    private func choiceGroup<Content: View>(_ pill: Choices, @ViewBuilder content: () -> Content) -> some View {
+        FlowLayout(spacing: 6) { content() }
+        // Match the filter/details reveal: measure the full endpoint before animating its frame.
+        // An animatable nested Layout exposed an intermediate height to the row's size cache.
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.bottom, 6)
+        .frame(height: choices == pill ? nil : 0, alignment: .top)
+        .clipped()
+        .opacity(choices == pill ? 1 : 0)
+        .allowsHitTesting(choices == pill)
+        .accessibilityHidden(choices != pill)
+        .layoutValue(key: FocusedActionsLayout.ChoiceOwner.self, value: pill.rawValue)
+    }
+
+    /// One reversible animation for the reveal, the other action rows and the selected fill.
+    private func toggle(_ pill: Choices) {
+        if !reduceMotion { FrameRateBoost.shared.request(for: .milliseconds(500)) }
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.32)) {
+            choices = choices == pill ? nil : pill
+            contentChanged()
+        }
+    }
+    private func push(_ interval: PushInterval) {
+        guard let current = store.item(item.id) else { return }
+        if !reduceMotion { FrameRateBoost.shared.request(for: .milliseconds(700)) }
+        // Done with the item, like Start now: the menu closes as it moves away.
+        close()
+        withAnimation(FocusedItemMotion.animation(reduceMotion: reduceMotion)) {
+            store.push(current, from: day, by: interval, undoManager: undoManager)
+            contentChanged()
+        }
     }
 
     private func delete(_ scope: RepeatDeletion) {
-        withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) {
+        if !reduceMotion { FrameRateBoost.shared.request(for: .milliseconds(700)) }
+        // Remove the expanded card as one piece. A separate close would also collapse its
+        // details during removal, starting a second layout animation on the same rows.
+        withAnimation(FocusedItemMotion.animation(reduceMotion: reduceMotion)) {
             store.delete(item, children: false, scope: scope, undoManager: undoManager)
         }
-        close()
+    }
+}
+
+/// Normal-sized choice groups sit below their action's row; the remaining rows move as a unit.
+private struct FocusedActionsLayout: Layout {
+    var spacing: CGFloat
+    struct Owner: LayoutValueKey { static let defaultValue = 0 }
+    struct ChoiceOwner: LayoutValueKey { static let defaultValue = 0 }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let size = arrange(proposal.width ?? .infinity, subviews).size
+        return CGSize(width: proposal.width.map { $0.isFinite ? $0 : size.width } ?? size.width, height: size.height)
+    }
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for (view, frame) in zip(subviews, arrange(bounds.width, subviews).frames) {
+            view.place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                       anchor: .topLeading, proposal: ProposedViewSize(frame.size))
+        }
+    }
+    private func arrange(_ width: CGFloat, _ subviews: Subviews) -> (frames: [CGRect], size: CGSize) {
+        let sizes = subviews.map { view in
+            var size = view.sizeThatFits(view[ChoiceOwner.self] == 0
+                ? .unspecified : ProposedViewSize(width: width, height: nil))
+            size.width = min(size.width, width)
+            return size
+        }
+        var lines: [[Int]] = [], x: CGFloat = 0
+        for index in subviews.indices where subviews[index][ChoiceOwner.self] == 0 {
+            if let last = lines.last, !last.isEmpty, x + sizes[index].width <= width + 0.5 {
+                lines[lines.count - 1].append(index)
+            } else {
+                lines.append([index]); x = 0
+            }
+            x += sizes[index].width + spacing
+        }
+        var frames = Array(repeating: CGRect.zero, count: subviews.count)
+        var y: CGFloat = 0, maxX: CGFloat = 0
+        for line in lines {
+            x = 0
+            var height: CGFloat = 0
+            for index in line {
+                frames[index] = CGRect(origin: CGPoint(x: x, y: y), size: sizes[index])
+                x += sizes[index].width + spacing
+                height = max(height, sizes[index].height)
+            }
+            maxX = max(maxX, x - spacing)
+            y += height + spacing
+            for owner in line.map({ subviews[$0][Owner.self] }) where owner != 0 {
+                for index in subviews.indices where subviews[index][ChoiceOwner.self] == owner {
+                    frames[index] = CGRect(origin: CGPoint(x: 0, y: y), size: sizes[index])
+                    y += sizes[index].height
+                }
+            }
+        }
+        return (frames, CGSize(width: maxX, height: max(0, y - spacing)))
     }
 }
 
@@ -171,8 +304,10 @@ private struct FocusedActionLabelStyle: LabelStyle {
     }
 }
 
-/// A compact capsule with its icon and title centered as one group.
+/// A compact capsule with its icon and title centered as one group. `selected` keeps it looking
+/// pressed, in a tint of its colour, like Delete while a repeating item's choices are open.
 private struct FocusedButtonStyle: ButtonStyle {
+    var selected = false
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .labelStyle(FocusedActionLabelStyle())
@@ -183,8 +318,13 @@ private struct FocusedButtonStyle: ButtonStyle {
             .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 12)
             .frame(minHeight: 36, alignment: .center)
-            .background(Color.primary.opacity(configuration.isPressed ? 0.14 : 0.07), in: .capsule)
+            .background(fill(configuration), in: .capsule)
             .contentShape(.capsule)
+    }
+    private func fill(_ configuration: Configuration) -> Color {
+        guard selected else { return Color.primary.opacity(configuration.isPressed ? 0.14 : 0.07) }
+        let tint = configuration.role == .destructive ? Color.red : .primary
+        return tint.opacity(configuration.isPressed ? 0.24 : 0.16)
     }
 }
 

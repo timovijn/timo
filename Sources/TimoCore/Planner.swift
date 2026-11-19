@@ -55,7 +55,7 @@ extension Day {
 /// A focus in someone's life that an item can belong to. The set is fixed for now.
 /// Items store the raw value, so a persona this version doesn't know reads as none.
 public enum Persona: String, Codable, CaseIterable, Identifiable {
-    case health, work, family, friends, personal
+    case health, work, family, friends, travel, personal
     public var id: String { rawValue }
     public var title: String {
         switch self {
@@ -63,6 +63,7 @@ public enum Persona: String, Codable, CaseIterable, Identifiable {
         case .work: return "Work"
         case .family: return "Family"
         case .friends: return "Friends"
+        case .travel: return "Travel"
         case .personal: return "Personal"
         }
     }
@@ -71,6 +72,28 @@ public enum Persona: String, Codable, CaseIterable, Identifiable {
     public static func ordered<S: Sequence>(_ personas: S) -> [Persona] where S.Element == Persona {
         let chosen = Set(personas)
         return allCases.filter(chosen.contains)
+    }
+}
+
+/// How far the focussed card's Push moves an item on: a day, a week or a month from the day
+/// it's shown on.
+public enum PushInterval: CaseIterable, Identifiable {
+    case day, week, month
+    public var id: Self { self }
+    public var title: String {
+        switch self {
+        case .day: return "Next day"
+        case .week: return "Next week"
+        case .month: return "Next month"
+        }
+    }
+    public func day(after shown: Day, calendar: Calendar = .current) -> Day {
+        let (component, value): (Calendar.Component, Int) = switch self {
+        case .day: (.day, 1)
+        case .week: (.day, 7)
+        case .month: (.month, 1)
+        }
+        return Day(calendar.date(byAdding: component, value: value, to: shown.date(calendar: calendar))!, calendar: calendar)
     }
 }
 
@@ -664,6 +687,25 @@ public struct PlanDeletion: Identifiable {
     public let removed: [PlanItem]
     public let previousPlans: [RepeatingPlan]
     public let unlinked: [UUID: UUID]
+}
+
+/// The schedule and repeating link changed by one Push action.
+public struct PlanPush: Identifiable {
+    public let id = UUID()
+    public let original: PlanItem
+    public let moved: PlanItem
+    public let addedExclusion: LinkedItemOrigin?
+}
+
+/// One shared Undo offer for the most recent destructive or scheduling action.
+public enum PlanUndo: Identifiable {
+    case deletion(PlanDeletion), push(PlanPush)
+    public var id: UUID {
+        switch self { case .deletion(let value): value.id; case .push(let value): value.id }
+    }
+    public var title: String {
+        switch self { case .deletion(let value): value.title; case .push(let value): value.original.title }
+    }
 }
 
 public enum PlannerError: LocalizedError {
@@ -1435,6 +1477,53 @@ public enum Planner {
         else { items[index] = updated }
         return true
     }
+    /// Push only this item on from the day it's shown on, keeping its time, duration and the
+    /// offsets of its reminders. A linked occurrence detaches instead of moving its series.
+    @discardableResult public static func push(_ id: UUID, from shown: Day, by interval: PushInterval, items: inout [PlanItem],
+                                               series: inout [RepeatingPlan], calendar: Calendar = .current) -> Bool {
+        guard let index = items.firstIndex(where: { $0.id == id }), !items[index].on(shown).isSettled else { return false }
+        var updated = items[index]
+        updateStart(&updated, day: interval.day(after: shown, calendar: calendar), minute: updated.minute, calendar: calendar)
+        if updated.seriesID != nil { detach(updated, items: &items, series: &series, calendar: calendar) }
+        else { items[index] = updated }
+        return true
+    }
+    /// Capture only the item and the occurrence exclusion changed by Push.
+    public static func pushUndo(for id: UUID, before: (items: [PlanItem], series: [RepeatingPlan]),
+                                after: (items: [PlanItem], series: [RepeatingPlan])) -> PlanPush? {
+        guard let original = before.items.first(where: { $0.id == id }),
+              let moved = after.items.first(where: { $0.id == id }), original != moved else { return nil }
+        var exclusion: LinkedItemOrigin?
+        if let seriesID = original.seriesID,
+           let old = before.series.first(where: { $0.id == seriesID }),
+           let new = after.series.first(where: { $0.id == seriesID }) {
+            let day = original.occurrenceDay ?? original.day
+            if !old.excludedDays.contains(day), new.excludedDays.contains(day) {
+                exclusion = LinkedItemOrigin(seriesID: seriesID, day: day)
+            }
+        }
+        return PlanPush(original: original, moved: moved, addedExclusion: exclusion)
+    }
+
+    public static func undo(_ push: PlanPush, items: inout [PlanItem], series: inout [RepeatingPlan]) {
+        guard let index = items.firstIndex(where: { $0.id == push.original.id }) else { return }
+        // Do not recreate a repeating link if its series has since been deleted.
+        if let id = push.original.seriesID, !series.contains(where: { $0.id == id }) { return }
+        func restore<Value: Equatable>(_ key: WritableKeyPath<PlanItem, Value>) {
+            if push.original[keyPath: key] != push.moved[keyPath: key] {
+                items[index][keyPath: key] = push.original[keyPath: key]
+            }
+        }
+        restore(\.day); restore(\.minute); restore(\.end); restore(\.endDay)
+        restore(\.reminders); restore(\.dailyStatuses); restore(\.excludedRangeDays)
+        restore(\.suggestionDismissed); restore(\.originalDay)
+        restore(\.seriesID); restore(\.occurrenceDay); restore(\.detachedFrom)
+        restore(\.repeatRule); restore(\.repeatWeekdays)
+        if let origin = push.addedExclusion, let index = series.firstIndex(where: { $0.id == origin.seriesID }) {
+            series[index].excludedDays.removeAll { $0 == origin.day }
+        }
+    }
+
     public static func reschedule(_ item: inout PlanItem, to day: Day, minute: Int?, end: Date? = nil) {
         updateStart(&item, day: day, minute: minute)
         item.end = end
