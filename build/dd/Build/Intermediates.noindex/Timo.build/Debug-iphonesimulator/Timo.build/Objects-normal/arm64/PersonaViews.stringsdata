@@ -31,7 +31,7 @@
         "key": "%lld to review",
         "location": {
           "startingColumn": 30,
-          "startingLine": 248
+          "startingLine": 253
         }
       },
       {
@@ -39,7 +39,7 @@
         "key": "%lld with reminders",
         "location": {
           "startingColumn": 30,
-          "startingLine": 250
+          "startingLine": 255
         }
       },
       {
@@ -47,7 +47,7 @@
         "key": "%lld with deadlines",
         "location": {
           "startingColumn": 30,
-          "startingLine": 252
+          "startingLine": 257
         }
       },
       {
@@ -55,7 +55,7 @@
         "key": "%lld/%lld complete",
         "location": {
           "startingColumn": 30,
-          "startingLine": 254
+          "startingLine": 259
         }
       },
       {
@@ -63,7 +63,7 @@
         "key": "Nothing in %@ yet",
         "location": {
           "startingColumn": 31,
-          "startingLine": 261
+          "startingLine": 266
         }
       },
       {
@@ -71,7 +71,7 @@
         "key": "Give an item the %@ persona and it will be gathered here, with everything before and after it.",
         "location": {
           "startingColumn": 30,
-          "startingLine": 263
+          "startingLine": 268
         }
       },
       {
@@ -79,7 +79,39 @@
         "key": "Add an item",
         "location": {
           "startingColumn": 32,
-          "startingLine": 265
+          "startingLine": 270
+        }
+      },
+      {
+        "comment": "",
+        "key": "Today, above",
+        "location": {
+          "startingColumn": 45,
+          "startingLine": 413
+        }
+      },
+      {
+        "comment": "",
+        "key": "Today, below",
+        "location": {
+          "startingColumn": 62,
+          "startingLine": 413
+        }
+      },
+      {
+        "comment": "",
+        "key": "Scrolls back to today",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 414
+        }
+      },
+      {
+        "comment": "",
+        "key": "Today",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 400
         }
       },
       {
@@ -87,7 +119,7 @@
         "key": "Lists repeating items three months further ahead",
         "location": {
           "startingColumn": 28,
-          "startingLine": 338
+          "startingLine": 436
         }
       },
       {
@@ -95,7 +127,7 @@
         "key": "Show 3 more months of repeating items",
         "location": {
           "startingColumn": 19,
-          "startingLine": 333
+          "startingLine": 431
         }
       },
       {
@@ -103,7 +135,7 @@
         "key": "Original item only",
         "location": {
           "startingColumn": 17,
-          "startingLine": 632
+          "startingLine": 730
         }
       },
       {
@@ -111,7 +143,7 @@
         "key": "Original and all linked items",
         "location": {
           "startingColumn": 54,
-          "startingLine": 632
+          "startingLine": 730
         }
       },
       {
@@ -119,7 +151,7 @@
         "key": "This linked item only",
         "location": {
           "startingColumn": 17,
-          "startingLine": 633
+          "startingLine": 731
         }
       },
       {
@@ -127,7 +159,7 @@
         "key": "This and following linked items",
         "location": {
           "startingColumn": 57,
-          "startingLine": 633
+          "startingLine": 731
         }
       },
       {
@@ -135,15 +167,7 @@
         "key": "Original and all linked items",
         "location": {
           "startingColumn": 17,
-          "startingLine": 634
-        }
-      },
-      {
-        "comment": "",
-        "key": "Deleted “%@”",
-        "location": {
-          "startingColumn": 22,
-          "startingLine": 649
+          "startingLine": 732
         }
       },
       {
@@ -151,15 +175,47 @@
         "key": "Undo",
         "location": {
           "startingColumn": 24,
-          "startingLine": 652
+          "startingLine": 750
         }
       },
       {
         "comment": "",
-        "key": "Puts back what was deleted",
+        "key": "Reverses the last action",
         "location": {
           "startingColumn": 36,
-          "startingLine": 656
+          "startingLine": 755
+        }
+      },
+      {
+        "comment": "",
+        "key": "Deleted “%@”",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 773
+        }
+      },
+      {
+        "comment": "",
+        "key": "Pushed “%@”",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 774
+        }
+      },
+      {
+        "comment": "",
+        "key": "Deleted %@. Undo available.",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 779
+        }
+      },
+      {
+        "comment": "",
+        "key": "Pushed %@. Undo available.",
+        "location": {
+          "startingColumn": 39,
+          "startingLine": 780
         }
       }
     ]

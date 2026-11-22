@@ -6,8 +6,16 @@
         "comment": "",
         "key": "Delete",
         "location": {
-          "startingColumn": 36,
-          "startingLine": 399
+          "startingColumn": 48,
+          "startingLine": 407
+        }
+      },
+      {
+        "comment": "",
+        "key": "Push",
+        "location": {
+          "startingColumn": 44,
+          "startingLine": 408
         }
       }
     ]

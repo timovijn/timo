@@ -210,6 +210,10 @@ struct PersonaHistoryView: View {
     let row: (PlanItem, Day) -> AnyView
     @EnvironmentObject private var store: PlanStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Today's day in the page, and the part of the page in sight, for the Today pill.
+    @State private var todayFrame: (minY: CGFloat, maxY: CGFloat)?
+    @State private var sight = PageSight()
+    private static let space = "persona-page"
 
     var body: some View {
         let horizon = Self.horizon(months: months, from: now)
@@ -221,6 +225,7 @@ struct PersonaHistoryView: View {
         }
         let filtered = Self.unique(days.flatMap(\.items)).count
         let more = store.repeats(items, after: horizon)
+        let today = Self.todayAnchor(days, now: now)
         ScrollViewReader { proxy in ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 // The furthest days are at the top, so more of them come in above.
@@ -267,24 +272,40 @@ struct PersonaHistoryView: View {
                     .frame(minHeight: 280)
                 }
                 ForEach(days) { entry in
-                    Text(Self.heading(entry.day, now: now))
-                        .font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 8)
-                        .accessibilityAddTraits(.isHeader)
-                        .id(entry.day)
-                    ForEach(entry.items) { item in
-                        row(item, entry.day)
-                            .padding(.horizontal, 16)
+                    // One group per day, so today's heading and rows are measured together.
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(Self.heading(entry.day, now: now))
+                            .font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 8)
+                            .accessibilityAddTraits(.isHeader)
+                        ForEach(entry.items) { item in
+                            row(item, entry.day)
+                                .padding(.horizontal, 16)
+                        }
                     }
+                    .id(entry.day)
+                    .modifier(TodayFrameReport(isToday: entry.day == today, space: Self.space, frame: $todayFrame))
                 }
                 SettingsLink()
                     .frame(maxWidth: .infinity).padding(.vertical, 28)
             }
             .readableWidth()
             .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: days.flatMap(\.items).map(\.id))
+            .coordinateSpace(name: Self.space)
         }
         .scrollEdgeEffectHidden(true, for: .vertical)
+        .onScrollGeometryChange(for: PageSight.self) { geometry in
+            PageSight(rect: geometry.visibleRect, insets: geometry.contentInsets)
+        } action: { _, sight in
+            self.sight = sight
+        }
+        .overlay {
+            TodayPill(edge: today.flatMap { _ in sight.edge(of: todayFrame) }, sight: sight) {
+                guard let today else { return }
+                withAnimation(reduceMotion ? nil : .smooth(duration: 0.4)) { proxy.scrollTo(today, anchor: .top) }
+            }
+        }
         .modifier(PullsToSearch())
         // Opens on today, with what's ahead above it: once the days generated for the list are in,
         // as they come in above today and would push it out of view.
@@ -321,6 +342,83 @@ struct PersonaHistoryView: View {
         let sameYear = calendar.isDate(date, equalTo: now, toGranularity: .year)
         return sameYear ? date.formatted(.dateTime.weekday(.wide).day().month(.wide))
             : date.formatted(.dateTime.weekday(.wide).day().month(.wide).year())
+    }
+}
+
+/// The part of a persona page in sight, between the glass of the top controls and the dock,
+/// in the page's own coordinates.
+private struct PageSight: Equatable {
+    var rect = CGRect.zero
+    var insets = EdgeInsets()
+    /// The top controls' glass ends 10 points above the bar's edge; the dock's starts 26 points
+    /// into its margin. The same reach as Time view's earlier and later counts.
+    var top: CGFloat { rect.minY + insets.top - 10 }
+    var bottom: CGFloat { rect.maxY - insets.bottom + 26 }
+    func edge(of frame: (minY: CGFloat, maxY: CGFloat)?) -> VerticalEdge? {
+        guard let frame, rect.height > 0 else { return nil }
+        if frame.maxY <= top { return .top }
+        if frame.minY >= bottom { return .bottom }
+        return nil
+    }
+}
+
+/// Measures today's group of rows on a persona page.
+private struct TodayFrameReport: ViewModifier {
+    let isToday: Bool
+    let space: String
+    @Binding var frame: (minY: CGFloat, maxY: CGFloat)?
+
+    func body(content: Content) -> some View {
+        if isToday {
+            content
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(space)) } action: { frame = ($0.minY, $0.maxY) }
+                .onDisappear { frame = nil }
+        } else {
+            content
+        }
+    }
+}
+
+/// A small glass "Today" at the top or bottom of a persona page once today has scrolled out of
+/// sight, where Time view shows its earlier and later counts; tapping it scrolls back to today.
+private struct TodayPill: View {
+    let edge: VerticalEdge?
+    let sight: PageSight
+    let action: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Kept through the exit animation, so the pill fades where it was.
+    @State private var lastEdge = VerticalEdge.bottom
+    private var animation: Animation? { reduceMotion ? nil : .easeInOut(duration: 0.25) }
+
+    var body: some View {
+        let shown = edge ?? lastEdge
+        let visible = edge != nil
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: shown == .top ? "chevron.up" : "chevron.down")
+                    .font(.caption2.weight(.semibold))
+                Text("Today").font(.caption.weight(.medium))
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .contentShape(.capsule)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .compositingGroup()
+        .opacity(visible ? 1 : 0)
+        .offset(y: visible || reduceMotion ? 0 : (shown == .top ? -4 : 4))
+        .allowsHitTesting(visible)
+        .accessibilityHidden(!visible)
+        .accessibilityLabel(shown == .top ? "Today, above" : "Today, below")
+        .accessibilityHint("Scrolls back to today")
+        // 6 points from the glass of the top controls or the dock, like Time view's counts.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: shown == .top ? .top : .bottom)
+        .padding(.top, sight.insets.top - 10 + 6)
+        .padding(.bottom, sight.insets.bottom - 26 + 6)
+        .ignoresSafeArea(.container, edges: .vertical)
+        .animation(animation, value: visible)
+        .onChange(of: edge) { _, edge in if let edge { lastEdge = edge } }
     }
 }
 

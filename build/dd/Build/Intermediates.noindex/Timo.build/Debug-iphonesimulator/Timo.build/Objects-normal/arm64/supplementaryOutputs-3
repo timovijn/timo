@@ -1,0 +1,23 @@
+{
+  "/Users/timovijn/Timo/GitHub/timo/Timo/PersonaViews.swift" : {
+    "const-values" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/PersonaViews.swiftconstvalues",
+    "dependencies" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/PersonaViews.d",
+    "diagnostics" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/PersonaViews.dia",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/PersonaViews.o",
+    "swift-dependencies" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/PersonaViews.swiftdeps"
+  },
+  "/Users/timovijn/Timo/GitHub/timo/Timo/SearchView.swift" : {
+    "const-values" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/SearchView.swiftconstvalues",
+    "dependencies" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/SearchView.d",
+    "diagnostics" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/SearchView.dia",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/SearchView.o",
+    "swift-dependencies" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/SearchView.swiftdeps"
+  },
+  "/Users/timovijn/Timo/GitHub/timo/Timo/TitleDetails.swift" : {
+    "const-values" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/TitleDetails.swiftconstvalues",
+    "dependencies" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/TitleDetails.d",
+    "diagnostics" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/TitleDetails.dia",
+    "object" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/TitleDetails.o",
+    "swift-dependencies" : "/Users/timovijn/Timo/GitHub/timo/build/dd/Build/Intermediates.noindex/Timo.build/Debug-iphonesimulator/Timo.build/Objects-normal/arm64/TitleDetails.swiftdeps"
+  }
+}

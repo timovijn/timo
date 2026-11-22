@@ -128,6 +128,8 @@ extension Logger {
         var invitations: [String: Invitation]?
         /// The attachment files iCloud has, as `fileKey`s: one `File` record per zone and attachment.
         var files: Set<String>?
+        /// The `CloudSync.readerVersion` that last read `records`.
+        var readerVersion: Int?
     }
     private struct Known: Codable {
         var systemFields: Data
@@ -153,8 +155,38 @@ extension Logger {
             sharedZones = saved.shares ?? []
             people = saved.people ?? []
             showDevices()
+            restoreUnreadDetails()
         }
         if isEnabled { start() }
+    }
+
+    /// Raised whenever items gain a field an older build drops when it reads a record.
+    private static let readerVersion = 1
+
+    /// An older build reads a record without the fields it doesn't know (checklists, attachments)
+    /// and keeps that copy, and iCloud doesn't send an unchanged record again. The cache still
+    /// holds what iCloud sent, so the first launch of a newer build fills those fields in from it.
+    /// Only empty ones: the older build can't have emptied them on purpose.
+    private func restoreUnreadDetails() {
+        guard let store, isEnabled, (cache.readerVersion ?? 0) < Self.readerVersion else { return }
+        func restore(_ item: inout PlanItem, from cached: PlanItem) {
+            if item.checklist.isEmpty { item.checklist = cached.checklist }
+            if item.attachments.isEmpty { item.attachments = cached.attachments }
+        }
+        var items = store.items, series = store.repeatingPlans
+        for (name, known) in cache.records {
+            guard UUID(uuidString: name) != nil else { continue }
+            if let index = items.firstIndex(where: { $0.id.uuidString == name }),
+               let cached = try? Self.decoder.decode(PlanItem.self, from: known.payload) {
+                restore(&items[index], from: cached)
+            } else if let index = series.firstIndex(where: { $0.id.uuidString == name }),
+                      let cached = try? Self.decoder.decode(RepeatingPlan.self, from: known.payload) {
+                restore(&series[index].template, from: cached.template)
+            }
+        }
+        cache.readerVersion = Self.readerVersion
+        saveCache()
+        store.applyFromCloud(items: items, series: series)
     }
 
     func setEnabled(_ on: Bool) {

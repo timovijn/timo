@@ -7,7 +7,7 @@
         "key": "Search",
         "location": {
           "startingColumn": 20,
-          "startingLine": 336
+          "startingLine": 338
         }
       },
       {
@@ -15,7 +15,7 @@
         "key": "Add %@ item",
         "location": {
           "startingColumn": 43,
-          "startingLine": 392
+          "startingLine": 394
         }
       },
       {
@@ -23,7 +23,7 @@
         "key": "Add item",
         "location": {
           "startingColumn": 71,
-          "startingLine": 392
+          "startingLine": 394
         }
       },
       {
@@ -31,7 +31,7 @@
         "key": "Next day",
         "location": {
           "startingColumn": 37,
-          "startingLine": 582
+          "startingLine": 584
         }
       },
       {
@@ -39,7 +39,7 @@
         "key": "Previous day",
         "location": {
           "startingColumn": 37,
-          "startingLine": 583
+          "startingLine": 585
         }
       },
       {
@@ -47,7 +47,7 @@
         "key": "Yesterday",
         "location": {
           "startingColumn": 36,
-          "startingLine": 456
+          "startingLine": 458
         }
       },
       {
@@ -55,7 +55,7 @@
         "key": "Go to yesterday",
         "location": {
           "startingColumn": 66,
-          "startingLine": 456
+          "startingLine": 458
         }
       },
       {
@@ -63,7 +63,7 @@
         "key": "Today",
         "location": {
           "startingColumn": 36,
-          "startingLine": 457
+          "startingLine": 459
         }
       },
       {
@@ -71,7 +71,7 @@
         "key": "Go to today",
         "location": {
           "startingColumn": 61,
-          "startingLine": 457
+          "startingLine": 459
         }
       },
       {
@@ -79,7 +79,7 @@
         "key": "Tomorrow",
         "location": {
           "startingColumn": 36,
-          "startingLine": 458
+          "startingLine": 460
         }
       },
       {
@@ -87,7 +87,7 @@
         "key": "Go to tomorrow",
         "location": {
           "startingColumn": 64,
-          "startingLine": 458
+          "startingLine": 460
         }
       },
       {
@@ -95,7 +95,7 @@
         "key": "Previous day",
         "location": {
           "startingColumn": 33,
-          "startingLine": 506
+          "startingLine": 508
         }
       },
       {
@@ -103,7 +103,7 @@
         "key": "Choose a day",
         "location": {
           "startingColumn": 37,
-          "startingLine": 533
+          "startingLine": 535
         }
       },
       {
@@ -111,7 +111,7 @@
         "key": "Tap or swipe up for the calendar, or hold for today",
         "location": {
           "startingColumn": 36,
-          "startingLine": 535
+          "startingLine": 537
         }
       },
       {
@@ -119,7 +119,7 @@
         "key": "Go to today",
         "location": {
           "startingColumn": 45,
-          "startingLine": 537
+          "startingLine": 539
         }
       },
       {
@@ -127,7 +127,7 @@
         "key": "Next day",
         "location": {
           "startingColumn": 33,
-          "startingLine": 547
+          "startingLine": 549
         }
       },
       {
@@ -135,7 +135,7 @@
         "key": "Show all %@",
         "location": {
           "startingColumn": 56,
-          "startingLine": 766
+          "startingLine": 773
         }
       },
       {
@@ -143,7 +143,7 @@
         "key": "Show %lld %@ with deadlines",
         "location": {
           "startingColumn": 78,
-          "startingLine": 766
+          "startingLine": 773
         }
       },
       {
@@ -151,7 +151,7 @@
         "key": "Deadline filter on",
         "location": {
           "startingColumn": 56,
-          "startingLine": 767
+          "startingLine": 774
         }
       },
       {
@@ -159,7 +159,7 @@
         "key": "Deadline filter off",
         "location": {
           "startingColumn": 79,
-          "startingLine": 767
+          "startingLine": 774
         }
       },
       {
@@ -167,7 +167,7 @@
         "key": "Toggles results with an open deadline",
         "location": {
           "startingColumn": 52,
-          "startingLine": 769
+          "startingLine": 776
         }
       },
       {
@@ -175,7 +175,7 @@
         "key": "Toggles unfinished items with a deadline, including deadlines on other days",
         "location": {
           "startingColumn": 38,
-          "startingLine": 770
+          "startingLine": 777
         }
       },
       {
@@ -183,7 +183,7 @@
         "key": "Show all %@",
         "location": {
           "startingColumn": 56,
-          "startingLine": 781
+          "startingLine": 788
         }
       },
       {
@@ -191,7 +191,7 @@
         "key": "Show %lld %@ with reminders",
         "location": {
           "startingColumn": 78,
-          "startingLine": 781
+          "startingLine": 788
         }
       },
       {
@@ -199,7 +199,7 @@
         "key": "Reminder filter on",
         "location": {
           "startingColumn": 56,
-          "startingLine": 782
+          "startingLine": 789
         }
       },
       {
@@ -207,7 +207,7 @@
         "key": "Reminder filter off",
         "location": {
           "startingColumn": 79,
-          "startingLine": 782
+          "startingLine": 789
         }
       },
       {
@@ -215,7 +215,7 @@
         "key": "Toggles results with an upcoming reminder",
         "location": {
           "startingColumn": 52,
-          "startingLine": 784
+          "startingLine": 791
         }
       },
       {
@@ -223,7 +223,7 @@
         "key": "Toggles unfinished items with an upcoming reminder, including reminders on other days",
         "location": {
           "startingColumn": 38,
-          "startingLine": 785
+          "startingLine": 792
         }
       },
       {
@@ -231,7 +231,7 @@
         "key": "Show all %@",
         "location": {
           "startingColumn": 49,
-          "startingLine": 796
+          "startingLine": 803
         }
       },
       {
@@ -239,7 +239,7 @@
         "key": "Review %lld %@",
         "location": {
           "startingColumn": 71,
-          "startingLine": 796
+          "startingLine": 803
         }
       },
       {
@@ -247,7 +247,7 @@
         "key": "Review filter on",
         "location": {
           "startingColumn": 49,
-          "startingLine": 797
+          "startingLine": 804
         }
       },
       {
@@ -255,7 +255,7 @@
         "key": "Review filter off",
         "location": {
           "startingColumn": 70,
-          "startingLine": 797
+          "startingLine": 804
         }
       },
       {
@@ -263,7 +263,7 @@
         "key": "Toggles results needing review",
         "location": {
           "startingColumn": 52,
-          "startingLine": 799
+          "startingLine": 806
         }
       },
       {
@@ -271,7 +271,7 @@
         "key": "Toggles items needing review",
         "location": {
           "startingColumn": 55,
-          "startingLine": 800
+          "startingLine": 807
         }
       },
       {
@@ -279,7 +279,7 @@
         "key": "Toggles items needing review for this day",
         "location": {
           "startingColumn": 88,
-          "startingLine": 800
+          "startingLine": 807
         }
       },
       {
@@ -287,7 +287,7 @@
         "key": "99+",
         "location": {
           "startingColumn": 35,
-          "startingLine": 820
+          "startingLine": 827
         }
       },
       {
@@ -295,7 +295,7 @@
         "key": "%lld",
         "location": {
           "startingColumn": 43,
-          "startingLine": 820
+          "startingLine": 827
         }
       },
       {
@@ -303,7 +303,7 @@
         "key": "Nothing planned",
         "location": {
           "startingColumn": 26,
-          "startingLine": 890
+          "startingLine": 897
         }
       },
       {
@@ -311,7 +311,7 @@
         "key": "%lld to review",
         "location": {
           "startingColumn": 30,
-          "startingLine": 875
+          "startingLine": 882
         }
       },
       {
@@ -319,7 +319,7 @@
         "key": "%lld with reminders",
         "location": {
           "startingColumn": 30,
-          "startingLine": 877
+          "startingLine": 884
         }
       },
       {
@@ -327,7 +327,7 @@
         "key": "%lld with deadlines",
         "location": {
           "startingColumn": 30,
-          "startingLine": 879
+          "startingLine": 886
         }
       },
       {
@@ -335,7 +335,7 @@
         "key": "%lld/%lld complete",
         "location": {
           "startingColumn": 30,
-          "startingLine": 882
+          "startingLine": 889
         }
       },
       {
@@ -343,7 +343,7 @@
         "key": "Uncancel",
         "location": {
           "startingColumn": 68,
-          "startingLine": 1321
+          "startingLine": 1329
         }
       },
       {
@@ -351,7 +351,7 @@
         "key": "Cancel",
         "location": {
           "startingColumn": 81,
-          "startingLine": 1321
+          "startingLine": 1329
         }
       },
       {
@@ -359,7 +359,7 @@
         "key": "Carried to %@",
         "location": {
           "startingColumn": 38,
-          "startingLine": 1265
+          "startingLine": 1273
         }
       },
       {
@@ -367,7 +367,7 @@
         "key": "Carried from %@",
         "location": {
           "startingColumn": 38,
-          "startingLine": 1269
+          "startingLine": 1277
         }
       },
       {
@@ -375,7 +375,7 @@
         "key": "Anytime, %@",
         "location": {
           "startingColumn": 38,
-          "startingLine": 1278
+          "startingLine": 1286
         }
       },
       {
@@ -383,7 +383,7 @@
         "key": "Shared",
         "location": {
           "startingColumn": 22,
-          "startingLine": 1438
+          "startingLine": 1446
         }
       },
       {
@@ -391,7 +391,7 @@
         "key": "%lld",
         "location": {
           "startingColumn": 26,
-          "startingLine": 1464
+          "startingLine": 1472
         }
       },
       {
@@ -399,7 +399,7 @@
         "key": "%@: %@",
         "location": {
           "startingColumn": 33,
-          "startingLine": 1723
+          "startingLine": 1731
         }
       },
       {
@@ -407,7 +407,7 @@
         "key": "Switch to list view",
         "location": {
           "startingColumn": 48,
-          "startingLine": 1786
+          "startingLine": 1794
         }
       },
       {
@@ -415,7 +415,7 @@
         "key": "Switch to time view",
         "location": {
           "startingColumn": 72,
-          "startingLine": 1786
+          "startingLine": 1794
         }
       },
       {
@@ -423,7 +423,7 @@
         "key": "Time view",
         "location": {
           "startingColumn": 48,
-          "startingLine": 1787
+          "startingLine": 1795
         }
       },
       {
@@ -431,7 +431,7 @@
         "key": "List view",
         "location": {
           "startingColumn": 62,
-          "startingLine": 1787
+          "startingLine": 1795
         }
       },
       {
@@ -439,7 +439,7 @@
         "key": "%lld earlier %@ above",
         "location": {
           "startingColumn": 46,
-          "startingLine": 2296
+          "startingLine": 2304
         }
       },
       {
@@ -447,7 +447,7 @@
         "key": "%lld later %@ below",
         "location": {
           "startingColumn": 90,
-          "startingLine": 2296
+          "startingLine": 2304
         }
       },
       {
@@ -455,7 +455,7 @@
         "key": "Scrolls to the nearest one",
         "location": {
           "startingColumn": 28,
-          "startingLine": 2297
+          "startingLine": 2305
         }
       },
       {
@@ -463,7 +463,7 @@
         "key": "%lld earlier",
         "location": {
           "startingColumn": 39,
-          "startingLine": 2280
+          "startingLine": 2288
         }
       },
       {
@@ -471,7 +471,7 @@
         "key": "%lld later",
         "location": {
           "startingColumn": 69,
-          "startingLine": 2280
+          "startingLine": 2288
         }
       },
       {
@@ -479,7 +479,7 @@
         "key": "Reminder time",
         "location": {
           "startingColumn": 30,
-          "startingLine": 2419
+          "startingLine": 2427
         }
       },
       {
@@ -487,7 +487,7 @@
         "key": "Check this reminder",
         "location": {
           "startingColumn": 20,
-          "startingLine": 2424
+          "startingLine": 2432
         }
       },
       {
@@ -495,7 +495,7 @@
         "key": "Remind me at",
         "location": {
           "startingColumn": 32,
-          "startingLine": 2410
+          "startingLine": 2418
         }
       },
       {
@@ -503,7 +503,7 @@
         "key": "This updates the reminder time for the original item and all its linked items.",
         "location": {
           "startingColumn": 30,
-          "startingLine": 2415
+          "startingLine": 2423
         }
       },
       {
@@ -511,7 +511,7 @@
         "key": "Cancel",
         "location": {
           "startingColumn": 70,
-          "startingLine": 2421
+          "startingLine": 2429
         }
       },
       {
@@ -519,7 +519,7 @@
         "key": "Save",
         "location": {
           "startingColumn": 70,
-          "startingLine": 2422
+          "startingLine": 2430
         }
       },
       {
@@ -527,7 +527,7 @@
         "key": "OK",
         "location": {
           "startingColumn": 24,
-          "startingLine": 2425
+          "startingLine": 2433
         }
       },
       {
@@ -535,7 +535,7 @@
         "key": "·",
         "location": {
           "startingColumn": 22,
-          "startingLine": 2625
+          "startingLine": 2633
         }
       }
     ]
