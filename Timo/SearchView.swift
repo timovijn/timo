@@ -147,8 +147,8 @@ struct SearchLayer: View {
     let now: Date
     /// Already scoped to the persona and narrowed by the filter.
     let results: [PersonaDay]
-    /// The persona the results are scoped to, if any.
-    let persona: Persona?
+    let selection: PersonaSelection
+    let sharedPersonName: String?
     /// Whether repeating items go on past the ones listed, and how to list three more months.
     let showsMore: Bool
     let showMore: () -> Void
@@ -372,14 +372,18 @@ struct SearchLayer: View {
         .scrollDismissesKeyboard(.interactively)
         .scrollEdgeEffectHidden(true, for: .vertical)
         // Opens on today, with what's ahead above it, as the query, persona or filter changes.
-        .onChange(of: [query, persona?.rawValue ?? "", "\(results.count)"], initial: true) {
+        .onChange(of: [query, selection.title, sharedPersonName ?? "", "\(results.count)"], initial: true) {
             if let target = PersonaHistoryView.todayAnchor(results, now: now) { proxy.scrollTo(target, anchor: .top) }
         }
         }
         .overlay {
             if results.isEmpty {
                 let text = query.trimmingCharacters(in: .whitespaces)
-                if let persona {
+                if selection == .shared {
+                    let detail = sharedPersonName.map { "Nothing shared with \($0) matches “\(text)”." }
+                        ?? "No shared items match “\(text)”."
+                    ContentUnavailableView("No Shared Results", systemImage: "magnifyingglass", description: Text(detail))
+                } else if let persona = selection.itemPersona {
                     // Not a spelling problem: the persona is what leaves it out.
                     ContentUnavailableView("No Results in \(persona.title)", systemImage: "magnifyingglass",
                                            description: Text("Nothing in \(persona.title) matches “\(text)”. Choose All to search everything."))

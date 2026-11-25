@@ -39,23 +39,42 @@ struct PersonaOrb: View {
     }
 }
 
-extension Persona {
-    /// The menu's order: All first, then each persona.
-    static let menuOrder: [Persona?] = [nil] + allCases.map { $0 }
+/// The persona switcher also offers a view of active CloudKit shares.
+enum PersonaSelection: Hashable {
+    case all, persona(Persona), shared
 
-    /// The next or previous persona, wrapping around. From All, forward starts at the first
-    /// persona and back at the last, so cycling never returns to All.
-    static func cycled(from persona: Persona?, by offset: Int) -> Persona {
-        let all = allCases
-        guard let persona, let index = all.firstIndex(of: persona) else { return offset > 0 ? all.first! : all.last! }
-        return all[(index + offset + all.count) % all.count]
+    var itemPersona: Persona? {
+        if case .persona(let persona) = self { return persona }
+        return nil
+    }
+
+    var title: String {
+        switch self {
+        case .all: "All"
+        case .persona(let persona): persona.title
+        case .shared: "Shared"
+        }
+    }
+
+    static func menuOrder(includesShared: Bool) -> [Self] {
+        [.all] + Persona.allCases.map(Self.persona) + (includesShared ? [.shared] : [])
+    }
+
+    /// Swipes cycle through the history pages and skip All.
+    func cycled(by offset: Int, in choices: [Self]) -> Self {
+        let pages = Array(choices.dropFirst())
+        guard let index = pages.firstIndex(of: self) else {
+            return (offset > 0 ? pages.first : pages.last) ?? .all
+        }
+        return pages[(index + offset + pages.count) % pages.count]
     }
 }
 
 /// The top-left control. Tapping it opens a menu, grown out of the capsule, listing All and
 /// every persona with its orb; choosing one switches to it.
 struct PersonaSwitcher: View {
-    @Binding var selection: Persona?
+    @Binding var selection: PersonaSelection
+    let choices: [PersonaSelection]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.displayScale) private var displayScale
     @ScaledMetric(relativeTo: .subheadline) private var orbSize: CGFloat = 20
@@ -63,20 +82,32 @@ struct PersonaSwitcher: View {
     var body: some View {
         Menu {
             Picker("Persona", selection: Binding(get: { selection }, set: choose)) {
-                ForEach(Persona.menuOrder, id: \.self) { persona in
+                ForEach(choices, id: \.self) { choice in
                     Label {
-                        Text(persona?.title ?? "All")
+                        Text(choice.title)
                     } icon: {
-                        Image(uiImage: PersonaOrb.image(for: persona, scale: displayScale))
+                        if choice == .shared {
+                            Image(systemName: "person.2.fill")
+                        } else {
+                            Image(uiImage: PersonaOrb.image(for: choice.itemPersona, scale: displayScale))
+                        }
                     }
-                    .tag(persona)
+                    .tag(choice)
                 }
             }
             .pickerStyle(.inline)
         } label: {
             HStack(spacing: 8) {
-                PersonaOrb(persona: selection, size: orbSize)
-                Text(selection?.title ?? "All")
+                if selection == .shared {
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: orbSize * 0.7, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: orbSize, height: orbSize)
+                        .accessibilityHidden(true)
+                } else {
+                    PersonaOrb(persona: selection.itemPersona, size: orbSize)
+                }
+                Text(selection.title)
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.primary)
                     .fixedSize()
@@ -89,8 +120,8 @@ struct PersonaSwitcher: View {
             .background {
                 // Tints the toolbar's glass with the persona, like an active filter button.
                 // The glass reaches 10 points past the label on each side.
-                if let selection {
-                    Capsule().fill(selection.color.opacity(0.22))
+                if let color = selection.itemPersona?.color {
+                    Capsule().fill(color.opacity(0.22))
                         .padding(.horizontal, -10)
                         .allowsHitTesting(false)
                 }
@@ -101,7 +132,7 @@ struct PersonaSwitcher: View {
         .menuOrder(.fixed)
         .sensoryFeedback(.selection, trigger: selection)
         .accessibilityLabel("Persona")
-        .accessibilityValue(selection?.title ?? "All")
+        .accessibilityValue(selection.title)
         .accessibilityHint("Opens the list of personas. Swipe up or down to cycle through them.")
         .accessibilityAdjustableAction { direction in
             switch direction {
@@ -111,10 +142,10 @@ struct PersonaSwitcher: View {
             }
         }
     }
-    private func choose(_ persona: Persona?) {
-        withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut(duration: 0.3)) { selection = persona }
+    private func choose(_ choice: PersonaSelection) {
+        withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut(duration: 0.3)) { selection = choice }
     }
-    private func step(_ offset: Int) { choose(Persona.cycled(from: selection, by: offset)) }
+    private func step(_ offset: Int) { choose(selection.cycled(by: offset, in: choices)) }
 }
 
 /// A horizontal swipe across a persona page. It only begins for a clearly sideways drag, so the
@@ -163,10 +194,14 @@ private struct PersonaSwipe: UIGestureRecognizerRepresentable {
 /// page's gradient wash blends into the next instead of sliding across. Swiping left or right
 /// cycles through the personas, never back to All.
 struct PersonaPages: View {
-    @Binding var persona: Persona?
+    @Binding var selection: PersonaSelection
+    let choices: [PersonaSelection]
+    let sharedPeople: [CloudSync.Person]
+    @Binding var sharedPersonID: String?
     let now: Date
     let add: () -> Void
     @Binding var months: Int
+    let history: (PersonaSelection) -> [PersonaDay]
     /// The top filter buttons' filter, and whether a row is in it on a day.
     let filter: DayView.DayFilter
     let matches: (PlanItem, Day) -> Bool
@@ -179,55 +214,102 @@ struct PersonaPages: View {
 
     var body: some View {
         ZStack {
-            if let persona {
-                PersonaHistoryView(persona: persona, now: now, add: add, months: $months, filter: filter,
-                                   matches: matches, row: row)
-                    .id(persona)
-                    .transition(.opacity)
-                    // Like the day pager: swiping left goes forward.
-                    .gesture(PersonaSwipe(swiped: { forward in step(forward ? 1 : -1) },
-                                          began: swipeBegan, ended: swipeEnded))
+            if selection != .all {
+                let choice = selection
+                PersonaHistoryView(selection: choice, now: now, add: add, months: $months, filter: filter,
+                                   history: { history(choice) }, matches: matches, row: row)
+                .id(choice == .shared ? sharedPersonID : nil)
+                .safeAreaInset(edge: .top, alignment: .leading, spacing: 0) {
+                    if choice == .shared && !sharedPeople.isEmpty {
+                        SharedPeopleFilter(people: sharedPeople, selection: $sharedPersonID)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 4)
+                    }
+                }
+                .id(choice)
+                .transition(.opacity)
+                // Like the day pager: swiping left goes forward.
+                .gesture(PersonaSwipe(swiped: { forward in step(forward ? 1 : -1) },
+                                      began: swipeBegan, ended: swipeEnded))
             }
         }
     }
     private func step(_ offset: Int) {
         withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .easeInOut(duration: 0.3)) {
-            persona = Persona.cycled(from: persona, by: offset)
+            selection = selection.cycled(by: offset, in: choices)
         }
+    }
+}
+
+/// Stays above the history so the filter is reachable from any day in the list.
+private struct SharedPeopleFilter: View {
+    let people: [CloudSync.Person]
+    @Binding var selection: String?
+    private var name: String { people.first { $0.id == selection }?.name ?? "Everyone" }
+
+    var body: some View {
+        Menu {
+            Picker("Shared with", selection: $selection) {
+                Text("Everyone").tag(nil as String?)
+                ForEach(people) { person in
+                    Text(person.name).tag(Optional(person.id))
+                }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            HStack(spacing: 8) {
+                Text(name).lineLimit(1)
+                Image(systemName: "chevron.down").font(.caption.weight(.semibold))
+            }
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 12)
+            .frame(minHeight: 44)
+            .contentShape(.capsule)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .menuOrder(.fixed)
+        .sensoryFeedback(.selection, trigger: selection)
+        .accessibilityLabel("Shared with")
+        .accessibilityValue(name)
     }
 }
 
 /// Everything in one persona, past and present, grouped by day with the newest day first.
 struct PersonaHistoryView: View {
-    let persona: Persona
+    let selection: PersonaSelection
     let now: Date
     let add: () -> Void
     /// How far ahead repeating items are listed; the button at the top adds three months at a time.
     @Binding var months: Int
     /// The top filter buttons narrow the list as they narrow a day.
     let filter: DayView.DayFilter
+    let history: () -> [PersonaDay]
     let matches: (PlanItem, Day) -> Bool
     let row: (PlanItem, Day) -> AnyView
     @EnvironmentObject private var store: PlanStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// Today's day in the page, and the part of the page in sight, for the Today pill.
-    @State private var todayFrame: (minY: CGFloat, maxY: CGFloat)?
-    @State private var sight = PageSight()
-    private static let space = "persona-page"
+    @State private var scrollPosition = ScrollPosition(idType: PersonaHistoryRow.ID.self)
+    @State private var visibleDays: ClosedRange<Day>?
+    @State private var scrollInsets = EdgeInsets()
 
     var body: some View {
         let horizon = Self.horizon(months: months, from: now)
-        let all = Planner.history(of: persona, in: store.items, now: now, repeatsThrough: horizon)
+        let all = history()
         let items = Self.unique(all.flatMap(\.items))
         let days = filter == .all ? all : all.compactMap { entry in
             let kept = entry.items.filter { matches($0, entry.day) }
             return kept.isEmpty ? nil : PersonaDay(day: entry.day, items: kept)
         }
-        let filtered = Self.unique(days.flatMap(\.items)).count
+        let filtered = filter == .all ? items.count : Self.unique(days.flatMap(\.items)).count
         let more = store.repeats(items, after: horizon)
         let today = Self.todayAnchor(days, now: now)
-        ScrollViewReader { proxy in ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
+        let rows = days.flatMap { entry in
+            [PersonaHistoryRow.heading(entry.day)] + entry.items.map { .item($0, entry.day) }
+        }
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
                 // The furthest days are at the top, so more of them come in above.
                 if more {
                     MoreRepeatsButton {
@@ -239,7 +321,7 @@ struct PersonaHistoryView: View {
                             Task { @MainActor in
                                 // Once the new days are laid out: before, it scrolled to where they'd go.
                                 try? await Task.sleep(for: .milliseconds(60))
-                                proxy.scrollTo(top, anchor: .top)
+                                scrollPosition.scrollTo(id: PersonaHistoryRow.ID(day: top), anchor: .top)
                             }
                         }
                     }
@@ -261,49 +343,55 @@ struct PersonaHistoryView: View {
                     }
                 }
                 .padding(.horizontal, 20).padding(.vertical, 6)
-                if all.isEmpty {
+                if all.isEmpty && selection == .shared {
+                    ContentUnavailableView("No Shared Items", systemImage: "person.2",
+                                           description: Text("Items you share or receive appear here."))
+                        .frame(minHeight: 280)
+                } else if all.isEmpty {
                     ContentUnavailableView {
-                        Label("Nothing in \(persona.title) yet", systemImage: "circle.dashed")
+                        Label("Nothing in \(selection.title) yet", systemImage: "circle.dashed")
                     } description: {
-                        Text("Give an item the \(persona.title) persona and it will be gathered here, with everything before and after it.")
+                        Text("Give an item the \(selection.title) persona and it will be gathered here, with everything before and after it.")
                     } actions: {
                         Button("Add an item", systemImage: "plus", action: add).buttonStyle(.borderedProminent)
                     }
                     .frame(minHeight: 280)
                 }
-                ForEach(days) { entry in
-                    // One group per day, so today's heading and rows are measured together.
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text(Self.heading(entry.day, now: now))
+                ForEach(rows) { entry in
+                    switch entry {
+                    case .heading(let day):
+                        Text(Self.heading(day, now: now))
                             .font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 8)
                             .accessibilityAddTraits(.isHeader)
-                        ForEach(entry.items) { item in
-                            row(item, entry.day)
-                                .padding(.horizontal, 16)
-                        }
+                    case .item(let item, let day):
+                        row(item, day).padding(.horizontal, 16)
                     }
-                    .id(entry.day)
-                    .modifier(TodayFrameReport(isToday: entry.day == today, space: Self.space, frame: $todayFrame))
                 }
                 SettingsLink()
                     .frame(maxWidth: .infinity).padding(.vertical, 28)
             }
+            .scrollTargetLayout()
             .readableWidth()
-            .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: days.flatMap(\.items).map(\.id))
-            .coordinateSpace(name: Self.space)
+            .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: rows.map(\.id))
         }
+        .scrollPosition($scrollPosition, anchor: .top)
         .scrollEdgeEffectHidden(true, for: .vertical)
-        .onScrollGeometryChange(for: PageSight.self) { geometry in
-            PageSight(rect: geometry.visibleRect, insets: geometry.contentInsets)
-        } action: { _, sight in
-            self.sight = sight
+        .onScrollTargetVisibilityChange(idType: PersonaHistoryRow.ID.self, threshold: 0.01) { targets in
+            let days = targets.map(\.day)
+            guard let first = days.min(), let last = days.max(), visibleDays != first...last else { return }
+            visibleDays = first...last
+        }
+        .onScrollGeometryChange(for: EdgeInsets.self, of: \.contentInsets) { _, insets in
+            scrollInsets = insets
         }
         .overlay {
-            TodayPill(edge: today.flatMap { _ in sight.edge(of: todayFrame) }, sight: sight) {
+            TodayPill(day: today, visibleDays: $visibleDays, scrollInsets: $scrollInsets) {
                 guard let today else { return }
-                withAnimation(reduceMotion ? nil : .smooth(duration: 0.4)) { proxy.scrollTo(today, anchor: .top) }
+                withAnimation(reduceMotion ? nil : .smooth(duration: 0.4)) {
+                    scrollPosition.scrollTo(id: PersonaHistoryRow.ID(day: today), anchor: .top)
+                }
             }
         }
         .modifier(PullsToSearch())
@@ -312,9 +400,10 @@ struct PersonaHistoryView: View {
         .task {
             store.generateRepeats(through: horizon)
             await Task.yield()
-            let days = Planner.history(of: persona, in: store.items, now: now, repeatsThrough: horizon)
-            if let target = Self.todayAnchor(days, now: now) { proxy.scrollTo(target, anchor: .top) }
-        }
+            let days = history()
+            if let target = Self.todayAnchor(days, now: now) {
+                scrollPosition.scrollTo(id: PersonaHistoryRow.ID(day: target), anchor: .top)
+            }
         }
     }
     /// The last day repeating items are listed on, `months` ahead.
@@ -345,36 +434,20 @@ struct PersonaHistoryView: View {
     }
 }
 
-/// The part of a persona page in sight, between the glass of the top controls and the dock,
-/// in the page's own coordinates.
-private struct PageSight: Equatable {
-    var rect = CGRect.zero
-    var insets = EdgeInsets()
-    /// The top controls' glass ends 10 points above the bar's edge; the dock's starts 26 points
-    /// into its margin. The same reach as Time view's earlier and later counts.
-    var top: CGFloat { rect.minY + insets.top - 10 }
-    var bottom: CGFloat { rect.maxY - insets.bottom + 26 }
-    func edge(of frame: (minY: CGFloat, maxY: CGFloat)?) -> VerticalEdge? {
-        guard let frame, rect.height > 0 else { return nil }
-        if frame.maxY <= top { return .top }
-        if frame.minY >= bottom { return .bottom }
-        return nil
+/// Each heading and card can be laid out independently, even on days with many carried items.
+private enum PersonaHistoryRow: Identifiable {
+    case heading(Day)
+    case item(PlanItem, Day)
+
+    struct ID: Hashable {
+        let day: Day
+        var itemID: UUID? = nil
     }
-}
 
-/// Measures today's group of rows on a persona page.
-private struct TodayFrameReport: ViewModifier {
-    let isToday: Bool
-    let space: String
-    @Binding var frame: (minY: CGFloat, maxY: CGFloat)?
-
-    func body(content: Content) -> some View {
-        if isToday {
-            content
-                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(space)) } action: { frame = ($0.minY, $0.maxY) }
-                .onDisappear { frame = nil }
-        } else {
-            content
+    var id: ID {
+        switch self {
+        case .heading(let day): ID(day: day)
+        case .item(let item, let day): ID(day: day, itemID: item.id)
         }
     }
 }
@@ -382,13 +455,20 @@ private struct TodayFrameReport: ViewModifier {
 /// A small glass "Today" at the top or bottom of a persona page once today has scrolled out of
 /// sight, where Time view shows its earlier and later counts; tapping it scrolls back to today.
 private struct TodayPill: View {
-    let edge: VerticalEdge?
-    let sight: PageSight
+    let day: Day?
+    @Binding var visibleDays: ClosedRange<Day>?
+    @Binding var scrollInsets: EdgeInsets
     let action: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Kept through the exit animation, so the pill fades where it was.
     @State private var lastEdge = VerticalEdge.bottom
     private var animation: Animation? { reduceMotion ? nil : .easeInOut(duration: 0.25) }
+    private var edge: VerticalEdge? {
+        guard let day, let visibleDays else { return nil }
+        if day > visibleDays.upperBound { return .top }
+        if day < visibleDays.lowerBound { return .bottom }
+        return nil
+    }
 
     var body: some View {
         let shown = edge ?? lastEdge
@@ -414,8 +494,8 @@ private struct TodayPill: View {
         .accessibilityHint("Scrolls back to today")
         // 6 points from the glass of the top controls or the dock, like Time view's counts.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: shown == .top ? .top : .bottom)
-        .padding(.top, sight.insets.top - 10 + 6)
-        .padding(.bottom, sight.insets.bottom - 26 + 6)
+        .padding(.top, scrollInsets.top - 10 + 6)
+        .padding(.bottom, scrollInsets.bottom - 26 + 6)
         .ignoresSafeArea(.container, edges: .vertical)
         .animation(animation, value: visible)
         .onChange(of: edge) { _, edge in if let edge { lastEdge = edge } }

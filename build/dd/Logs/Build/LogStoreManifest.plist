@@ -6,7 +6,7 @@
 	<integer>13</integer>
 	<key>logs</key>
 	<dict>
-		<key>75891301-6F84-4C4E-B4C2-F5073D0DB4D6</key>
+		<key>8BB10354-7EB0-4264-95D9-962F17FD7A34</key>
 		<dict>
 			<key>className</key>
 			<string>IDECommandLineBuildLog</string>
@@ -15,13 +15,13 @@
 			<key>domainType</key>
 			<string>Xcode.IDEActivityLogDomainType.BuildLog</string>
 			<key>fileName</key>
-			<string>75891301-6F84-4C4E-B4C2-F5073D0DB4D6.xcactivitylog</string>
+			<string>8BB10354-7EB0-4264-95D9-962F17FD7A34.xcactivitylog</string>
 			<key>hasPrimaryLog</key>
 			<true/>
 			<key>primaryObservable</key>
 			<dict>
 				<key>highLevelStatus</key>
-				<string>S</string>
+				<string>W</string>
 				<key>totalNumberOfAnalyzerIssues</key>
 				<integer>0</integer>
 				<key>totalNumberOfErrors</key>
@@ -29,7 +29,7 @@
 				<key>totalNumberOfTestFailures</key>
 				<integer>0</integer>
 				<key>totalNumberOfWarnings</key>
-				<integer>0</integer>
+				<integer>2</integer>
 			</dict>
 			<key>schemeIdentifier-containerName</key>
 			<string>Timo project</string>
@@ -40,13 +40,13 @@
 			<key>signature</key>
 			<string>Building project Timo with scheme Timo</string>
 			<key>timeStartedRecording</key>
-			<real>816944043.52140605</real>
+			<real>817230558.85942495</real>
 			<key>timeStoppedRecording</key>
-			<real>816944080.17715394</real>
+			<real>817230587.00637805</real>
 			<key>title</key>
 			<string>Building project Timo with scheme Timo</string>
 			<key>uniqueIdentifier</key>
-			<string>75891301-6F84-4C4E-B4C2-F5073D0DB4D6</string>
+			<string>8BB10354-7EB0-4264-95D9-962F17FD7A34</string>
 		</dict>
 		<key>904432C4-E719-4E37-86B7-52192865A33A</key>
 		<dict>

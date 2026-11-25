@@ -37,6 +37,8 @@ extension Logger {
     private(set) var sharedZones: Set<String> = []
     /// Everyone who has joined a share with this person, to share with again in one tap.
     private(set) var people: [Person] = []
+    /// Invitees appear in the Shared persona while their invitation is pending.
+    private var pendingPeopleByZone: [String: [Person]] = [:]
     /// The devices syncing this plan, this one first. iCloud doesn't list them, so each one
     /// keeps a record of itself in the "Plan" zone.
     private(set) var devices: [Device] = []
@@ -123,6 +125,7 @@ extension Logger {
         /// Per item or repeating plan ID: this person's `PersonalDetails` on a shared one.
         var overlays: [String: Data]?
         var people: [Person]?
+        var pendingPeopleByZone: [String: [Person]]?
         var devices: [Device]?
         /// Per record name: invitations to this person not accepted yet.
         var invitations: [String: Invitation]?
@@ -154,6 +157,7 @@ extension Logger {
             lastSynced = saved.lastSynced
             sharedZones = saved.shares ?? []
             people = saved.people ?? []
+            pendingPeopleByZone = saved.pendingPeopleByZone ?? [:]
             showDevices()
             restoreUnreadDetails()
         }
@@ -265,6 +269,7 @@ extension Logger {
         cache = Cache()
         sharedZones = []
         people = []
+        pendingPeopleByZone = [:]
         devices = []
         lastSynced = nil
         try? FileManager.default.removeItem(at: cacheURL)
@@ -454,6 +459,18 @@ extension Logger {
         }
         people = known.filter { !$0.zones.isEmpty }.sorted { $0.name < $1.name }
         cache.people = people
+
+        let pending = participants.compactMap { participant -> Person? in
+            let identity = participant.userIdentity
+            let userID = identity.userRecordID?.recordName
+            guard participant.acceptanceStatus == .pending, !me.contains(userID) else { return nil }
+            let address = identity.lookupInfo?.emailAddress ?? identity.lookupInfo?.phoneNumber
+            guard let id = userID ?? address.map({ "invitee:\($0)" }) else { return nil }
+            let name = people.first { $0.id == id }?.name ?? Self.name(of: participant) ?? "Someone"
+            return Person(id: id, name: name, zones: [zone.zoneName: zone.ownerName])
+        }
+        pendingPeopleByZone[zone.zoneName] = sharedZones.contains(zone.zoneName) ? pending : nil
+        cache.pendingPeopleByZone = pendingPeopleByZone
     }
 
     private static func name(of participant: CKShare.Participant) -> String? {
@@ -843,8 +860,48 @@ extension Logger {
 
     // MARK: Sharing
 
-    func isShared(_ item: PlanItem) -> Bool {
-        sharedZones.contains(recordID(item.id, series: item.seriesID).zoneID.zoneName)
+    func isShared(_ item: PlanItem, with person: Person? = nil) -> Bool {
+        let zone = recordID(item.id, series: item.seriesID).zoneID.zoneName
+        guard sharedZones.contains(zone) else { return false }
+        guard let person else { return true }
+        return person.zones[zone] != nil
+    }
+
+    /// People on active shares, including pending invitations. Direct sharing still uses `people`.
+    var sharedPeople: [Person] {
+        var known = Dictionary(uniqueKeysWithValues: people.map { ($0.id, $0) })
+        for (zone, pending) in pendingPeopleByZone where sharedZones.contains(zone) {
+            for invitee in pending {
+                var person = known[invitee.id] ?? invitee
+                person.zones.merge(invitee.zones) { existing, _ in existing }
+                known[person.id] = person
+            }
+        }
+        return known.values.filter { !sharedZones.isDisjoint(with: $0.zones.keys) }.sorted {
+            let order = $0.name.localizedStandardCompare($1.name)
+            return order == .orderedSame ? $0.id < $1.id : order == .orderedAscending
+        }
+    }
+
+    /// Older caches only stored accepted participants. Fill in the rest when Shared opens.
+    func refreshSharedPeople() async {
+        guard isEnabled, userRecordName != nil else { return }
+        let missing = Set(cache.records.values.map(\.zone)).filter {
+            sharedZones.contains($0.zoneName) && pendingPeopleByZone[$0.zoneName] == nil
+        }
+        let byOwner = Dictionary(grouping: missing) { $0.ownerName == CKCurrentUserDefaultName }
+        for zones in byOwner.values {
+            guard let first = zones.first else { continue }
+            let ids = zones.map { CKRecord.ID(recordName: CKRecordNameZoneWideShare, zoneID: $0) }
+            guard let results = try? await database(of: first).records(for: ids), !Task.isCancelled, isEnabled else { continue }
+            for (id, result) in results {
+                let zone = id.zoneID
+                guard sharedZones.contains(zone.zoneName), pendingPeopleByZone[zone.zoneName] == nil,
+                      let share = (try? result.get()) as? CKShare else { continue }
+                remember(in: zone, share.participants)
+            }
+            saveCache()
+        }
     }
 
     /// The share to show for `item`, moving it into a zone of its own the first time. A repeating

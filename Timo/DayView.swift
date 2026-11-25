@@ -65,7 +65,7 @@ struct DayView: View {
         let item = saved.on(focused.day)
         switch focused.source {
         case .day:
-            guard !search.isOpen, persona == nil, focused.day == day else { return true }
+            guard !search.isOpen, personaSelection == .all, focused.day == day else { return true }
             guard focused.filter != .all else { return false }
             let appears = item.shows(on: focused.day, now: now) || item.movedAway(from: focused.day, now: now)
                 || item.visits(focused.day, now: now)
@@ -76,7 +76,7 @@ struct DayView: View {
                 entry.day == focused.day && entry.items.contains { $0.id == focused.id }
             }
         case .persona:
-            guard persona != nil, !search.isOpen else { return true }
+            guard personaSelection != .all, !search.isOpen else { return true }
             return !matches(item, personaFilter, on: focused.day) || !personaDays.contains { entry in
                 entry.day == focused.day && entry.items.contains { $0.id == focused.id }
             }
@@ -89,8 +89,16 @@ struct DayView: View {
     /// Which filter the rows' status panels show. It outlasts the filter, so a panel keeps its
     /// content while it collapses back into its row.
     @State private var panelFilter: DayFilter = .review
-    /// The persona shown in the top left. All keeps the day view; a persona swaps in its history.
-    @State private var persona: Persona?
+    @State private var personaSelection: PersonaSelection = .all
+    @State private var sharedPersonID: String?
+    private var personaChoices: [PersonaSelection] {
+        PersonaSelection.menuOrder(includesShared: personaSelection == .shared || !store.cloud.sharedZones.isEmpty)
+    }
+    private var sharedPeople: [CloudSync.Person] { personaSelection == .shared ? store.cloud.sharedPeople : [] }
+    private var sharedPerson: CloudSync.Person? {
+        guard let sharedPersonID else { return nil }
+        return sharedPeople.first { $0.id == sharedPersonID }
+    }
     private var reviewing: Bool { filter == .review }
     private var showingReminders: Bool { filter == .reminders }
     private var showingDeadlines: Bool { filter == .deadlines }
@@ -201,18 +209,20 @@ struct DayView: View {
                         .offset(y: DayDockLayout.lowering(for: viewport.safeAreaInsets.bottom))
                 }
                 // The day view stays alive underneath, so returning to All is instant.
-                .opacity(persona == nil ? 1 : 0)
-                .allowsHitTesting(persona == nil)
-                .accessibilityHidden(persona != nil)
+                .opacity(personaSelection == .all ? 1 : 0)
+                .allowsHitTesting(personaSelection == .all)
+                .accessibilityHidden(personaSelection != .all)
                 .overlay {
                     ZStack(alignment: .bottomTrailing) {
-                        PersonaPages(persona: $persona, now: now, add: add, months: $personaMonths, filter: personaFilter,
+                        PersonaPages(selection: $personaSelection, choices: personaChoices, sharedPeople: sharedPeople,
+                                     sharedPersonID: $sharedPersonID, now: now, add: add, months: $personaMonths,
+                                     history: personaHistory, filter: personaFilter,
                                      matches: { matches($0, personaFilter, on: $1) },
                                      row: { AnyView(row($0, filter: personaFilter, day: $1, source: .persona)) },
                                      swipeBegan: daySwipeInteraction.begin, swipeEnded: daySwipeInteraction.end)
                             .contentMargins(.bottom, 94 - DayDockLayout.lowering(for: viewport.safeAreaInsets.bottom), for: .scrollContent)
                             .environment(search)
-                        if persona != nil {
+                        if personaSelection.itemPersona != nil {
                             // Sits where the day dock's add button does, and stays put as pages slide.
                             addButton
                                 .frame(height: 72)
@@ -236,7 +246,7 @@ struct DayView: View {
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    PersonaSwitcher(selection: $persona)
+                    PersonaSwitcher(selection: $personaSelection, choices: personaChoices)
                         // The search button sits beside it, in the search layer above.
                         .onGeometryChange(for: CGPoint.self) { CGPoint(x: $0.frame(in: .global).maxX, y: $0.frame(in: .global).midY) }
                             action: { search.anchor = $0 }
@@ -248,7 +258,7 @@ struct DayView: View {
             }
             .sheet(item: $editing) { item in
                 // A persona page or search can open an item from any day.
-                ItemEditor(item: item, viewingDay: persona == nil && !search.isOpen ? day : item.liveDay(now: now),
+                ItemEditor(item: item, viewingDay: personaSelection == .all && !search.isOpen ? day : item.liveDay(now: now),
                            isDuplicate: item.id == duplicating, openItem: openOnItsDay)
                     .environmentObject(store)
                     // A fresh editor per item: opened while the last sheet is still closing, SwiftUI
@@ -298,9 +308,18 @@ struct DayView: View {
                 if count == 0 { withAnimation(reviewAnimation) { searchFilter = .all } }
             }
             // Each persona's page starts on all its items; resolving the last in a filter returns there.
-            .onChange(of: persona) { _, _ in
+            .onChange(of: personaSelection) { _, _ in
                 if focused?.source == .persona { focused = nil }
-                personaFilter = .all; personaMonths = 3
+                personaFilter = .all; personaMonths = 3; sharedPersonID = nil
+            }
+            .onChange(of: sharedPersonID) { _, _ in
+                if focused?.source == .persona { focused = nil }
+            }
+            .onChange(of: sharedPerson?.id) { _, id in
+                if id == nil { sharedPersonID = nil }
+            }
+            .task(id: personaSelection) {
+                if personaSelection == .shared { await store.cloud.refreshSharedPeople() }
             }
             .onChange(of: personaFilter == .all || search.isOpen ? nil : filterCount(personaFilter, in: personaDays)) { _, count in
                 if count == 0 { withAnimation(reviewAnimation) { personaFilter = .all } }
@@ -319,7 +338,8 @@ struct DayView: View {
         .overlay {
             // The day list's own rows, so results complete, open and take focus as they do there, and
             // open the same status panel under a filter.
-            SearchLayer(pull: search, now: now, results: filteredSearchResults, persona: persona,
+            SearchLayer(pull: search, now: now, results: filteredSearchResults,
+                        selection: personaSelection, sharedPersonName: sharedPerson?.name,
                         showsMore: store.repeats(searchResults.flatMap(\.items), after: searchHorizon),
                         showMore: {
                             searchMonths += 3
@@ -391,7 +411,7 @@ struct DayView: View {
         .buttonStyle(.plain)
         // A circle as tall as the date capsule, rather than the glass style's wider capsule.
         .glassEffect(.regular.interactive(), in: .circle)
-        .accessibilityLabel(persona.map { "Add \($0.title) item" } ?? "Add item")
+        .accessibilityLabel(personaSelection.itemPersona.map { "Add \($0.title) item" } ?? "Add item")
     }
     /// The day capsule and the calendar are one piece of glass. A single animation grows its
     /// frame from the capsule's size to the calendar's and back, and both are clipped to it:
@@ -636,8 +656,11 @@ struct DayView: View {
     }
     private func closeFocus() {
         guard let focused, !focused.ending else { return }
-        withAnimation(FocusedItemMotion.animation(reduceMotion: reduceMotion)) {
+        withAnimation(FocusedItemMotion.animation(reduceMotion: reduceMotion), completionCriteria: .removed) {
             self.focused?.ending = true
+        } completion: {
+            // An offscreen persona row may have been unloaded before its own collapse callback.
+            if focused.source == .persona { finishInlineFocus(focused.token) }
         }
         if reduceMotion { finishInlineFocus(focused.token) }
     }
@@ -659,14 +682,14 @@ struct DayView: View {
     /// Reminders can arrive before the scheduled day, or be opened on a later day.
     private func focusOnDay(_ item: PlanItem, on target: Day) {
         let editorWasOpen = editing != nil
-        let pageChanges = persona != nil || search.isOpen || day != target
+        let pageChanges = personaSelection != .all || search.isOpen || day != target
         focused = nil
         editing = nil
         Task { @MainActor in
             // Only what's in the way is waited for: a tap on a Live Activity should land at once.
             // Let a sheet finish closing before the day changes under it.
             if editorWasOpen { try? await Task.sleep(for: .milliseconds(450)) }
-            if persona != nil { persona = nil }
+            personaSelection = .all
             if search.isOpen { search.close(reduceMotion: reduceMotion) }
             navigate(to: target.date())
             // Another day's page can hold the same item (a range over several days).
@@ -685,7 +708,7 @@ struct DayView: View {
         Task { @MainActor in
             // Let the sheet finish closing before the day changes under it.
             try? await Task.sleep(for: .milliseconds(450))
-            if persona != nil { persona = nil }
+            personaSelection = .all
             if search.isOpen { search.close(reduceMotion: reduceMotion) }
             navigate(to: shownDay)
             try? await Task.sleep(for: .milliseconds(reduceMotion ? 100 : 450))
@@ -702,22 +725,30 @@ struct DayView: View {
     }
     /// The filter the top buttons show and set: the search's while searching, a persona page's on
     /// one, otherwise the day's.
-    private var shownFilter: DayFilter { search.isOpen ? searchFilter : persona != nil ? personaFilter : filter }
-    /// The persona page's days, before any filter.
-    private var personaDays: [PersonaDay] {
-        persona.map { Planner.history(of: $0, in: store.items, now: now, repeatsThrough: personaHorizon) } ?? []
+    private var shownFilter: DayFilter { search.isOpen ? searchFilter : personaSelection != .all ? personaFilter : filter }
+    private func scopedItems(for selection: PersonaSelection) -> [PlanItem] {
+        guard selection == .shared else { return store.items }
+        let person = sharedPerson
+        return store.items.filter { store.cloud.isShared($0, with: person) }
     }
+    private func personaHistory(_ selection: PersonaSelection) -> [PersonaDay] {
+        Planner.history(of: selection.itemPersona, in: scopedItems(for: selection), now: now, repeatsThrough: personaHorizon)
+    }
+    /// The persona page's days before the status filter.
+    private var personaDays: [PersonaDay] { personaSelection == .all ? [] : personaHistory(personaSelection) }
     /// The list the filters count and narrow instead of a day: search's results, or a persona page.
-    private var listedDays: [PersonaDay]? { search.isOpen ? searchResults : persona != nil ? personaDays : nil }
+    private var listedDays: [PersonaDay]? { search.isOpen ? searchResults : personaSelection != .all ? personaDays : nil }
     /// The search's results, scoped to the chosen persona, before any filter.
     private var searchResults: [PersonaDay] {
-        search.isOpen ? Planner.search(search.query, in: store.items, now: now, persona: persona, repeatsThrough: searchHorizon) : []
+        guard search.isOpen else { return [] }
+        return Planner.search(search.query, in: scopedItems(for: personaSelection), now: now,
+                              persona: personaSelection.itemPersona, repeatsThrough: searchHorizon)
     }
     /// How many rows a filter keeps: of the search's results or the persona page, otherwise of the
     /// day. A filter is a property of each row, so it means the same for a list as for a day. A
     /// running range listed on two days of a persona page counts once.
     private func filterCount(_ value: DayFilter, in results: [PersonaDay]) -> Int {
-        guard search.isOpen || persona != nil else {
+        guard search.isOpen || personaSelection != .all else {
             switch value {
             case .all: return 0
             case .review: return reviewItems.count
@@ -737,7 +768,7 @@ struct DayView: View {
         }
     }
     private func toggleFilter(_ value: DayFilter) {
-        guard search.isOpen || persona != nil else { setFilter(filter == value ? .all : value); return }
+        guard search.isOpen || personaSelection != .all else { setFilter(filter == value ? .all : value); return }
         withAnimation(reviewAnimation) {
             if search.isOpen {
                 searchFilter = searchFilter == value ? .all : value
@@ -804,7 +835,7 @@ struct DayView: View {
                 .accessibilityValue(reviewing ? "Review filter on" : "Review filter off")
                 .accessibilityAddTraits(reviewing ? .isSelected : [])
                 .accessibilityHint(search.isOpen ? "Toggles results needing review"
-                                   : persona != nil ? "Toggles items needing review" : "Toggles items needing review for this day")
+                                   : personaSelection != .all ? "Toggles items needing review" : "Toggles items needing review for this day")
                 .transition(transition)
             }
         }
@@ -1377,8 +1408,8 @@ struct DayView: View {
             // The day and persona rows stay mounted behind search. Only the visible surface
             // can supply a marker, including when a notification asks to focus an item.
             switch source {
-            case .day: return !search.isOpen && persona == nil
-            case .persona: return !search.isOpen && persona != nil
+            case .day: return !search.isOpen && personaSelection == .all
+            case .persona: return !search.isOpen && personaSelection != .all
             case .search: return search.isOpen
             }
         }) {
@@ -1645,8 +1676,8 @@ struct DayView: View {
     }
     private func add() {
         // From a persona's history, a new item starts today in that persona.
-        var item = PlanItem(title: "", day: persona == nil ? day : Day(now))
-        item.personas = persona.map { [$0] } ?? []
+        var item = PlanItem(title: "", day: personaSelection == .all ? day : Day(now))
+        item.personas = personaSelection.itemPersona.map { [$0] } ?? []
         editing = item
     }
     private func move(_ delta: Int) {

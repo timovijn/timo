@@ -87,6 +87,14 @@
         "key": "Nothing in %@ matches “%@”. Choose All to search everything.",
         "location": {
           "startingColumn": 62,
+          "startingLine": 389
+        }
+      },
+      {
+        "comment": "",
+        "key": "No Shared Results",
+        "location": {
+          "startingColumn": 44,
           "startingLine": 385
         }
       },
@@ -95,7 +103,7 @@
         "key": "No Results in %@",
         "location": {
           "startingColumn": 44,
-          "startingLine": 384
+          "startingLine": 388
         }
       }
     ]

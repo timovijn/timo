@@ -7,7 +7,7 @@
         "key": "Persona",
         "location": {
           "startingColumn": 29,
-          "startingLine": 103
+          "startingLine": 134
         }
       },
       {
@@ -15,7 +15,7 @@
         "key": "Opens the list of personas. Swipe up or down to cycle through them.",
         "location": {
           "startingColumn": 28,
-          "startingLine": 105
+          "startingLine": 136
         }
       },
       {
@@ -23,7 +23,47 @@
         "key": "Persona",
         "location": {
           "startingColumn": 20,
-          "startingLine": 65
+          "startingLine": 84
+        }
+      },
+      {
+        "comment": "",
+        "key": "Shared with",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 274
+        }
+      },
+      {
+        "comment": "",
+        "key": "Shared with",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 252
+        }
+      },
+      {
+        "comment": "",
+        "key": "Everyone",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 253
+        }
+      },
+      {
+        "comment": "",
+        "key": "Items you share or receive appear here.",
+        "location": {
+          "startingColumn": 62,
+          "startingLine": 348
+        }
+      },
+      {
+        "comment": "",
+        "key": "No Shared Items",
+        "location": {
+          "startingColumn": 44,
+          "startingLine": 347
         }
       },
       {
@@ -31,7 +71,7 @@
         "key": "%lld to review",
         "location": {
           "startingColumn": 30,
-          "startingLine": 253
+          "startingLine": 335
         }
       },
       {
@@ -39,7 +79,7 @@
         "key": "%lld with reminders",
         "location": {
           "startingColumn": 30,
-          "startingLine": 255
+          "startingLine": 337
         }
       },
       {
@@ -47,7 +87,7 @@
         "key": "%lld with deadlines",
         "location": {
           "startingColumn": 30,
-          "startingLine": 257
+          "startingLine": 339
         }
       },
       {
@@ -55,7 +95,7 @@
         "key": "%lld/%lld complete",
         "location": {
           "startingColumn": 30,
-          "startingLine": 259
+          "startingLine": 341
         }
       },
       {
@@ -63,7 +103,7 @@
         "key": "Nothing in %@ yet",
         "location": {
           "startingColumn": 31,
-          "startingLine": 266
+          "startingLine": 352
         }
       },
       {
@@ -71,7 +111,7 @@
         "key": "Give an item the %@ persona and it will be gathered here, with everything before and after it.",
         "location": {
           "startingColumn": 30,
-          "startingLine": 268
+          "startingLine": 354
         }
       },
       {
@@ -79,7 +119,7 @@
         "key": "Add an item",
         "location": {
           "startingColumn": 32,
-          "startingLine": 270
+          "startingLine": 356
         }
       },
       {
@@ -87,7 +127,7 @@
         "key": "Today, above",
         "location": {
           "startingColumn": 45,
-          "startingLine": 413
+          "startingLine": 493
         }
       },
       {
@@ -95,7 +135,7 @@
         "key": "Today, below",
         "location": {
           "startingColumn": 62,
-          "startingLine": 413
+          "startingLine": 493
         }
       },
       {
@@ -103,7 +143,7 @@
         "key": "Scrolls back to today",
         "location": {
           "startingColumn": 28,
-          "startingLine": 414
+          "startingLine": 494
         }
       },
       {
@@ -111,7 +151,7 @@
         "key": "Today",
         "location": {
           "startingColumn": 22,
-          "startingLine": 400
+          "startingLine": 480
         }
       },
       {
@@ -119,7 +159,7 @@
         "key": "Lists repeating items three months further ahead",
         "location": {
           "startingColumn": 28,
-          "startingLine": 436
+          "startingLine": 516
         }
       },
       {
@@ -127,7 +167,7 @@
         "key": "Show 3 more months of repeating items",
         "location": {
           "startingColumn": 19,
-          "startingLine": 431
+          "startingLine": 511
         }
       },
       {
@@ -135,7 +175,7 @@
         "key": "Original item only",
         "location": {
           "startingColumn": 17,
-          "startingLine": 730
+          "startingLine": 810
         }
       },
       {
@@ -143,7 +183,7 @@
         "key": "Original and all linked items",
         "location": {
           "startingColumn": 54,
-          "startingLine": 730
+          "startingLine": 810
         }
       },
       {
@@ -151,7 +191,7 @@
         "key": "This linked item only",
         "location": {
           "startingColumn": 17,
-          "startingLine": 731
+          "startingLine": 811
         }
       },
       {
@@ -159,7 +199,7 @@
         "key": "This and following linked items",
         "location": {
           "startingColumn": 57,
-          "startingLine": 731
+          "startingLine": 811
         }
       },
       {
@@ -167,7 +207,7 @@
         "key": "Original and all linked items",
         "location": {
           "startingColumn": 17,
-          "startingLine": 732
+          "startingLine": 812
         }
       },
       {
@@ -175,7 +215,7 @@
         "key": "Undo",
         "location": {
           "startingColumn": 24,
-          "startingLine": 750
+          "startingLine": 830
         }
       },
       {
@@ -183,7 +223,7 @@
         "key": "Reverses the last action",
         "location": {
           "startingColumn": 36,
-          "startingLine": 755
+          "startingLine": 835
         }
       },
       {
@@ -191,7 +231,7 @@
         "key": "Deleted “%@”",
         "location": {
           "startingColumn": 30,
-          "startingLine": 773
+          "startingLine": 853
         }
       },
       {
@@ -199,7 +239,7 @@
         "key": "Pushed “%@”",
         "location": {
           "startingColumn": 26,
-          "startingLine": 774
+          "startingLine": 854
         }
       },
       {
@@ -207,7 +247,7 @@
         "key": "Deleted %@. Undo available.",
         "location": {
           "startingColumn": 43,
-          "startingLine": 779
+          "startingLine": 859
         }
       },
       {
@@ -215,7 +255,7 @@
         "key": "Pushed %@. Undo available.",
         "location": {
           "startingColumn": 39,
-          "startingLine": 780
+          "startingLine": 860
         }
       }
     ]

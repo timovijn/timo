@@ -1289,51 +1289,69 @@ public enum Planner {
             ($0.visitTime(on: day, now: now, calendar: calendar) ?? .distantFuture) < ($1.visitTime(on: day, now: now, calendar: calendar) ?? .distantFuture)
         }
     }
-    /// Every item in `persona` (among any others it has), grouped by day, newest day first. Each
-    /// day lists what that day's list shows of the persona, in the same order: an item on its own
+    /// Groups items by day, newest day first, optionally keeping only those in `persona`. Each
+    /// day lists what that day's list shows, in the same order: an item on its own
     /// (live) day, a "Carried to" entry on every day it was carried on from, and today for anything
     /// today's list shows, such as a range that is still running. Every generated linked item of a
     /// repeating item is listed, including those ahead of today up to `repeatsThrough`.
-    public static func history(of persona: Persona, in items: [PlanItem], now: Date, repeatsThrough: Day? = nil,
+    public static func history(of persona: Persona? = nil, in items: [PlanItem], now: Date, repeatsThrough: Day? = nil,
                                calendar: Calendar = .current) -> [PersonaDay] {
         let today = Day(now, calendar: calendar)
-        let matching = items.filter {
-            guard $0.personas.contains(persona) else { return false }
-            return within(repeatsThrough, $0, now: now, calendar: calendar)
-        }
-        var days = Set<Day>()
-        for item in matching {
+        let matching = items.compactMap { item -> (item: PlanItem, live: Day)? in
+            if let persona, !item.personas.contains(persona) { return nil }
             let live = item.liveDay(now: now, calendar: calendar)
-            days.insert(live)
-            if let endDay = item.endDay {
-                var covered = item.day
-                while covered <= endDay {
-                    days.insert(covered)
-                    guard let next = calendar.date(byAdding: .day, value: 1, to: covered.date(calendar: calendar)) else { break }
-                    covered = Day(next, calendar: calendar)
-                }
-            }
-            var carriedFrom = item.day
-            while carriedFrom < live, let next = calendar.date(byAdding: .day, value: 1, to: carriedFrom.date(calendar: calendar)) {
-                days.insert(carriedFrom)
-                carriedFrom = Day(next, calendar: calendar)
+            if let repeatsThrough, item.seriesID != nil, live > repeatsThrough { return nil }
+            return (item, live)
+        }
+        var historyDays = Set<Day>()
+        for (item, live) in matching {
+            historyDays.insert(live)
+            let last = max(live, item.endDay ?? live)
+            var covered = item.day
+            while covered <= last {
+                historyDays.insert(covered)
+                guard covered < last,
+                      let next = calendar.date(byAdding: .day, value: 1, to: covered.date(calendar: calendar)) else { break }
+                covered = Day(next, calendar: calendar)
             }
         }
-        if matching.contains(where: { $0.shows(on: today, now: now, calendar: calendar) }) { days.insert(today) }
-        return days.sorted(by: >).map { day in
-            let listed = matching.filter {
-                $0.shows(on: day, now: now, calendar: calendar) || $0.movedAway(from: day, now: now, calendar: calendar)
+        if matching.contains(where: { $0.item.shows(on: today, now: now, calendar: calendar) }) { historyDays.insert(today) }
+
+        // Timed ranges can appear on days added by other items. Use the history's dates to
+        // find those rows without scanning every item again for each date.
+        let days = historyDays.sorted()
+        let positions = Dictionary(uniqueKeysWithValues: days.enumerated().map { ($1, $0) })
+        var rows = Array(repeating: [Int](), count: days.count)
+        for (index, entry) in matching.enumerated() {
+            let (item, live) = entry
+            guard var position = positions[item.day] else { continue }
+            var last = max(live, item.endDay ?? live)
+            if live == item.day, item.endDay == nil, item.minute != nil, let end = item.end {
+                last = max(last, Day(end, calendar: calendar))
             }
+            while position < days.count, days[position] <= last {
+                let day = days[position]
+                if item.shows(on: day, now: now, calendar: calendar) || item.movedAway(from: day, now: now, calendar: calendar) {
+                    rows[position].append(index)
+                }
+                position += 1
+            }
+        }
+
+        return days.indices.reversed().map { position in
+            let day = days[position]
             // Like the day list: Anytime items first, then Scheduled ones. A carried item keeps
             // its time only on its scheduled day.
-            let timed = { (item: PlanItem) in
-                item.minute != nil && (!item.isCarried(now: now, calendar: calendar) || item.day == day)
+            let listed = rows[position].sorted { left, right in
+                let (lhs, lhsLive) = matching[left]
+                let (rhs, rhsLive) = matching[right]
+                let lhsTimed = lhs.minute != nil && (lhsLive == lhs.day || lhs.day == day)
+                let rhsTimed = rhs.minute != nil && (rhsLive == rhs.day || rhs.day == day)
+                if lhsTimed != rhsTimed { return !lhsTimed }
+                if lhs.minute != rhs.minute { return (lhs.minute ?? -1) < (rhs.minute ?? -1) }
+                return lhs.createdAt < rhs.createdAt
             }
-            return PersonaDay(day: day, items: listed.map { $0.on(day) }.sorted {
-                if timed($0) != timed($1) { return !timed($0) }
-                if $0.minute != $1.minute { return ($0.minute ?? -1) < ($1.minute ?? -1) }
-                return $0.createdAt < $1.createdAt
-            })
+            return PersonaDay(day: day, items: listed.map { matching[$0].item.on(day) })
         }
     }
     /// Items matching `query`, grouped by the day each is shown as itself, newest day first (like

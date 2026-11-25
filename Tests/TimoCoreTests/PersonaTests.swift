@@ -63,6 +63,13 @@ final class PersonaTests: XCTestCase {
         XCTAssertEqual(history[1].items.map(\.title), ["Drink water", "Stretch", "Gym"])
         XCTAssertTrue(Planner.history(of: .friends, in: [late, other], now: date(25), calendar: calendar).isEmpty)
     }
+    func testHistoryCanGroupSharedItemsWithoutAPersonaTag() {
+        let untagged = item("Book tickets", 23, persona: nil)
+        let family = item("Dinner", 22, persona: .family)
+        let history = Planner.history(in: [family, untagged], now: date(25), calendar: calendar)
+        XCTAssertEqual(history.map(\.day), [day(23), day(22)])
+        XCTAssertEqual(history.flatMap(\.items).map(\.id), [untagged.id, family.id])
+    }
     func testCarriedItemIsListedOnItsCurrentDayWithEntriesOnTheDaysBefore() {
         var physio = item("Book physio", 20, persona: .health)
         physio.completedAt = nil
@@ -89,6 +96,17 @@ final class PersonaTests: XCTestCase {
         // On its scheduled day its entry keeps its time, after the range that is also running then.
         XCTAssertEqual(history[2].items.map(\.title), ["Project", "Report"])
         XCTAssertEqual(history[3].items.map(\.title), ["Project"])
+    }
+    func testTimedRangeJoinsOtherHistoryDaysBeforeItsMidnightEnd() {
+        var range = PlanItem(title: "Project", day: day(20), minute: 9 * 60, movesToNextDay: false)
+        range.personas = [.work]
+        range.end = date(23, 0)
+        let during = item("Check in", 21, persona: .work)
+        let after = item("Follow up", 23, persona: .work)
+        let history = Planner.history(of: .work, in: [range, during, after], now: date(25), calendar: calendar)
+
+        XCTAssertEqual(history.map(\.day), [day(23), day(21), day(20)])
+        XCTAssertEqual(history.map { $0.items.map(\.id) }, [[after.id], [during.id, range.id], [range.id]])
     }
     func testRepeatingItemsShareTheirPersonaAndListEveryLinkedItem() {
         var template = PlanItem(title: "Walk", day: day(20), minute: 8 * 60, movesToNextDay: false)

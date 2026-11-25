@@ -21,7 +21,7 @@
       "disableOnlyActiveArch" : false,
       "hostTargetedPlatform" : null,
       "platform" : "iphonesimulator",
-      "sdk" : "iphonesimulator27.1",
+      "sdk" : "iphonesimulator27.2",
       "sdkVariant" : "iphonesimulator",
       "supportedArchitectures" : [
         "arm64"

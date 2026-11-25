@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-        D31A00010000000000000001 /* Sources/TimoCore/ChecklistReorderLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = D31A00010000000000000002 /* Sources/TimoCore/ChecklistReorderLayout.swift */; };
 		0376400FDE1030E0FE917C4D /* Timo/TimoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC6864D4F6482CA3DEF937AD /* Timo/TimoApp.swift */; };
 		124C42E500BB571FA1B41FA8 /* Timo/ItemEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D817EF2461BD1202B03023E /* Timo/ItemEditor.swift */; };
 		1CADA818579E1792F1E74D6B /* Timo/PlanStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CEA8AA3E9EF380055DA8E77 /* Timo/PlanStore.swift */; };
@@ -16,11 +15,11 @@
 		5E7A0C3D9F1B4A2E8C6D0F11 /* Timo/PersonaViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E7A0C3D9F1B4A2E8C6D0F12 /* Timo/PersonaViews.swift */; };
 		6BDBE62584FF4DF8AC6D03B8 /* Timo/Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4D185854A38E445BB37924BD /* Timo/Assets.xcassets */; };
 		7A1C5E9B3D2F4A6C8E0B1D21 /* Timo/SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1C5E9B3D2F4A6C8E0B1D22 /* Timo/SearchView.swift */; };
-		7A1D3E5F9B2C4D6E8F0A1C41 /* Timo/Checklist.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1D3E5F9B2C4D6E8F0A1C42 /* Timo/Checklist.swift */; };
-		7A1D3E5F9B2C4D6E8F0A1C31 /* Timo/Attachments.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1D3E5F9B2C4D6E8F0A1C32 /* Timo/Attachments.swift */; };
 		7A1D3E5F9B2C4D6E8F0A1B21 /* Timo/FocusedItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1D3E5F9B2C4D6E8F0A1B22 /* Timo/FocusedItem.swift */; };
 		7A1D3E5F9B2C4D6E8F0A1B31 /* Timo/CloudSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1D3E5F9B2C4D6E8F0A1B32 /* Timo/CloudSync.swift */; };
 		7A1D3E5F9B2C4D6E8F0A1B41 /* Timo/CloudSharing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1D3E5F9B2C4D6E8F0A1B42 /* Timo/CloudSharing.swift */; };
+		7A1D3E5F9B2C4D6E8F0A1C31 /* Timo/Attachments.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1D3E5F9B2C4D6E8F0A1C32 /* Timo/Attachments.swift */; };
+		7A1D3E5F9B2C4D6E8F0A1C41 /* Timo/Checklist.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1D3E5F9B2C4D6E8F0A1C42 /* Timo/Checklist.swift */; };
 		7A1E4F6A0B3C5D7E9F1A2B11 /* Sources/TimoCore/QuickEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1E4F6A0B3C5D7E9F1A2B12 /* Sources/TimoCore/QuickEntry.swift */; };
 		7A1E4F6A0B3C5D7E9F1A2B21 /* Timo/TitleDetails.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1E4F6A0B3C5D7E9F1A2B22 /* Timo/TitleDetails.swift */; };
 		B1D0A0010000000000000001 /* Sources/TimoCore/Planner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83DD306496F70F3A81ED3AB1 /* Sources/TimoCore/Planner.swift */; };
@@ -37,10 +36,11 @@
 		C2E0A0010000000000000002 /* Sources/TimoCore/QuickEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1E4F6A0B3C5D7E9F1A2B12 /* Sources/TimoCore/QuickEntry.swift */; };
 		C2E0A0010000000000000003 /* Timo/PlanLocation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1D0A0010000000000000011 /* Timo/PlanLocation.swift */; };
 		C2E0A0010000000000000004 /* Timo/AttachmentFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2E0A0010000000000000009 /* Timo/AttachmentFiles.swift */; };
-		C2E0A0010000000000000008 /* Timo/AttachmentFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2E0A0010000000000000009 /* Timo/AttachmentFiles.swift */; };
 		C2E0A0010000000000000005 /* TimoShare/ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2E0A0010000000000000010 /* TimoShare/ShareViewController.swift */; };
 		C2E0A0010000000000000006 /* TimoShare/ShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2E0A0010000000000000011 /* TimoShare/ShareView.swift */; };
 		C2E0A0010000000000000007 /* TimoShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C2E0A0010000000000000012 /* TimoShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		C2E0A0010000000000000008 /* Timo/AttachmentFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2E0A0010000000000000009 /* Timo/AttachmentFiles.swift */; };
+		D31A00010000000000000001 /* Sources/TimoCore/ChecklistReorderLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = D31A00010000000000000002 /* Sources/TimoCore/ChecklistReorderLayout.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -76,17 +76,16 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-        D31A00010000000000000002 /* Sources/TimoCore/ChecklistReorderLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/TimoCore/ChecklistReorderLayout.swift; sourceTree = "<group>"; };
 		2D817EF2461BD1202B03023E /* Timo/ItemEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/ItemEditor.swift; sourceTree = "<group>"; };
 		4CEA8AA3E9EF380055DA8E77 /* Timo/PlanStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/PlanStore.swift; sourceTree = "<group>"; };
 		4D185854A38E445BB37924BD /* Timo/Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Timo/Assets.xcassets; sourceTree = "<group>"; };
 		5E7A0C3D9F1B4A2E8C6D0F12 /* Timo/PersonaViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/PersonaViews.swift; sourceTree = "<group>"; };
 		7A1C5E9B3D2F4A6C8E0B1D22 /* Timo/SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/SearchView.swift; sourceTree = "<group>"; };
-		7A1D3E5F9B2C4D6E8F0A1C42 /* Timo/Checklist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/Checklist.swift; sourceTree = "<group>"; };
-		7A1D3E5F9B2C4D6E8F0A1C32 /* Timo/Attachments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/Attachments.swift; sourceTree = "<group>"; };
 		7A1D3E5F9B2C4D6E8F0A1B22 /* Timo/FocusedItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/FocusedItem.swift; sourceTree = "<group>"; };
 		7A1D3E5F9B2C4D6E8F0A1B32 /* Timo/CloudSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/CloudSync.swift; sourceTree = "<group>"; };
 		7A1D3E5F9B2C4D6E8F0A1B42 /* Timo/CloudSharing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/CloudSharing.swift; sourceTree = "<group>"; };
+		7A1D3E5F9B2C4D6E8F0A1C32 /* Timo/Attachments.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/Attachments.swift; sourceTree = "<group>"; };
+		7A1D3E5F9B2C4D6E8F0A1C42 /* Timo/Checklist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/Checklist.swift; sourceTree = "<group>"; };
 		7A1E4F6A0B3C5D7E9F1A2B12 /* Sources/TimoCore/QuickEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/TimoCore/QuickEntry.swift; sourceTree = "<group>"; };
 		7A1E4F6A0B3C5D7E9F1A2B22 /* Timo/TitleDetails.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/TitleDetails.swift; sourceTree = "<group>"; };
 		7D1043473D55BFA90E8530D3 /* Timo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; path = Timo.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -99,11 +98,12 @@
 		B1D0A0010000000000000015 /* TimoWidget/GuideLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimoWidget/GuideLiveActivity.swift; sourceTree = "<group>"; };
 		B1D0A0010000000000000016 /* Timo/DayGuideActivities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/DayGuideActivities.swift; sourceTree = "<group>"; };
 		B1D0A0010000000000000042 /* Timo/PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = Timo/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		CC6864D4F6482CA3DEF937AD /* Timo/TimoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/TimoApp.swift; sourceTree = "<group>"; };
 		C2E0A0010000000000000009 /* Timo/AttachmentFiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/AttachmentFiles.swift; sourceTree = "<group>"; };
 		C2E0A0010000000000000010 /* TimoShare/ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimoShare/ShareViewController.swift; sourceTree = "<group>"; };
 		C2E0A0010000000000000011 /* TimoShare/ShareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimoShare/ShareView.swift; sourceTree = "<group>"; };
 		C2E0A0010000000000000012 /* TimoShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TimoShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		CC6864D4F6482CA3DEF937AD /* Timo/TimoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timo/TimoApp.swift; sourceTree = "<group>"; };
+		D31A00010000000000000002 /* Sources/TimoCore/ChecklistReorderLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/TimoCore/ChecklistReorderLayout.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -371,7 +371,7 @@
 				CLANG_ENABLE_OBJC_WEAK = YES;
 				CODE_SIGN_ENTITLEMENTS = "$(TIMO_ENTITLEMENTS_$(TIMO_ICLOUD))";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Timo/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Timo;
@@ -399,7 +399,7 @@
 				CLANG_ENABLE_OBJC_WEAK = YES;
 				CODE_SIGN_ENTITLEMENTS = "$(TIMO_ENTITLEMENTS_$(TIMO_ICLOUD))";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Timo/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Timo;
@@ -518,48 +518,6 @@
 			};
 			name = Release;
 		};
-		E6DE6C99132752C914FEF632 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
-				CLANG_WARN_BOOL_CONVERSION = YES;
-				CLANG_WARN_COMMA = YES;
-				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_EMPTY_BODY = YES;
-				CLANG_WARN_ENUM_CONVERSION = YES;
-				CLANG_WARN_INFINITE_RECURSION = YES;
-				CLANG_WARN_INT_CONVERSION = YES;
-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
-				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_UNREACHABLE_CODE = YES;
-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = F2JT93AQ4G;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
-				GCC_WARN_ABOUT_RETURN_TYPE = YES;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNINITIALIZED_AUTOS = YES;
-				GCC_WARN_UNUSED_FUNCTION = YES;
-				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				SDKROOT = iphoneos;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_COMPILATION_MODE = wholemodule;
-				SWIFT_OPTIMIZATION_LEVEL = "-O";
-				SWIFT_VERSION = 5.0;
-			};
-			name = Release;
-		};
 		C2E0A0010000000000000018 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -614,6 +572,48 @@
 			};
 			name = Release;
 		};
+		E6DE6C99132752C914FEF632 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = F2JT93AQ4G;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -635,20 +635,20 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		C57128001CE614BF8549D6BB /* Build configuration list for PBXNativeTarget "Timo" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				7082CC0B6FC1282FCEABD07A /* Debug */,
-				639A7CA24D39909E713B47F7 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		C2E0A0010000000000000017 /* Build configuration list for PBXNativeTarget "TimoShare" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				C2E0A0010000000000000018 /* Debug */,
 				C2E0A0010000000000000019 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C57128001CE614BF8549D6BB /* Build configuration list for PBXNativeTarget "Timo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7082CC0B6FC1282FCEABD07A /* Debug */,
+				639A7CA24D39909E713B47F7 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
